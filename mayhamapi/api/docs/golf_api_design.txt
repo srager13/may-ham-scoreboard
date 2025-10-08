@@ -1,0 +1,394 @@
+# Golf Tournament API Design (OpenAPI/Swagger style documentation)
+
+# Base URL: /api/v1
+
+# ============================================
+# AUTHENTICATION
+# ============================================
+
+POST /auth/register
+  Request:
+    {
+      "email": "player@example.com",
+      "password": "password123",
+      "name": "John Doe",
+      "handicap": 12.5
+    }
+  Response: 
+    {
+      "user": { "id": "uuid", "email": "...", "name": "..." },
+      "token": "jwt-token"
+    }
+
+POST /auth/login
+  Request: { "email": "...", "password": "..." }
+  Response: { "user": {...}, "token": "jwt-token" }
+
+GET /auth/me
+  Headers: Authorization: Bearer {token}
+  Response: { "user": {...} }
+
+# ============================================
+# TOURNAMENTS (Admin primarily)
+# ============================================
+
+POST /tournaments
+  Description: Create a new tournament
+  Auth: Admin required
+  Request:
+    {
+      "name": "Summer Ryder Cup 2025",
+      "description": "Annual summer tournament",
+      "start_date": "2025-06-15",
+      "end_date": "2025-06-16"
+    }
+  Response: { "tournament": {...} }
+
+GET /tournaments
+  Description: List all tournaments
+  Query params: ?status=active&limit=10&offset=0
+  Response: 
+    {
+      "tournaments": [...],
+      "total": 25,
+      "limit": 10,
+      "offset": 0
+    }
+
+GET /tournaments/:id
+  Description: Get tournament details with teams and rounds
+  Response:
+    {
+      "tournament": {...},
+      "teams": [...],
+      "rounds": [...],
+      "stats": {
+        "total_matches": 12,
+        "completed_matches": 5,
+        "team1_points": 6.5,
+        "team2_points": 3.5
+      }
+    }
+
+PATCH /tournaments/:id
+  Description: Update tournament
+  Auth: Admin required
+  Request: { "name": "...", "status": "active" }
+  Response: { "tournament": {...} }
+
+DELETE /tournaments/:id
+  Auth: Admin required
+  Response: { "success": true }
+
+# ============================================
+# TEAMS
+# ============================================
+
+POST /tournaments/:tournament_id/teams
+  Description: Create a team in tournament
+  Auth: Admin required
+  Request:
+    {
+      "name": "Team USA",
+      "color": "#FF0000"
+    }
+  Response: { "team": {...} }
+
+GET /tournaments/:tournament_id/teams
+  Response: { "teams": [...] }
+
+POST /teams/:team_id/players
+  Description: Add player to team
+  Auth: Admin required
+  Request: { "user_id": "uuid" }
+  Response: { "team_player": {...} }
+
+DELETE /teams/:team_id/players/:user_id
+  Description: Remove player from team
+  Auth: Admin required
+
+# ============================================
+# ROUNDS
+# ============================================
+
+POST /tournaments/:tournament_id/rounds
+  Description: Create a round
+  Auth: Admin required
+  Request:
+    {
+      "name": "Friday Morning",
+      "round_number": 1,
+      "round_date": "2025-06-15"
+    }
+  Response: { "round": {...} }
+
+GET /tournaments/:tournament_id/rounds
+  Response: { "rounds": [...] }
+
+GET /rounds/:id
+  Description: Get round with all matches
+  Response:
+    {
+      "round": {...},
+      "matches": [...]
+    }
+
+PATCH /rounds/:id
+  Description: Update round status
+  Auth: Admin required
+  Request: { "status": "in_progress" }
+
+# ============================================
+# MATCH FORMATS
+# ============================================
+
+GET /match-formats
+  Description: List all available match formats
+  Response: { "formats": [...] }
+
+POST /match-formats
+  Description: Create custom match format
+  Auth: Admin required
+  Request:
+    {
+      "name": "Custom High-Low",
+      "description": "...",
+      "players_per_side": 2,
+      "scoring_type": "high_low"
+    }
+
+# ============================================
+# MATCHES
+# ============================================
+
+POST /rounds/:round_id/matches
+  Description: Create a match in a round
+  Auth: Admin required
+  Request:
+    {
+      "match_format_id": "uuid",
+      "match_number": 1,
+      "holes": 6,
+      "team1_id": "uuid",
+      "team2_id": "uuid",
+      "points_available": 1.0,
+      "team1_players": ["user_uuid1", "user_uuid2"],
+      "team2_players": ["user_uuid3", "user_uuid4"]
+    }
+  Response: { "match": {...} }
+
+GET /matches/:id
+  Description: Get match details with players and scores
+  Response:
+    {
+      "match": {...},
+      "players": {
+        "team1": [...],
+        "team2": [...]
+      },
+      "hole_results": [...],
+      "current_status": {
+        "team1_points": 2.5,
+        "team2_points": 1.5,
+        "holes_completed": 4,
+        "holes_remaining": 2
+      }
+    }
+
+PATCH /matches/:id
+  Description: Update match status or results
+  Auth: Admin required
+  Request: { "status": "completed" }
+
+# ============================================
+# SCORING (Main user interaction)
+# ============================================
+
+POST /matches/:match_id/scores
+  Description: Submit scores for a hole
+  Auth: Any player in the match
+  Request:
+    {
+      "hole_number": 1,
+      "scores": [
+        { "user_id": "uuid1", "strokes": 4 },
+        { "user_id": "uuid2", "strokes": 5 },
+        { "user_id": "uuid3", "strokes": 4 },
+        { "user_id": "uuid4", "strokes": 6 }
+      ]
+    }
+  Response:
+    {
+      "hole_result": {
+        "hole_number": 1,
+        "team1_score": 4,
+        "team2_score": 4,
+        "winner_team_id": null,
+        "team1_points": 0.5,
+        "team2_points": 0.5
+      },
+      "match_status": {
+        "team1_total_points": 0.5,
+        "team2_total_points": 0.5,
+        "holes_completed": 1
+      }
+    }
+
+GET /matches/:match_id/scores
+  Description: Get all scores for a match
+  Response:
+    {
+      "hole_scores": [
+        {
+          "hole_number": 1,
+          "scores": [
+            { "user_id": "...", "name": "John", "strokes": 4 },
+            ...
+          ],
+          "result": {
+            "team1_score": 4,
+            "team2_score": 5,
+            "winner": "team1"
+          }
+        },
+        ...
+      ]
+    }
+
+PATCH /matches/:match_id/scores/:hole_number
+  Description: Update scores for a specific hole
+  Auth: Any player in match or admin
+  Request:
+    {
+      "scores": [
+        { "user_id": "uuid1", "strokes": 5 }
+      ]
+    }
+
+# ============================================
+# LEADERBOARDS & STATISTICS
+# ============================================
+
+GET /tournaments/:tournament_id/leaderboard
+  Description: Get tournament leaderboard
+  Query params: ?view=team|individual
+  Response:
+    {
+      "team_standings": [
+        {
+          "team": {...},
+          "points_won": 12.5,
+          "points_lost": 7.5,
+          "matches_won": 8,
+          "matches_lost": 4,
+          "matches_tied": 3
+        },
+        ...
+      ],
+      "individual_standings": [
+        {
+          "user": {...},
+          "team": {...},
+          "points_won": 3.5,
+          "matches_played": 4,
+          "win_percentage": 0.625
+        },
+        ...
+      ]
+    }
+
+GET /tournaments/:tournament_id/live
+  Description: Get live scoring updates for active matches
+  Response:
+    {
+      "active_matches": [
+        {
+          "match": {...},
+          "current_hole": 3,
+          "team1_up": 2,
+          "last_update": "2025-06-15T14:23:00Z"
+        },
+        ...
+      ]
+    }
+
+GET /users/:user_id/stats
+  Description: Get player statistics
+  Query params: ?tournament_id=uuid (optional)
+  Response:
+    {
+      "overall": {
+        "tournaments_played": 5,
+        "total_points": 18.5,
+        "win_rate": 0.65
+      },
+      "tournament_stats": [...]
+    }
+
+# ============================================
+# WEBSOCKET EVENTS (for real-time updates)
+# ============================================
+
+WS /ws/tournaments/:tournament_id
+
+Events to send:
+  - score_updated: { match_id, hole_number, scores, result }
+  - match_completed: { match_id, final_result }
+  - leaderboard_updated: { team_standings, individual_standings }
+
+Clients subscribe to specific tournaments for live updates
+
+# ============================================
+# BULK OPERATIONS (Admin convenience)
+# ============================================
+
+POST /tournaments/:tournament_id/setup
+  Description: Bulk setup tournament structure
+  Auth: Admin required
+  Request:
+    {
+      "teams": [
+        { "name": "Team USA", "color": "#FF0000", "players": ["email1", "email2", ...] },
+        { "name": "Team Europe", "color": "#0000FF", "players": [...] }
+      ],
+      "rounds": [
+        {
+          "name": "Friday Morning",
+          "round_number": 1,
+          "matches": [
+            {
+              "format": "2v2 Scramble",
+              "holes": 6,
+              "team1_players": [0, 1], // indices into team1 players
+              "team2_players": [0, 1]
+            },
+            ...
+          ]
+        },
+        ...
+      ]
+    }
+  Response: { "tournament": {...}, "created": {...} }
+
+# ============================================
+# ERROR RESPONSES
+# ============================================
+
+All endpoints return standard error format:
+{
+  "error": {
+    "code": "INVALID_SCORE",
+    "message": "Score must be between 1 and 15",
+    "details": {...}
+  }
+}
+
+HTTP Status Codes:
+- 200: Success
+- 201: Created
+- 400: Bad Request
+- 401: Unauthorized
+- 403: Forbidden
+- 404: Not Found
+- 409: Conflict (e.g., score already exists)
+- 500: Internal Server Error

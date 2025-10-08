@@ -1,0 +1,40 @@
+Data Structure Expected:
+
+{
+  tournament: { id, name, status, start_date, end_date },
+  team_standings: [
+    {
+      team: { id, name, color },
+      points_won, points_lost,
+      matches_won, matches_lost, matches_tied,
+      holes_won, holes_lost, holes_tied
+    }
+  ],
+  individual_standings: [
+    {
+      user: { id, name, handicap },
+      team: { id, name, color },
+      points_won, points_lost,
+      matches_played, matches_won, matches_lost, matches_tied,
+      holes_won, holes_lost, holes_tied,
+      win_percentage
+    }
+  ],
+  live_matches: [
+    {
+      id, match_number, format,
+      current_hole, total_holes,
+      team1, team2,
+      team1_up, // positive = team1 leading, negative = team2 leading
+      status, last_update
+    }
+  ]
+}
+
+Usage Example:
+
+import TournamentLeaderboard from './components/TournamentLeaderboard';
+
+function App() {
+  return <TournamentLeaderboard tournamentId="tournament-uuid" />;
+}

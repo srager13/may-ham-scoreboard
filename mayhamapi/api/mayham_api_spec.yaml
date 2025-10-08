@@ -1,0 +1,1383 @@
+openapi: 3.0.3
+info:
+  title: Golf Tournament Management API
+  description: |
+    API for managing Ryder Cup-style golf tournaments with custom match formats,
+    real-time scoring, and leaderboard tracking.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@golftournament.com
+
+servers:
+  - url: https://api.golftournament.com/api/v1
+    description: Production server
+  - url: http://localhost:8080/api/v1
+    description: Development server
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Tournaments
+    description: Tournament management
+  - name: Teams
+    description: Team management
+  - name: Rounds
+    description: Round management
+  - name: Matches
+    description: Match management
+  - name: Scoring
+    description: Score submission and retrieval
+  - name: Leaderboard
+    description: Tournament standings and statistics
+  - name: Match Formats
+    description: Available match formats
+  - name: Users
+    description: User management
+  - name: WebSocket
+    description: Real-time updates
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: INVALID_INPUT
+            message:
+              type: string
+              example: Invalid tournament data
+            details:
+              type: object
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        handicap:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 54
+        is_admin:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    Tournament:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [draft, active, completed]
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Team:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tournament_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          example: '#FF0000'
+        created_at:
+          type: string
+          format: date-time
+
+    TeamPlayer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        team_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        user:
+          $ref: '#/components/schemas/User'
+        joined_at:
+          type: string
+          format: date-time
+
+    Round:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tournament_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Friday Morning
+        round_number:
+          type: integer
+          minimum: 1
+        round_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [upcoming, in_progress, completed]
+        created_at:
+          type: string
+          format: date-time
+
+    MatchFormat:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: 2v2 Scramble
+        description:
+          type: string
+        players_per_side:
+          type: integer
+          minimum: 1
+          maximum: 2
+        scoring_type:
+          type: string
+          enum: [match_play, scramble, best_ball, alternate_shot, high_low, shamble]
+
+    Match:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        round_id:
+          type: string
+          format: uuid
+        match_number:
+          type: integer
+          minimum: 1
+        holes:
+          type: integer
+          enum: [6, 9, 18]
+        status:
+          type: string
+          enum: [not_started, in_progress, completed]
+        format:
+          $ref: '#/components/schemas/MatchFormat'
+        team1:
+          $ref: '#/components/schemas/Team'
+        team2:
+          $ref: '#/components/schemas/Team'
+        points_available:
+          type: number
+          format: float
+          default: 1.0
+        team1_points:
+          type: number
+          format: float
+        team2_points:
+          type: number
+          format: float
+        created_at:
+          type: string
+          format: date-time
+
+    MatchPlayer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        match_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        team_id:
+          type: string
+          format: uuid
+        player_order:
+          type: integer
+        user:
+          $ref: '#/components/schemas/User'
+
+    HoleScore:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        strokes:
+          type: integer
+          minimum: 1
+          maximum: 15
+
+    HoleResult:
+      type: object
+      properties:
+        hole_number:
+          type: integer
+          minimum: 1
+        team1_score:
+          type: integer
+          nullable: true
+        team2_score:
+          type: integer
+          nullable: true
+        winner_team_id:
+          type: string
+          format: uuid
+          nullable: true
+        team1_points:
+          type: number
+          format: float
+        team2_points:
+          type: number
+          format: float
+        scores:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              strokes:
+                type: integer
+
+    MatchStatus:
+      type: object
+      properties:
+        team1_total_points:
+          type: number
+          format: float
+        team2_total_points:
+          type: number
+          format: float
+        holes_completed:
+          type: integer
+        holes_remaining:
+          type: integer
+        match_complete:
+          type: boolean
+        winner_team_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    TeamStanding:
+      type: object
+      properties:
+        team:
+          $ref: '#/components/schemas/Team'
+        points_won:
+          type: number
+          format: float
+        points_lost:
+          type: number
+          format: float
+        matches_won:
+          type: integer
+        matches_lost:
+          type: integer
+        matches_tied:
+          type: integer
+        holes_won:
+          type: integer
+        holes_lost:
+          type: integer
+        holes_tied:
+          type: integer
+
+    IndividualStanding:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        team:
+          $ref: '#/components/schemas/Team'
+        points_won:
+          type: number
+          format: float
+        points_lost:
+          type: number
+          format: float
+        matches_played:
+          type: integer
+        matches_won:
+          type: integer
+        matches_lost:
+          type: integer
+        matches_tied:
+          type: integer
+        holes_won:
+          type: integer
+        holes_lost:
+          type: integer
+        holes_tied:
+          type: integer
+        win_percentage:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+
+    LiveMatch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        match_number:
+          type: integer
+        format:
+          type: string
+        current_hole:
+          type: integer
+        total_holes:
+          type: integer
+        team1:
+          type: object
+          properties:
+            name:
+              type: string
+            color:
+              type: string
+            players:
+              type: array
+              items:
+                type: string
+        team2:
+          type: object
+          properties:
+            name:
+              type: string
+            color:
+              type: string
+            players:
+              type: array
+              items:
+                type: string
+        team1_up:
+          type: integer
+          description: Positive if team1 is up, negative if team2 is up, 0 for all square
+        status:
+          type: string
+          enum: [in_progress]
+        last_update:
+          type: string
+
+paths:
+  # ============================================
+  # Authentication
+  # ============================================
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                name:
+                  type: string
+                handicap:
+                  type: number
+                  format: float
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  token:
+                    type: string
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  token:
+                    type: string
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/me:
+    get:
+      tags: [Authentication]
+      summary: Get current user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============================================
+  # Tournaments
+  # ============================================
+  /tournaments:
+    get:
+      tags: [Tournaments]
+      summary: List all tournaments
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, active, completed]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of tournaments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tournaments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tournament'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+    post:
+      tags: [Tournaments]
+      summary: Create a new tournament
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, start_date, end_date]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                start_date:
+                  type: string
+                  format: date
+                end_date:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Tournament created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tournament:
+                    $ref: '#/components/schemas/Tournament'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /tournaments/{tournament_id}:
+    get:
+      tags: [Tournaments]
+      summary: Get tournament details
+      parameters:
+        - name: tournament_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Tournament details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tournament:
+                    $ref: '#/components/schemas/Tournament'
+                  teams:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Team'
+                  rounds:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Round'
+                  stats:
+                    type: object
+                    properties:
+                      total_matches:
+                        type: integer
+                      completed_matches:
+                        type: integer
+                      team1_points:
+                        type: number
+                      team2_points:
+                        type: number
+        '404':
+          description: Tournament not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      tags: [Tournaments]
+      summary: Update tournament
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tournament_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                status:
+                  type: string
+                  enum: [draft, active, completed]
+      responses:
+        '200':
+          description: Tournament updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tournament:
+                    $ref: '#/components/schemas/Tournament'
+        '404':
+          description: Tournament not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [Tournaments]
+      summary: Delete tournament
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tournament_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Tournament deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '404':
+          description: Tournament not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============================================
+  # Teams
+  # ============================================
+  /tournaments/{tournament_id}/teams:
+    get:
+      tags: [Teams]
+      summary: Get teams for tournament
+      parameters:
+        - name: tournament_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  teams:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/Team'
+                        - type: object
+                          properties:
+                            players:
+                              type: array
+                              items:
+                                $ref: '#/components/schemas/User'
+
+    post:
+      tags: [Teams]
+      summary: Create a team
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tournament_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                color:
+                  type: string
+                  pattern: '^#[0-9A-Fa-f]{6}$'
+      responses:
+        '201':
+          description: Team created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  team:
+                    $ref: '#/components/schemas/Team'
+
+  /teams/{team_id}/players:
+    post:
+      tags: [Teams]
+      summary: Add player to team
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Player added to team
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  team_player:
+                    $ref: '#/components/schemas/TeamPlayer'
+
+  /teams/{team_id}/players/{user_id}:
+    delete:
+      tags: [Teams]
+      summary: Remove player from team
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Player removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  # ============================================
+  # Rounds
+  # ============================================
+  /tournaments/{tournament_id}/rounds:
+    get:
+      tags: [Rounds]
+      summary: Get rounds for tournament
+      parameters:
+        - name: tournament_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of rounds
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rounds:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Round'
+
+    post:
+      tags: [Rounds]
+      summary: Create a round
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tournament_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, round_number, round_date]
+              properties:
+                name:
+                  type: string
+                round_number:
+                  type: integer
+                round_date:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Round created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  round:
+                    $ref: '#/components/schemas/Round'
+
+  /rounds/{round_id}:
+    get:
+      tags: [Rounds]
+      summary: Get round details with matches
+      parameters:
+        - name: round_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Round details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  round:
+                    $ref: '#/components/schemas/Round'
+                  matches:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Match'
+
+    patch:
+      tags: [Rounds]
+      summary: Update round
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: round_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                status:
+                  type: string
+                  enum: [upcoming, in_progress, completed]
+      responses:
+        '200':
+          description: Round updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  round:
+                    $ref: '#/components/schemas/Round'
+
+  # ============================================
+  # Match Formats
+  # ============================================
+  /match-formats:
+    get:
+      tags: [Match Formats]
+      summary: Get all available match formats
+      responses:
+        '200':
+          description: List of match formats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  formats:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MatchFormat'
+
+    post:
+      tags: [Match Formats]
+      summary: Create custom match format
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, players_per_side, scoring_type]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                players_per_side:
+                  type: integer
+                  minimum: 1
+                  maximum: 2
+                scoring_type:
+                  type: string
+                  enum: [match_play, scramble, best_ball, alternate_shot, high_low, shamble]
+      responses:
+        '201':
+          description: Format created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  format:
+                    $ref: '#/components/schemas/MatchFormat'
+
+  # ============================================
+  # Matches
+  # ============================================
+  /rounds/{round_id}/matches:
+    post:
+      tags: [Matches]
+      summary: Create a match
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: round_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [match_format_id, match_number, holes, team1_id, team2_id, team1_players, team2_players]
+              properties:
+                match_format_id:
+                  type: string
+                  format: uuid
+                match_number:
+                  type: integer
+                holes:
+                  type: integer
+                  enum: [6, 9, 18]
+                team1_id:
+                  type: string
+                  format: uuid
+                team2_id:
+                  type: string
+                  format: uuid
+                points_available:
+                  type: number
+                  format: float
+                  default: 1.0
+                team1_players:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                team2_players:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '201':
+          description: Match created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  match:
+                    $ref: '#/components/schemas/Match'
+
+  /matches/{match_id}:
+    get:
+      tags: [Matches]
+      summary: Get match details
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Match details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  match:
+                    $ref: '#/components/schemas/Match'
+                  players:
+                    type: object
+                    properties:
+                      team1:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/MatchPlayer'
+                      team2:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/MatchPlayer'
+                  hole_results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HoleResult'
+                  current_status:
+                    $ref: '#/components/schemas/MatchStatus'
+
+    patch:
+      tags: [Matches]
+      summary: Update match
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [not_started, in_progress, completed]
+      responses:
+        '200':
+          description: Match updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  match:
+                    $ref: '#/components/schemas/Match'
+
+  # ============================================
+  # Scoring
+  # ============================================
+  /matches/{match_id}/scores:
+    post:
+      tags: [Scoring]
+      summary: Submit scores for a hole
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hole_number, scores]
+              properties:
+                hole_number:
+                  type: integer
+                  minimum: 1
+                  maximum: 18
+                scores:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/HoleScore'
+              example:
+                hole_number: 1
+                scores:
+                  - user_id: "uuid-1"
+                    strokes: 4
+                  - user_id: "uuid-2"
+                    strokes: 5
+      responses:
+        '200':
+          description: Scores submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hole_result:
+                    $ref: '#/components/schemas/HoleResult'
+                  match_status:
+                    $ref: '#/components/schemas/MatchStatus'
+        '400':
+          description: Invalid scores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags: [Scoring]
+      summary: Get all scores for a match
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Match scores
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hole_scores:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HoleResult'
+
+  /matches/{match_id}/scores/{hole_number}:
+    patch:
+      tags: [Scoring]
+      summary: Update scores for a specific hole
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: match_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: hole_number
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 18
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scores]
+              properties:
+                scores:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/HoleScore'
+      responses:
+        '200':
+          description: Scores updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hole_result:
+                    $ref: '#/components/schemas/HoleResult'
+                  match_status:
+                    $ref: '#/components/schemas/MatchStatus'
+
+  # ============================================
+  # Leaderboard
+  # ============================================
+  /tournaments/{tournament_id}/leaderboard:
+    get:
+      tags: [Leaderboard]
+      summary: Get tournament leaderboard
+      parameters:
+        - name: tournament_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: view
+          in: query
+          schema:
+            type: string
+            enum: [team, individual]
+            default: team
+      responses:
+        '200':
+          description: Tournament leaderboard
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  team_standings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeamStanding'
+                  individual_standings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IndividualStanding'
+
+  /tournaments/{tournament_id}/live:
+    get:
+      tags: [Leaderboard]
+      summary: Get live scoring updates
+      parameters:
+        - name: tournament_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Live match updates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active_matches:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LiveMatch'
+
+  # ============================================
+  # User Statistics
+  # ============================================
+  /users/{user_id}/stats:
+    get:
+      tags: [Users]
+      summary: Get player statistics
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type:
