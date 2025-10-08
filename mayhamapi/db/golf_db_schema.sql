@@ -1,7 +1,7 @@
 -- Golf Tournament Management Database Schema
 
 -- Users/Players
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -12,7 +12,7 @@ CREATE TABLE users (
 );
 
 -- Tournaments (e.g., "Summer Ryder Cup 2025")
-CREATE TABLE tournaments (
+CREATE TABLE IF NOT EXISTS tournaments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     description TEXT,
@@ -25,7 +25,7 @@ CREATE TABLE tournaments (
 );
 
 -- Teams within a tournament
-CREATE TABLE teams (
+CREATE TABLE IF NOT EXISTS teams (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE teams (
 );
 
 -- Players assigned to teams for a tournament
-CREATE TABLE team_players (
+CREATE TABLE IF NOT EXISTS team_players (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -43,7 +43,7 @@ CREATE TABLE team_players (
 );
 
 -- Rounds within a tournament (e.g., "Friday Morning", "Saturday Afternoon")
-CREATE TABLE rounds (
+CREATE TABLE IF NOT EXISTS rounds (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -55,7 +55,7 @@ CREATE TABLE rounds (
 );
 
 -- Match formats/types
-CREATE TABLE match_formats (
+CREATE TABLE IF NOT EXISTS match_formats (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) NOT NULL UNIQUE, -- e.g., "2v2 Scramble", "Singles Match Play", "High-Low"
     description TEXT,
@@ -65,7 +65,7 @@ CREATE TABLE match_formats (
 );
 
 -- Matches within a round
-CREATE TABLE matches (
+CREATE TABLE IF NOT EXISTS matches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     round_id UUID REFERENCES rounds(id) ON DELETE CASCADE,
     match_format_id UUID REFERENCES match_formats(id),
@@ -82,7 +82,7 @@ CREATE TABLE matches (
 );
 
 -- Players participating in a specific match
-CREATE TABLE match_players (
+CREATE TABLE IF NOT EXISTS match_players (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     match_id UUID REFERENCES matches(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id),
@@ -92,7 +92,7 @@ CREATE TABLE match_players (
 );
 
 -- Hole-by-hole scores
-CREATE TABLE hole_scores (
+CREATE TABLE IF NOT EXISTS hole_scores (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     match_id UUID REFERENCES matches(id) ON DELETE CASCADE,
     hole_number INT NOT NULL,
@@ -104,7 +104,7 @@ CREATE TABLE hole_scores (
 );
 
 -- Hole results (who won each hole)
-CREATE TABLE hole_results (
+CREATE TABLE IF NOT EXISTS hole_results (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     match_id UUID REFERENCES matches(id) ON DELETE CASCADE,
     hole_number INT NOT NULL,
@@ -119,7 +119,7 @@ CREATE TABLE hole_results (
 );
 
 -- Player statistics/leaderboard
-CREATE TABLE player_stats (
+CREATE TABLE IF NOT EXISTS player_stats (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id),
@@ -135,14 +135,14 @@ CREATE TABLE player_stats (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_tournaments_status ON tournaments(status);
-CREATE INDEX idx_rounds_tournament ON rounds(tournament_id, round_number);
-CREATE INDEX idx_matches_round ON matches(round_id);
-CREATE INDEX idx_match_players_match ON match_players(match_id);
-CREATE INDEX idx_hole_scores_match ON hole_scores(match_id, hole_number);
-CREATE INDEX idx_hole_results_match ON hole_results(match_id);
-CREATE INDEX idx_player_stats_tournament ON player_stats(tournament_id);
-CREATE INDEX idx_team_players_team ON team_players(team_id);
+CREATE INDEX IF NOT EXISTS idx_tournaments_status ON tournaments(status);
+CREATE INDEX IF NOT EXISTS idx_rounds_tournament ON rounds(tournament_id, round_number);
+CREATE INDEX IF NOT EXISTS idx_matches_round ON matches(round_id);
+CREATE INDEX IF NOT EXISTS idx_match_players_match ON match_players(match_id);
+CREATE INDEX IF NOT EXISTS idx_hole_scores_match ON hole_scores(match_id, hole_number);
+CREATE INDEX IF NOT EXISTS idx_hole_results_match ON hole_results(match_id);
+CREATE INDEX IF NOT EXISTS idx_player_stats_tournament ON player_stats(tournament_id);
+CREATE INDEX IF NOT EXISTS idx_team_players_team ON team_players(team_id);
 
 -- Sample match formats data
 INSERT INTO match_formats (name, description, players_per_side, scoring_type) VALUES
@@ -151,4 +151,5 @@ INSERT INTO match_formats (name, description, players_per_side, scoring_type) VA
     ('2v2 Best Ball', 'Two-person team best ball', 2, 'best_ball'),
     ('2v2 Alternate Shot', 'Two-person alternate shot', 2, 'alternate_shot'),
     ('High-Low', 'Best and worst score combination', 2, 'high_low'),
-    ('Shamble', 'Drive scramble, then individual play', 2, 'shamble');
+    ('Shamble', 'Drive scramble, then individual play', 2, 'shamble')
+ON CONFLICT (name) DO NOTHING;
