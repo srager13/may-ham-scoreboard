@@ -1,3 +1,11 @@
+# Frontend development
+cd frontend
+npm run dev          # Development server with hot reload
+npm run build        # Build for production
+
+# Full-stack development  
+go run .             # Serves both API and React app
+
 Usage Example:
 
 ```

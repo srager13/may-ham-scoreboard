@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Trophy, Users, BarChart3, Settings } from 'lucide-react';
 import AdminPortal from './components/AdminPortal';
 import ScoreInterface from './components/ScoreInterface';
+import { AuthProvider, AuthModal, LoginButton, useAuth } from './components/Auth';
 
 // Temporary placeholder for Leaderboard
 const Leaderboard = () => (
@@ -12,8 +13,47 @@ const Leaderboard = () => (
   </div>
 );
 
-function App() {
+// Protected Route Component
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Authentication Required</h2>
+          <p className="text-gray-600 mb-4">Please sign in to access this feature.</p>
+          <button
+            onClick={() => setShowAuthModal(true)}
+            className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700"
+          >
+            Sign In
+          </button>
+          <AuthModal
+            isOpen={showAuthModal}
+            onClose={() => setShowAuthModal(false)}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+};
+
+function AppContent() {
   const location = useLocation();
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const navigation = [
     { name: 'Leaderboard', href: '/', icon: Trophy },
@@ -55,6 +95,11 @@ function App() {
                 })}
               </div>
             </div>
+            
+            {/* Auth Section */}
+            <div className="flex items-center">
+              <LoginButton onOpenAuth={() => setShowAuthModal(true)} />
+            </div>
           </div>
         </div>
 
@@ -87,11 +132,39 @@ function App() {
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <Routes>
           <Route path="/" element={<Leaderboard />} />
-          <Route path="/score" element={<ScoreInterface />} />
-          <Route path="/admin" element={<AdminPortal />} />
+          <Route 
+            path="/score" 
+            element={
+              <ProtectedRoute>
+                <ScoreInterface />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin" 
+            element={
+              <ProtectedRoute>
+                <AdminPortal />
+              </ProtectedRoute>
+            } 
+          />
         </Routes>
       </main>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+      />
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
