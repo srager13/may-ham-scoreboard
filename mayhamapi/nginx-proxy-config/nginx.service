@@ -1,0 +1,25 @@
+
+# ============================================
+# SYSTEMD SERVICE FOR NGINX
+# ============================================
+
+# File: /etc/systemd/system/nginx.service
+# Usually already installed, but here's a customized version
+
+[Unit]
+Description=Nginx HTTP Server
+After=network.target
+
+[Service]
+Type=forking
+PIDFile=/run/nginx.pid
+ExecStartPre=/usr/sbin/nginx -t
+ExecStart=/usr/sbin/nginx
+ExecReload=/usr/sbin/nginx -s reload
+ExecStop=/bin/kill -s QUIT $MAINPID
+PrivateTmp=true
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

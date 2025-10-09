@@ -1,0 +1,38 @@
+
+# ============================================
+# COMMANDS REFERENCE
+# ============================================
+
+# Start/stop/reload
+sudo systemctl start nginx
+sudo systemctl stop nginx
+sudo systemctl restart nginx
+sudo systemctl reload nginx
+
+# Check status
+sudo systemctl status nginx
+sudo nginx -t                    # Test configuration
+sudo nginx -s reload             # Graceful reload
+sudo nginx -s stop               # Graceful stop
+
+# View logs
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/golf_api_access.log
+sudo journalctl -u nginx -f
+
+# Monitor performance
+sudo systemctl status nginx
+ps aux | grep nginx
+ss -tlnp | grep nginx
+
+# Certificate management
+sudo certbot certificates              # List certificates
+sudo certbot renew --dry-run          # Test renewal
+sudo certbot renew                    # Renew certificates
+sudo certbot revoke --cert-path /etc/letsencrypt/live/golf.example.com/cert.pem
+
+# View current upstream servers
+sudo curl -s http://localhost:8080/api/v1/health | jq
+
+# Reload with zero downtime
+sudo nginx -s reload              # Gracefully reloads configuration
