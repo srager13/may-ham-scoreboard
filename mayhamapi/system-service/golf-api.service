@@ -1,0 +1,29 @@
+# ============================================
+# SYSTEMD SERVICE FILES (Linux - Recommended)
+# ============================================
+
+# File: /etc/systemd/system/golf-api.service
+# Install as root: sudo cp golf-api.service /etc/systemd/system/
+# Then enable: sudo systemctl enable golf-api.service
+# Start service: sudo systemctl start golf-api.service
+
+[Unit]
+Description=Golf Tournament API Service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+User=golftournament
+WorkingDirectory=/opt/golf-tournament/backend
+ExecStart=/opt/golf-tournament/backend/golf-api
+Environment="PORT=8080"
+Environment="DATABASE_URL=postgresql://user:password@localhost/golf_db"
+Environment="JWT_SECRET=your-secret-key-here"
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

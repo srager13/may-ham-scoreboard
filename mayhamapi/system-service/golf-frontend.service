@@ -1,0 +1,23 @@
+# File: /etc/systemd/system/golf-frontend.service
+# Install as root: sudo cp golf-frontend.service /etc/systemd/system/
+# Then enable: sudo systemctl enable golf-frontend.service
+# Start service: sudo systemctl start golf-frontend.service
+
+[Unit]
+Description=Golf Tournament Frontend Service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+User=golftournament
+WorkingDirectory=/opt/golf-tournament/frontend
+ExecStart=/usr/bin/npm start
+Environment="PORT=3000"
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -25,48 +25,48 @@ func (r *Repository) CreateTournament(req *models.CreateTournamentRequest, creat
 		VALUES ($1, $2, $3, $4, $5, 'draft', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		RETURNING id, name, description, start_date, end_date, created_by, status, created_at, updated_at
 	`
-	
+
 	var tournament models.Tournament
 	err := r.db.QueryRow(query, req.Name, req.Description, req.StartDate, req.EndDate, createdBy).Scan(
 		&tournament.ID, &tournament.Name, &tournament.Description, &tournament.StartDate,
 		&tournament.EndDate, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tournament: %w", err)
 	}
-	
+
 	return &tournament, nil
 }
 
 func (r *Repository) GetTournament(id string) (*models.Tournament, error) {
 	query := `SELECT id, name, description, start_date, end_date, created_by, status, created_at, updated_at FROM tournaments WHERE id = $1`
-	
+
 	var tournament models.Tournament
 	err := r.db.QueryRow(query, id).Scan(
 		&tournament.ID, &tournament.Name, &tournament.Description, &tournament.StartDate,
 		&tournament.EndDate, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("tournament not found")
 		}
 		return nil, fmt.Errorf("failed to get tournament: %w", err)
 	}
-	
+
 	return &tournament, nil
 }
 
 func (r *Repository) ListTournaments() ([]models.Tournament, error) {
 	query := `SELECT id, name, description, start_date, end_date, created_by, status, created_at, updated_at FROM tournaments ORDER BY created_at DESC`
-	
+
 	rows, err := r.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tournaments: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var tournaments []models.Tournament
 	for rows.Next() {
 		var tournament models.Tournament
@@ -79,7 +79,7 @@ func (r *Repository) ListTournaments() ([]models.Tournament, error) {
 		}
 		tournaments = append(tournaments, tournament)
 	}
-	
+
 	return tournaments, nil
 }
 
@@ -93,28 +93,28 @@ func (r *Repository) CreateTeam(tournamentID string, req *models.CreateTeamReque
 		VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		RETURNING id, tournament_id, name, color, created_at, updated_at
 	`
-	
+
 	var team models.Team
 	err := r.db.QueryRow(query, tournamentID, req.Name, req.Color).Scan(
 		&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.CreatedAt, &team.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create team: %w", err)
 	}
-	
+
 	return &team, nil
 }
 
 func (r *Repository) GetTeamsByTournament(tournamentID string) ([]models.Team, error) {
 	query := `SELECT id, tournament_id, name, color, created_at, updated_at FROM teams WHERE tournament_id = $1 ORDER BY created_at`
-	
+
 	rows, err := r.db.Query(query, tournamentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get teams: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var teams []models.Team
 	for rows.Next() {
 		var team models.Team
@@ -126,7 +126,7 @@ func (r *Repository) GetTeamsByTournament(tournamentID string) ([]models.Team, e
 		}
 		teams = append(teams, team)
 	}
-	
+
 	return teams, nil
 }
 
@@ -136,16 +136,16 @@ func (r *Repository) AddTeamMember(teamID, userID string) (*models.TeamMember, e
 		VALUES ($1, $2, CURRENT_TIMESTAMP)
 		RETURNING id, team_id, user_id, created_at
 	`
-	
+
 	var member models.TeamMember
 	err := r.db.QueryRow(query, teamID, userID).Scan(
 		&member.ID, &member.TeamID, &member.UserID, &member.CreatedAt,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to add team member: %w", err)
 	}
-	
+
 	return &member, nil
 }
 
@@ -159,29 +159,29 @@ func (r *Repository) CreateRound(tournamentID string, req *models.CreateRoundReq
 		VALUES ($1, $2, $3, $4, 'scheduled', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		RETURNING id, tournament_id, name, round_number, start_time, status, created_at, updated_at
 	`
-	
+
 	var round models.Round
 	err := r.db.QueryRow(query, tournamentID, req.Name, req.RoundNumber, req.StartTime).Scan(
 		&round.ID, &round.TournamentID, &round.Name, &round.RoundNumber,
 		&round.StartTime, &round.Status, &round.CreatedAt, &round.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create round: %w", err)
 	}
-	
+
 	return &round, nil
 }
 
 func (r *Repository) GetRoundsByTournament(tournamentID string) ([]models.Round, error) {
 	query := `SELECT id, tournament_id, name, round_number, start_time, status, created_at, updated_at FROM rounds WHERE tournament_id = $1 ORDER BY round_number`
-	
+
 	rows, err := r.db.Query(query, tournamentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rounds: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var rounds []models.Round
 	for rows.Next() {
 		var round models.Round
@@ -194,7 +194,7 @@ func (r *Repository) GetRoundsByTournament(tournamentID string) ([]models.Round,
 		}
 		rounds = append(rounds, round)
 	}
-	
+
 	return rounds, nil
 }
 
@@ -208,50 +208,50 @@ func (r *Repository) CreateMatch(roundID string, req *models.CreateMatchRequest)
 		VALUES ($1, $2, $3, $4, $5, 'scheduled', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		RETURNING id, round_id, team1_id, team2_id, format, holes, status, winner_team_id, start_time, end_time, created_at, updated_at
 	`
-	
+
 	var match models.Match
 	err := r.db.QueryRow(query, roundID, req.Team1ID, req.Team2ID, req.Format, req.Holes).Scan(
 		&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.Format,
 		&match.Holes, &match.Status, &match.WinnerTeamID, &match.StartTime, &match.EndTime,
 		&match.CreatedAt, &match.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create match: %w", err)
 	}
-	
+
 	return &match, nil
 }
 
 func (r *Repository) GetMatch(id string) (*models.Match, error) {
 	query := `SELECT id, round_id, team1_id, team2_id, format, holes, status, winner_team_id, start_time, end_time, created_at, updated_at FROM matches WHERE id = $1`
-	
+
 	var match models.Match
 	err := r.db.QueryRow(query, id).Scan(
 		&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.Format,
 		&match.Holes, &match.Status, &match.WinnerTeamID, &match.StartTime, &match.EndTime,
 		&match.CreatedAt, &match.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("match not found")
 		}
 		return nil, fmt.Errorf("failed to get match: %w", err)
 	}
-	
+
 	return &match, nil
 }
 
 func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 	query := `SELECT id, round_id, team1_id, team2_id, format, holes, status, winner_team_id, start_time, end_time, created_at, updated_at FROM matches WHERE round_id = $1 ORDER BY created_at`
-	
+
 	rows, err := r.db.Query(query, roundID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get matches: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var matches []models.Match
 	for rows.Next() {
 		var match models.Match
@@ -265,7 +265,7 @@ func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 		}
 		matches = append(matches, match)
 	}
-	
+
 	return matches, nil
 }
 
@@ -281,29 +281,29 @@ func (r *Repository) SubmitScore(matchID, userID string, holeNumber, strokes int
 		DO UPDATE SET strokes = EXCLUDED.strokes, updated_at = CURRENT_TIMESTAMP
 		RETURNING id, match_id, user_id, hole_number, strokes, created_at, updated_at
 	`
-	
+
 	var score models.Score
 	err := r.db.QueryRow(query, matchID, userID, holeNumber, strokes).Scan(
 		&score.ID, &score.MatchID, &score.UserID, &score.HoleNumber,
 		&score.Strokes, &score.CreatedAt, &score.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to submit score: %w", err)
 	}
-	
+
 	return &score, nil
 }
 
 func (r *Repository) GetMatchScores(matchID string) ([]models.Score, error) {
 	query := `SELECT id, match_id, user_id, hole_number, strokes, created_at, updated_at FROM scores WHERE match_id = $1 ORDER BY hole_number, user_id`
-	
+
 	rows, err := r.db.Query(query, matchID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get match scores: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var scores []models.Score
 	for rows.Next() {
 		var score models.Score
@@ -316,7 +316,7 @@ func (r *Repository) GetMatchScores(matchID string) ([]models.Score, error) {
 		}
 		scores = append(scores, score)
 	}
-	
+
 	return scores, nil
 }
 
@@ -330,41 +330,69 @@ func (r *Repository) CreateUser(email, name string, handicap *float64) (*models.
 		VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		RETURNING id, email, name, handicap, is_admin, created_at, updated_at
 	`
-	
+
 	var user models.User
 	err := r.db.QueryRow(query, email, name, handicap).Scan(
 		&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
-	
+
 	return &user, nil
 }
 
 func (r *Repository) GetUserByEmail(email string) (*models.User, error) {
 	query := `SELECT id, email, name, handicap, is_admin, created_at, updated_at FROM users WHERE email = $1`
-	
+
 	var user models.User
 	err := r.db.QueryRow(query, email).Scan(
 		&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("user not found")
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
-	
+
 	return &user, nil
+}
+
+func (r *Repository) GetAllUsers() ([]*models.User, error) {
+	query := `SELECT id, email, name, handicap, is_admin, created_at, updated_at FROM users ORDER BY name ASC`
+
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		var user models.User
+		err := rows.Scan(
+			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, &user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating users: %w", err)
+	}
+
+	return users, nil
 }
 
 func (r *Repository) UpdateMatchStatus(matchID, status string, winnerTeamID *string) error {
 	var query string
 	var args []interface{}
-	
+
 	if winnerTeamID != nil {
 		query = `UPDATE matches SET status = $1, winner_team_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`
 		args = []interface{}{status, *winnerTeamID, matchID}
@@ -372,11 +400,11 @@ func (r *Repository) UpdateMatchStatus(matchID, status string, winnerTeamID *str
 		query = `UPDATE matches SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`
 		args = []interface{}{status, matchID}
 	}
-	
+
 	_, err := r.db.Exec(query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update match status: %w", err)
 	}
-	
+
 	return nil
 }

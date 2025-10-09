@@ -1,0 +1,57 @@
+
+# File: docker-compose.yml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: golf-db
+    environment:
+      POSTGRES_USER: golfdeveloper
+      POSTGRES_PASSWORD: dev_password_change_me
+      POSTGRES_DB: golf_tournament
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U golfdeveloper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: golf-api
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgresql://golfdeveloper:dev_password_change_me@postgres:5432/golf_tournament
+      JWT_SECRET: your-secret-key-change-in-production
+      GIN_MODE: release
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: golf-frontend
+    environment:
+      REACT_APP_API_URL: http://localhost:8080/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

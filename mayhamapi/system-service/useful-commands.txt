@@ -1,0 +1,30 @@
+## USEFUL COMMANDS
+
+# Linux - systemd
+systemctl start golf-api              # Start service
+systemctl stop golf-api               # Stop service
+systemctl restart golf-api            # Restart service
+systemctl enable golf-api             # Enable at boot
+systemctl disable golf-api            # Disable at boot
+systemctl status golf-api             # Check status
+journalctl -u golf-api -n 100 -f      # View logs
+
+# Docker
+docker-compose ps                     # Check status
+docker-compose logs -f                # View logs
+docker-compose restart golf-api       # Restart service
+docker-compose down                   # Stop all
+docker-compose up -d                  # Start all
+
+# Windows - PowerShell
+Get-Service ServiceName               # Check status
+Start-Service ServiceName             # Start service
+Stop-Service ServiceName              # Stop service
+Restart-Service ServiceName           # Restart service
+
+# macOS - launchctl
+launchctl load /path/to/plist        # Load service
+launchctl unload /path/to/plist      # Unload service
+launchctl start com.golf-tournament.backend
+launchctl stop com.golf-tournament.backend
+launchctl list | grep golf           # Check running services

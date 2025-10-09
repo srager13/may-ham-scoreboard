@@ -126,6 +126,9 @@ func setupRouter(
 		protected := api.Group("/")
 		protected.Use(middleware.JWTAuth())
 		{
+			// User management
+			protected.GET("/users", authHandler.GetUsers)
+
 			// Tournament management (admin or tournament creator)
 			protected.POST("/tournaments", tournamentHandler.CreateTournament)
 			protected.POST("/tournaments/:tournament_id/teams", tournamentHandler.CreateTeam)

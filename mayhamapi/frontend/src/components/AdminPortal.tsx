@@ -57,20 +57,11 @@ const AdminPortal = () => {
       setLoading(true);
       setError(null);
       
-      // For now, we'll simulate users since we don't have a users endpoint
-      // In a real app, you'd want to add a GET /api/v1/users endpoint
-      const mockUsers: User[] = [
-        { id: '1', name: 'John Doe', email: 'john@example.com', handicap: 12.5, is_admin: false, created_at: '', updated_at: '' },
-        { id: '2', name: 'Jane Smith', email: 'jane@example.com', handicap: 8.0, is_admin: false, created_at: '', updated_at: '' },
-        { id: '3', name: 'Bob Johnson', email: 'bob@example.com', handicap: 15.2, is_admin: false, created_at: '', updated_at: '' },
-        { id: '4', name: 'Alice Williams', email: 'alice@example.com', handicap: 10.5, is_admin: false, created_at: '', updated_at: '' },
-        { id: '5', name: 'Charlie Brown', email: 'charlie@example.com', handicap: 18.0, is_admin: false, created_at: '', updated_at: '' },
-        { id: '6', name: 'Diana Prince', email: 'diana@example.com', handicap: 6.5, is_admin: false, created_at: '', updated_at: '' },
-      ];
-      
+      // Load users and match formats from API
+      const users = await apiClient.getUsers();
       const formats = await apiClient.getMatchFormats();
       
-      setAvailableUsers(mockUsers);
+      setAvailableUsers(users);
       setMatchFormats(formats);
     } catch (err) {
       console.error('Error loading initial data:', err);

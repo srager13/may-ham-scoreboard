@@ -2,11 +2,12 @@ package handlers
 
 import (
 	"net/http"
-	
-	"github.com/gin-gonic/gin"
+
 	"mayhamapi/middleware"
 	"mayhamapi/models"
 	"mayhamapi/repository"
+
+	"github.com/gin-gonic/gin"
 )
 
 type AuthHandler struct {
@@ -41,24 +42,24 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	// Get user by email
 	user, err := h.repo.GetUserByEmail(req.Email)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
-	
+
 	// TODO: In a real application, you would verify the password hash
 	// For now, we'll skip password verification
-	
+
 	// Generate JWT token
 	token, err := middleware.GenerateToken(user.ID, user.Email, user.IsAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, AuthResponse{
 		Token: token,
 		User:  *user,
@@ -72,31 +73,31 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	// Check if user already exists
 	existingUser, _ := h.repo.GetUserByEmail(req.Email)
 	if existingUser != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
 		return
 	}
-	
+
 	// TODO: In a real application, you would hash the password
 	// For now, we'll skip password storage
-	
+
 	// Create user
 	user, err := h.repo.CreateUser(req.Email, req.Name, req.Handicap)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
 	}
-	
+
 	// Generate JWT token
 	token, err := middleware.GenerateToken(user.ID, user.Email, user.IsAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
-	
+
 	c.JSON(http.StatusCreated, AuthResponse{
 		Token: token,
 		User:  *user,
@@ -110,13 +111,13 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	
+
 	// In a real application, you might want to fetch fresh user data from the database
 	// For now, we'll return the data from the JWT token
 	c.JSON(http.StatusOK, gin.H{
-		"user_id":    userID,
-		"email":      c.GetString("user_email"),
-		"is_admin":   c.GetBool("is_admin"),
+		"user_id":  userID,
+		"email":    c.GetString("user_email"),
+		"is_admin": c.GetBool("is_admin"),
 	})
 }
 
@@ -127,18 +128,29 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	
+
 	email := c.GetString("user_email")
 	isAdmin := c.GetBool("is_admin")
-	
+
 	// Generate new token
 	token, err := middleware.GenerateToken(userID.(string), email, isAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
 	})
+}
+
+// GET /api/v1/users
+func (h *AuthHandler) GetUsers(c *gin.Context) {
+	users, err := h.repo.GetAllUsers()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve users"})
+		return
+	}
+
+	c.JSON(http.StatusOK, users)
 }

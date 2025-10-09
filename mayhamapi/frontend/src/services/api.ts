@@ -236,6 +236,10 @@ class ApiClient {
     return this.request<User>('/auth/me');
   }
 
+  async getUsers(): Promise<User[]> {
+    return this.request<User[]>('/users');
+  }
+
   logout() {
     this.clearToken();
   }

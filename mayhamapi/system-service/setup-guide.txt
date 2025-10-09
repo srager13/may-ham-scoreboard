@@ -1,0 +1,53 @@
+
+# ============================================
+# COMPREHENSIVE SETUP GUIDE
+# ============================================
+
+## LINUX (RECOMMENDED FOR PRODUCTION)
+
+1. Clone your repository to /opt/golf-tournament/
+2. Install dependencies:
+   - Go (for backend)
+   - Node.js (for frontend)
+   - PostgreSQL
+
+3. Run setup:
+   sudo bash setup-linux.sh
+
+4. Enable at boot:
+   sudo systemctl enable golf-api golf-frontend
+
+5. Start services:
+   sudo systemctl start golf-api golf-frontend
+
+6. View logs:
+   sudo journalctl -u golf-api -f
+   sudo journalctl -u golf-frontend -f
+
+7. Check status:
+   systemctl status golf-api
+   systemctl status golf-frontend
+
+---
+
+## DOCKER (RECOMMENDED FOR PORTABILITY)
+
+1. Install Docker and Docker Compose
+2. Place docker-compose.yml in project root
+3. Build and run:
+   docker-compose up -d
+
+4. Check status:
+   docker-compose ps
+
+5. View logs:
+   docker-compose logs -f golf-api
+   docker-compose logs -f golf-frontend
+
+6. For auto-start on boot:
+   - Linux: systemctl enable docker
+   - macOS: Docker Desktop -> Preferences -> Start Docker Desktop when you log in
+   - Windows: Docker Desktop settings
+
+7. To start at system boot (systemd):
+   Create /etc/systemd/system/docker-compose-golf.service
