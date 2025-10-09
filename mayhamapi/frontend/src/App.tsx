@@ -1,17 +1,11 @@
 import React, { useState } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Trophy, Users, BarChart3, Settings } from 'lucide-react';
+import { Trophy, Users, BarChart3, Settings, AlertCircle } from 'lucide-react';
+import Leaderboard from './components/Leaderboard';
 import AdminPortal from './components/AdminPortal';
 import ScoreInterface from './components/ScoreInterface';
 import { AuthProvider, AuthModal, LoginButton, useAuth } from './components/Auth';
-
-// Temporary placeholder for Leaderboard
-const Leaderboard = () => (
-  <div className="p-6">
-    <h1 className="text-2xl font-bold mb-4">Leaderboard</h1>
-    <p>Leaderboard component is being updated. Please use the Admin Portal to create tournaments.</p>
-  </div>
-);
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -49,6 +43,28 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
 
   return <>{children}</>;
+};
+
+// API Error Notification
+const ApiErrorNotification = () => {
+  const { apiError } = useAuth();
+  
+  if (!apiError) return null;
+  
+  return (
+    <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+      <div className="flex">
+        <div className="flex-shrink-0">
+          <AlertCircle className="h-5 w-5 text-yellow-400" />
+        </div>
+        <div className="ml-3">
+          <p className="text-sm text-yellow-700">
+            <strong>API Connection Issue:</strong> {apiError}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 function AppContent() {
@@ -128,6 +144,9 @@ function AppContent() {
         </div>
       </nav>
 
+      {/* API Error Notification */}
+      <ApiErrorNotification />
+
       {/* Main content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <Routes>
@@ -162,9 +181,11 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

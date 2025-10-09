@@ -10,6 +10,7 @@ interface AuthContextType {
   register: (email: string, name: string, password: string, handicap?: number) => Promise<void>;
   logout: () => void;
   loading: boolean;
+  apiError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,6 +27,7 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<ApiUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     // Check if user is already logged in
@@ -35,10 +37,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const currentUser = await apiClient.getCurrentUser();
           setUser(currentUser);
+          setApiError(null);
         } catch (error) {
-          // Token is invalid, clear it
+          console.warn('Auth check failed:', error);
+          // Token is invalid or API is unavailable, clear it
           localStorage.removeItem('auth_token');
           apiClient.clearToken();
+          
+          // Check if this is an API connectivity issue
+          if (error instanceof Error && (error.message.includes('fetch') || error.message.includes('Network'))) {
+            setApiError('Backend API is not available. Some features may not work.');
+          }
         }
       }
       setLoading(false);
@@ -48,13 +57,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await apiClient.login({ email, password });
-    setUser(response.user);
+    try {
+      const response = await apiClient.login({ email, password });
+      setUser(response.user);
+      setApiError(null);
+    } catch (error) {
+      if (error instanceof Error && (error.message.includes('fetch') || error.message.includes('Network'))) {
+        throw new Error('Cannot connect to server. Please check if the backend is running.');
+      }
+      throw error;
+    }
   };
 
   const register = async (email: string, name: string, password: string, handicap?: number) => {
-    const response = await apiClient.register({ email, name, password, handicap });
-    setUser(response.user);
+    try {
+      const response = await apiClient.register({ email, name, password, handicap });
+      setUser(response.user);
+      setApiError(null);
+    } catch (error) {
+      if (error instanceof Error && (error.message.includes('fetch') || error.message.includes('Network'))) {
+        throw new Error('Cannot connect to server. Please check if the backend is running.');
+      }
+      throw error;
+    }
   };
 
   const logout = () => {
@@ -69,6 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     register,
     logout,
     loading,
+    apiError,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -155,7 +155,7 @@ export interface AuthResponse {
   user: User;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
     this.name = 'ApiError';
@@ -197,20 +197,33 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new ApiError(
+          response.status,
+          errorData.error || `HTTP ${response.status}`
+        );
+      }
+
+      return response.json();
+    } catch (error) {
+      // Handle network errors (e.g., ECONNREFUSED, network timeout, etc.)
+      if (error instanceof ApiError) {
+        throw error; // Re-throw API errors
+      }
+      
+      // This is likely a network/connectivity error
       throw new ApiError(
-        response.status,
-        errorData.error || `HTTP ${response.status}`
+        0,
+        'Network error: Unable to connect to the server. Please check if the backend is running.'
       );
     }
-
-    return response.json();
   }
 
   // Authentication
@@ -339,4 +352,3 @@ class ApiClient {
 
 // Create singleton instance
 export const apiClient = new ApiClient();
-export { ApiError };
