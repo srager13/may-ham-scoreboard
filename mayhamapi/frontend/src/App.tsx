@@ -2,8 +2,15 @@ import React from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Trophy, Users, BarChart3, Settings } from 'lucide-react';
 import AdminPortal from './components/AdminPortal';
-import Leaderboard from './components/Leaderboard';
 import ScoreInterface from './components/ScoreInterface';
+
+// Temporary placeholder for Leaderboard
+const Leaderboard = () => (
+  <div className="p-6">
+    <h1 className="text-2xl font-bold mb-4">Leaderboard</h1>
+    <p>Leaderboard component is being updated. Please use the Admin Portal to create tournaments.</p>
+  </div>
+);
 
 function App() {
   const location = useLocation();

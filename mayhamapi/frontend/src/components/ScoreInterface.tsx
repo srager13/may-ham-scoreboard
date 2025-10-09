@@ -1,56 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Target, Award, RefreshCw, Save, AlertCircle } from 'lucide-react';
+import { apiClient, ApiError, Match as ApiMatch, Tournament, Team, Round } from '../services/api';
 
-// Mock API - replace with actual API calls
-const mockAPI = {
-  getActiveMatches: async () => [
-    {
-      id: '1',
-      match_number: 1,
-      holes: 6,
-      status: 'in_progress',
-      team1: { id: '1', name: 'Team USA', color: '#DC2626' },
-      team2: { id: '2', name: 'Team Europe', color: '#2563EB' },
-      players: [
-        { id: '1', name: 'John Doe', team_id: '1' },
-        { id: '2', name: 'Jane Smith', team_id: '1' },
-        { id: '3', name: 'Bob Johnson', team_id: '2' },
-        { id: '4', name: 'Alice Williams', team_id: '2' },
-      ],
-      format: { name: '2v2 Scramble', scoring_type: 'scramble' },
-      current_hole: 3,
-      scores: {
-        1: { '1': 4, '2': 5, '3': 3, '4': 4 },
-        2: { '1': 3, '2': 4, '3': 4, '4': 3 },
-      }
-    }
-  ],
-  submitScores: async (matchId: string, holeNumber: number, scores: Record<string, number>) => {
-    console.log('Submitting scores:', { matchId, holeNumber, scores });
-    return { success: true };
-  }
-};
-
-interface Match {
-  id: string;
-  match_number: number;
-  holes: number;
-  status: string;
-  team1: { id: string; name: string; color: string };
-  team2: { id: string; name: string; color: string };
-  players: Array<{ id: string; name: string; team_id: string }>;
-  format: { name: string; scoring_type: string };
+interface MatchWithScores extends ApiMatch {
   current_hole: number;
   scores: Record<number, Record<string, number>>;
 }
 
 const ScoreInterface: React.FC = () => {
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const [matches, setMatches] = useState<MatchWithScores[]>([]);
+  const [selectedMatch, setSelectedMatch] = useState<MatchWithScores | null>(null);
   const [currentHole, setCurrentHole] = useState(1);
   const [holeScores, setHoleScores] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadMatches();
@@ -59,14 +23,40 @@ const ScoreInterface: React.FC = () => {
   const loadMatches = async () => {
     try {
       setLoading(true);
-      const activeMatches = await mockAPI.getActiveMatches();
-      setMatches(activeMatches);
-      if (activeMatches.length > 0) {
-        setSelectedMatch(activeMatches[0]);
-        setCurrentHole(activeMatches[0].current_hole);
+      setError(null);
+      
+      // Get all tournaments to find matches
+      const tournaments = await apiClient.getTournaments();
+      
+      const allMatches: MatchWithScores[] = [];
+      
+      for (const tournament of tournaments) {
+        const rounds = await apiClient.getTournamentRounds(tournament.id);
+        
+        for (const round of rounds) {
+          const matches = await apiClient.getRoundMatches(round.id);
+          
+          // Convert API matches to matches with scores
+          const matchesWithScores: MatchWithScores[] = matches
+            .filter(m => m.status === 'in_progress' || m.status === 'not_started')
+            .map(match => ({
+              ...match,
+              current_hole: 1,
+              scores: {}
+            }));
+          
+          allMatches.push(...matchesWithScores);
+        }
       }
-    } catch (error) {
-      console.error('Error loading matches:', error);
+      
+      setMatches(allMatches);
+      if (allMatches.length > 0) {
+        setSelectedMatch(allMatches[0]);
+        setCurrentHole(1);
+      }
+    } catch (err) {
+      console.error('Error loading matches:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to load matches');
     } finally {
       setLoading(false);
     }
@@ -84,7 +74,16 @@ const ScoreInterface: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await mockAPI.submitScores(selectedMatch.id, currentHole, holeScores);
+      // Convert holeScores to API format
+      const scoresArray = Object.entries(holeScores).map(([userId, strokes]) => ({
+        user_id: userId,
+        strokes: strokes
+      }));
+
+      await apiClient.submitScores(selectedMatch.id, {
+        hole_number: currentHole,
+        scores: scoresArray
+      });
       
       // Update local state
       setSelectedMatch(prev => ({
@@ -101,8 +100,9 @@ const ScoreInterface: React.FC = () => {
         setCurrentHole(currentHole + 1);
         setHoleScores({});
       }
-    } catch (error) {
-      console.error('Error submitting scores:', error);
+    } catch (err) {
+      console.error('Error submitting scores:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to submit scores');
     } finally {
       setIsSubmitting(false);
     }
@@ -133,6 +133,13 @@ const ScoreInterface: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white shadow-sm rounded-lg p-6">
         <div className="flex items-center justify-between">
@@ -227,7 +234,7 @@ const ScoreInterface: React.FC = () => {
               {getTeamPlayers(selectedMatch.team1.id).map((player) => (
                 <div key={player.id} className="flex items-center space-x-3">
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900">{player.name}</div>
+                    <div className="font-medium text-gray-900">{player.user?.name || `Player ${player.user_id}`}</div>
                   </div>
                   <div className="flex items-center space-x-2">
                     <input
@@ -254,7 +261,7 @@ const ScoreInterface: React.FC = () => {
               {getTeamPlayers(selectedMatch.team2.id).map((player) => (
                 <div key={player.id} className="flex items-center space-x-3">
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900">{player.name}</div>
+                    <div className="font-medium text-gray-900">{player.user?.name || `Player ${player.user_id}`}</div>
                   </div>
                   <div className="flex items-center space-x-2">
                     <input

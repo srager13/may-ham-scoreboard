@@ -1,80 +1,151 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Users, Trophy, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
+import { apiClient, ApiError, User, MatchFormat, Tournament, Team, Round, CreateTournamentRequest } from '../services/api';
 
-// Mock API calls - replace with actual API
-const mockAPI = {
-  getUsers: async () => [
-    { id: '1', name: 'John Doe', email: 'john@example.com', handicap: 12.5 },
-    { id: '2', name: 'Jane Smith', email: 'jane@example.com', handicap: 8.0 },
-    { id: '3', name: 'Bob Johnson', email: 'bob@example.com', handicap: 15.2 },
-    { id: '4', name: 'Alice Williams', email: 'alice@example.com', handicap: 10.5 },
-    { id: '5', name: 'Charlie Brown', email: 'charlie@example.com', handicap: 18.0 },
-    { id: '6', name: 'Diana Prince', email: 'diana@example.com', handicap: 6.5 },
-  ],
-  getMatchFormats: async () => [
-    { id: '1', name: 'Singles Match Play', players_per_side: 1, scoring_type: 'match_play' },
-    { id: '2', name: '2v2 Scramble', players_per_side: 2, scoring_type: 'scramble' },
-    { id: '3', name: '2v2 Best Ball', players_per_side: 2, scoring_type: 'best_ball' },
-    { id: '4', name: 'High-Low', players_per_side: 2, scoring_type: 'high_low' },
-    { id: '5', name: 'Shamble', players_per_side: 2, scoring_type: 'shamble' },
-  ],
-  createTournament: async (data) => {
-    console.log('Creating tournament:', data);
-    return { success: true, id: 'new-tournament-id' };
-  }
-};
+interface TeamData {
+  id?: string;
+  name: string;
+  color: string;
+  players: User[];
+}
+
+interface RoundData {
+  id?: string;
+  name: string;
+  round_number: number;
+  date: string;
+  matches: MatchData[];
+}
+
+interface MatchData {
+  id?: string;
+  match_number: number;
+  format_id: string;
+  holes: number;
+  team1_players: string[];
+  team2_players: string[];
+}
 
 const AdminPortal = () => {
   const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
   const [tournament, setTournament] = useState({
     name: '',
     description: '',
     start_date: '',
     end_date: ''
   });
-  const [teams, setTeams] = useState([
+  
+  const [teams, setTeams] = useState<TeamData[]>([
     { name: 'Team USA', color: '#DC2626', players: [] },
     { name: 'Team Europe', color: '#2563EB', players: [] }
   ]);
-  const [rounds, setRounds] = useState([]);
-  const [availableUsers, setAvailableUsers] = useState([]);
-  const [matchFormats, setMatchFormats] = useState([]);
+  
+  const [rounds, setRounds] = useState<RoundData[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
+  const [matchFormats, setMatchFormats] = useState<MatchFormat[]>([]);
+  const [createdTournament, setCreatedTournament] = useState<Tournament | null>(null);
 
   useEffect(() => {
     loadInitialData();
   }, []);
 
   const loadInitialData = async () => {
-    const users = await mockAPI.getUsers();
-    const formats = await mockAPI.getMatchFormats();
-    setAvailableUsers(users);
-    setMatchFormats(formats);
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // For now, we'll simulate users since we don't have a users endpoint
+      // In a real app, you'd want to add a GET /api/v1/users endpoint
+      const mockUsers: User[] = [
+        { id: '1', name: 'John Doe', email: 'john@example.com', handicap: 12.5, is_admin: false, created_at: '', updated_at: '' },
+        { id: '2', name: 'Jane Smith', email: 'jane@example.com', handicap: 8.0, is_admin: false, created_at: '', updated_at: '' },
+        { id: '3', name: 'Bob Johnson', email: 'bob@example.com', handicap: 15.2, is_admin: false, created_at: '', updated_at: '' },
+        { id: '4', name: 'Alice Williams', email: 'alice@example.com', handicap: 10.5, is_admin: false, created_at: '', updated_at: '' },
+        { id: '5', name: 'Charlie Brown', email: 'charlie@example.com', handicap: 18.0, is_admin: false, created_at: '', updated_at: '' },
+        { id: '6', name: 'Diana Prince', email: 'diana@example.com', handicap: 6.5, is_admin: false, created_at: '', updated_at: '' },
+      ];
+      
+      const formats = await apiClient.getMatchFormats();
+      
+      setAvailableUsers(mockUsers);
+      setMatchFormats(formats);
+    } catch (err) {
+      console.error('Error loading initial data:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to load initial data');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async () => {
-    const payload = {
-      tournament,
-      teams: teams.map(t => ({
-        name: t.name,
-        color: t.color,
-        player_ids: t.players.map(p => p.id)
-      })),
-      rounds: rounds.map(r => ({
-        name: r.name,
-        round_number: r.round_number,
-        round_date: r.date,
-        matches: r.matches.map(m => ({
-          format_id: m.format_id,
-          holes: m.holes,
-          team1_player_indices: m.team1_players,
-          team2_player_indices: m.team2_players
-        }))
-      }))
-    };
-    
-    const result = await mockAPI.createTournament(payload);
-    if (result.success) {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Step 1: Create tournament
+      const tournamentData: CreateTournamentRequest = {
+        name: tournament.name,
+        description: tournament.description || undefined,
+        start_date: tournament.start_date,
+        end_date: tournament.end_date,
+      };
+
+      const newTournament = await apiClient.createTournament(tournamentData);
+      setCreatedTournament(newTournament);
+
+      // Step 2: Create teams
+      const createdTeams = [];
+      for (const team of teams) {
+        const newTeam = await apiClient.createTeam(newTournament.id, {
+          name: team.name,
+          color: team.color,
+        });
+        createdTeams.push(newTeam);
+
+        // Add team members
+        for (const player of team.players) {
+          await apiClient.addTeamMember(newTeam.id, player.id);
+        }
+      }
+
+      // Step 3: Create rounds
+      const createdRounds = [];
+      for (const round of rounds) {
+        const newRound = await apiClient.createRound(newTournament.id, {
+          name: round.name,
+          round_number: round.round_number,
+          start_time: round.date,
+        });
+        createdRounds.push(newRound);
+
+        // Create matches for this round
+        for (const match of round.matches) {
+          await apiClient.createMatch(newRound.id, {
+            match_format_id: match.format_id,
+            match_number: match.match_number,
+            holes: match.holes,
+            team1_id: createdTeams[0].id,
+            team2_id: createdTeams[1].id,
+            player_assignments: {
+              team1_players: match.team1_players,
+              team2_players: match.team2_players,
+            },
+          });
+        }
+      }
+
       alert('Tournament created successfully!');
+      // Reset form or redirect
+      setStep(1);
+      
+    } catch (err) {
+      console.error('Error creating tournament:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to create tournament');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,6 +157,20 @@ const AdminPortal = () => {
       </div>
 
       <div className="max-w-7xl mx-auto p-6">
+        {/* Error Display */}
+        {error && (
+          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+            {error}
+          </div>
+        )}
+
+        {/* Loading Display */}
+        {loading && (
+          <div className="mb-4 p-4 bg-blue-100 border border-blue-400 text-blue-700 rounded">
+            Creating tournament... Please wait.
+          </div>
+        )}
+
         {/* Progress Steps */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
