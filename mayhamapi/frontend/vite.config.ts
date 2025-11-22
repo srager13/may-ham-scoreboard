@@ -9,6 +9,9 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    allowedHosts: [
+      'mayhamscoreboard.com',
+    ],
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
