@@ -22,8 +22,8 @@ interface MatchData {
   match_number: number;
   format_id: string;
   holes: number;
-  team1_players: string[];
-  team2_players: string[];
+  team1_players: number[];
+  team2_players: number[];
 }
 
 const AdminPortal = () => {
@@ -132,6 +132,17 @@ const AdminPortal = () => {
 
         // Create matches for this round
         for (const match of round.matches) {
+          // Convert player indices to player IDs
+          const team1PlayerIds = match.team1_players
+            .filter(playerIdx => playerIdx !== undefined)
+            .map(playerIdx => teams[0].players[playerIdx]?.id)
+            .filter(id => id !== undefined);
+          
+          const team2PlayerIds = match.team2_players
+            .filter(playerIdx => playerIdx !== undefined)
+            .map(playerIdx => teams[1].players[playerIdx]?.id)
+            .filter(id => id !== undefined);
+
           await apiClient.createMatch(newRound.id, {
             match_format_id: match.format_id,
             match_number: match.match_number,
@@ -139,8 +150,8 @@ const AdminPortal = () => {
             team1_id: createdTeams[0].id,
             team2_id: createdTeams[1].id,
             player_assignments: {
-              team1_players: match.team1_players,
-              team2_players: match.team2_players,
+              team1_players: team1PlayerIds,
+              team2_players: team2PlayerIds,
             },
           });
         }
@@ -671,17 +682,21 @@ const MatchConfig = ({
               {Array.from({ length: playersNeeded }).map((_, playerSlot) => (
                 <select
                   key={playerSlot}
-                  value={teamIdx === 0 ? match.team1_players[playerSlot] || '' : match.team2_players[playerSlot] || ''}
+                  value={teamIdx === 0 ? (match.team1_players[playerSlot] !== undefined ? match.team1_players[playerSlot].toString() : '') : (match.team2_players[playerSlot] !== undefined ? match.team2_players[playerSlot].toString() : '')}
                   onChange={(e) => {
                     const newPlayers = [...(teamIdx === 0 ? match.team1_players : match.team2_players)];
-                    newPlayers[playerSlot] = parseInt(e.target.value);
+                    if (e.target.value === '') {
+                      newPlayers[playerSlot] = undefined;
+                    } else {
+                      newPlayers[playerSlot] = parseInt(e.target.value);
+                    }
                     updateMatch(roundIdx, matchIdx, teamIdx === 0 ? 'team1_players' : 'team2_players', newPlayers);
                   }}
                   className="w-full p-2 border rounded text-sm"
                 >
                   <option value="">Select player...</option>
                   {team.players.map((player, pIdx) => (
-                    <option key={player.id} value={pIdx}>
+                    <option key={player.id} value={pIdx.toString()}>
                       {player.name} (HCP: {player.handicap})
                     </option>
                   ))}
