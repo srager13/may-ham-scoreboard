@@ -322,7 +322,8 @@ class ApiClient {
 
   // Match Formats
   async getMatchFormats(): Promise<MatchFormat[]> {
-    return this.request<MatchFormat[]>('/public/match-formats');
+    const response = await this.request<{ formats: MatchFormat[] }>('/public/match-formats');
+    return response.formats;
   }
 
   // Scoring

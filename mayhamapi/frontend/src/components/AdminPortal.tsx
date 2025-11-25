@@ -58,14 +58,21 @@ const AdminPortal = () => {
       setError(null);
       
       // Load users and match formats from API
+      console.log('Loading initial data...');
       const users = await apiClient.getUsers();
-      const formats = await apiClient.getMatchFormats();
+      console.log('Users loaded:', users);
       
-      setAvailableUsers(users);
-      setMatchFormats(formats);
+      const formats = await apiClient.getMatchFormats();
+      console.log('Match formats loaded:', formats);
+      
+      setAvailableUsers(Array.isArray(users) ? users : []);
+      setMatchFormats(Array.isArray(formats) ? formats : []);
     } catch (err) {
       console.error('Error loading initial data:', err);
       setError(err instanceof ApiError ? err.message : 'Failed to load initial data');
+      // Set safe defaults on error
+      setAvailableUsers([]);
+      setMatchFormats([]);
     } finally {
       setLoading(false);
     }
@@ -199,6 +206,7 @@ const AdminPortal = () => {
             setRounds={setRounds} 
             teams={teams}
             matchFormats={matchFormats}
+            loading={loading}
           />
         )}
         {step === 4 && (
@@ -400,7 +408,39 @@ const TeamsStep = ({ teams, setTeams, availableUsers }) => {
 };
 
 // Step 3: Rounds & Matches
-const RoundsStep = ({ rounds, setRounds, teams, matchFormats }) => {
+const RoundsStep = ({ rounds, setRounds, teams, matchFormats, loading }) => {
+  // Show loading message if data is still being fetched
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-2xl font-bold mb-6 flex items-center">
+          <Trophy className="mr-2" />
+          Rounds & Matches
+        </h2>
+        <div className="text-center py-12">
+          <p className="text-gray-500">Loading match formats...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Ensure matchFormats is an array
+  const safeMatchFormats = Array.isArray(matchFormats) ? matchFormats : [];
+
+  // Show warning if no match formats are available
+  if (safeMatchFormats.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-2xl font-bold mb-6 flex items-center">
+          <Trophy className="mr-2" />
+          Rounds & Matches
+        </h2>
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
+          <p>No match formats available. Please ensure your API is running and try refreshing the page.</p>
+        </div>
+      </div>
+    );
+  }
   const addRound = () => {
     setRounds([...rounds, {
       name: `Round ${rounds.length + 1}`,
@@ -422,8 +462,10 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats }) => {
 
   const addMatch = (roundIdx) => {
     const newRounds = [...rounds];
+    const safeMatchFormats = Array.isArray(matchFormats) ? matchFormats : [];
     newRounds[roundIdx].matches.push({
-      format_id: matchFormats[0]?.id || '',
+      match_number: newRounds[roundIdx].matches.length + 1,
+      format_id: safeMatchFormats.length > 0 ? safeMatchFormats[0].id : '',
       holes: 6,
       team1_players: [],
       team2_players: []
@@ -559,7 +601,9 @@ const MatchConfig = ({
   updateMatch,
   deleteMatch
 }) => {
-  const selectedFormat = matchFormats.find(f => f.id === match.format_id);
+  // Ensure matchFormats is always an array
+  const safeMatchFormats = Array.isArray(matchFormats) ? matchFormats : [];
+  const selectedFormat = safeMatchFormats.find(f => f.id === match.format_id);
   const playersNeeded = selectedFormat?.players_per_side || 1;
 
   return (
@@ -581,8 +625,12 @@ const MatchConfig = ({
             value={match.format_id}
             onChange={(e) => updateMatch(roundIdx, matchIdx, 'format_id', e.target.value)}
             className="w-full p-2 border rounded"
+            disabled={safeMatchFormats.length === 0}
           >
-            {matchFormats.map(format => (
+            <option value="">
+              {safeMatchFormats.length === 0 ? 'No formats available' : 'Select format...'}
+            </option>
+            {safeMatchFormats.map(format => (
               <option key={format.id} value={format.id}>{format.name}</option>
             ))}
           </select>

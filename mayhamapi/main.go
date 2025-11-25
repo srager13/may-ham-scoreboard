@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 
 	"mayhamapi/db"
 	"mayhamapi/handlers"
@@ -83,7 +84,7 @@ func setupRouter(
 	// Handle client-side routing for SPA
 	r.NoRoute(func(c *gin.Context) {
 		// If it's an API route, return 404
-		if c.Request.URL.Path[:4] == "/api" {
+		if strings.HasPrefix(c.Request.URL.Path, "/api") {
 			c.JSON(404, gin.H{"error": "Not found"})
 			return
 		}
