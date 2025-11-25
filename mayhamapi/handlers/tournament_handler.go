@@ -25,8 +25,18 @@ func (h *TournamentHandler) CreateTournament(c *gin.Context) {
 		return
 	}
 
-	// TODO: Get user ID from JWT token
-	createdBy := "user-id-placeholder" // For now, use placeholder
+	// Get user ID from JWT token
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	createdBy, ok := userID.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID"})
+		return
+	}
 
 	tournament, err := h.repo.CreateTournament(&req, createdBy)
 	if err != nil {

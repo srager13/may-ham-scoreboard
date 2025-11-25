@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
 	"mayhamapi/handlers"
 	"mayhamapi/middleware"
 	"mayhamapi/websocket"
+
+	"github.com/gin-gonic/gin"
 )
 
 func setupRouter(
@@ -14,17 +15,17 @@ func setupRouter(
 	wsHub *websocket.Hub,
 ) *gin.Engine {
 	r := gin.Default()
-	
+
 	// Global middleware
 	r.Use(middleware.CORS())
 	r.Use(middleware.Logger())
 	r.Use(middleware.RequestID())
-	
+
 	// Health check endpoint
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "healthy"})
 	})
-	
+
 	// API routes
 	api := r.Group("/api/v1")
 	{
@@ -36,7 +37,7 @@ func setupRouter(
 			auth.GET("/me", middleware.JWTAuth(), authHandler.GetCurrentUser)
 			auth.POST("/refresh", middleware.JWTAuth(), authHandler.RefreshToken)
 		}
-		
+
 		// Public tournament data (read-only)
 		public := api.Group("/public")
 		public.Use(middleware.OptionalAuth())
@@ -50,28 +51,31 @@ func setupRouter(
 			public.GET("/matches/:match_id/scores", scoringHandler.GetMatchScores)
 			public.GET("/match-formats", tournamentHandler.GetMatchFormats)
 		}
-		
+
 		// Protected routes (authentication required)
 		protected := api.Group("/")
 		protected.Use(middleware.JWTAuth())
 		{
+			// User management
+			protected.GET("/users", authHandler.GetUsers)
+
 			// Tournament management (admin or tournament creator)
 			protected.POST("/tournaments", tournamentHandler.CreateTournament)
 			protected.POST("/tournaments/:tournament_id/teams", tournamentHandler.CreateTeam)
 			protected.POST("/teams/:team_id/members", tournamentHandler.AddTeamMember)
 			protected.POST("/tournaments/:tournament_id/rounds", tournamentHandler.CreateRound)
 			protected.POST("/rounds/:round_id/matches", tournamentHandler.CreateMatch)
-			
+
 			// Scoring (players can submit their own scores)
 			protected.POST("/matches/:match_id/scores", scoringHandler.SubmitScores)
 			protected.PATCH("/matches/:match_id/scores/:hole_number", scoringHandler.UpdateHoleScore)
 		}
-		
+
 		// WebSocket endpoint (optional auth for real-time updates)
 		api.GET("/ws/tournaments/:tournament_id", func(c *gin.Context) {
 			wsHub.HandleWebSocket(c)
 		})
 	}
-	
+
 	return r
 }

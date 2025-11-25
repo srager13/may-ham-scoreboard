@@ -52,8 +52,14 @@ const AdminPortal = () => {
 
   useEffect(() => {
     loadInitialData();
-    checkForDraftData();
   }, []);
+
+  // Check for draft data after users are loaded
+  useEffect(() => {
+    if (availableUsers.length > 0) {
+      checkForDraftData();
+    }
+  }, [availableUsers]);
 
   // Save tournament data to localStorage
   const saveDraft = () => {
@@ -75,7 +81,23 @@ const AdminPortal = () => {
       try {
         const parsed = JSON.parse(draftData);
         setTournament(parsed.tournament || tournament);
-        setTeams(parsed.teams || teams);
+        
+        // When loading teams, we need to ensure player objects are properly reconstructed
+        // by matching them with the current availableUsers
+        if (parsed.teams && availableUsers.length > 0) {
+          const reconstructedTeams = parsed.teams.map(team => ({
+            ...team,
+            players: (team.players || []).map(savedPlayer => {
+              // Find the full user object from availableUsers by ID
+              const fullUser = availableUsers.find(user => user.id === savedPlayer.id);
+              return fullUser || savedPlayer; // Fallback to saved player if not found
+            }).filter(player => player.id && player.id !== 'user-id-placeholder') // Filter out invalid players
+          }));
+          setTeams(reconstructedTeams);
+        } else {
+          setTeams(parsed.teams || teams);
+        }
+        
         setRounds(parsed.rounds || rounds);
         setStep(parsed.step || 1);
         setShowDraftDialog(false);
@@ -180,7 +202,16 @@ const AdminPortal = () => {
 
         // Add team members
         for (const player of team.players) {
-          await apiClient.addTeamMember(newTeam.id, player.id);
+          if (!player.id) {
+            console.warn('Skipping player with no ID:', player);
+            continue;
+          }
+          try {
+            await apiClient.addTeamMember(newTeam.id, player.id);
+          } catch (memberError) {
+            console.error(`Failed to add player ${player.name} (${player.id}) to team:`, memberError);
+            // Continue with other players even if one fails
+          }
         }
       }
 
@@ -198,12 +229,12 @@ const AdminPortal = () => {
         for (const match of round.matches) {
           // Convert player indices to player IDs
           const team1PlayerIds = match.team1_players
-            .filter(playerIdx => playerIdx !== undefined)
+            .filter(playerIdx => playerIdx !== undefined && teams[0].players[playerIdx])
             .map(playerIdx => teams[0].players[playerIdx]?.id)
             .filter(id => id !== undefined);
           
           const team2PlayerIds = match.team2_players
-            .filter(playerIdx => playerIdx !== undefined)
+            .filter(playerIdx => playerIdx !== undefined && teams[1].players[playerIdx])
             .map(playerIdx => teams[1].players[playerIdx]?.id)
             .filter(id => id !== undefined);
 
