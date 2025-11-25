@@ -59,14 +59,25 @@ const AdminPortal = () => {
       
       // Load users and match formats from API
       console.log('Loading initial data...');
-      const users = await apiClient.getUsers();
-      console.log('Users loaded:', users);
       
-      const formats = await apiClient.getMatchFormats();
-      console.log('Match formats loaded:', formats);
+      try {
+        const users = await apiClient.getUsers();
+        console.log('Users loaded:', users);
+        setAvailableUsers(Array.isArray(users) ? users : []);
+      } catch (err) {
+        console.error('Error loading users:', err);
+        setAvailableUsers([]);
+      }
       
-      setAvailableUsers(Array.isArray(users) ? users : []);
-      setMatchFormats(Array.isArray(formats) ? formats : []);
+      try {
+        const formats = await apiClient.getMatchFormats();
+        console.log('Match formats loaded:', formats);
+        setMatchFormats(Array.isArray(formats) ? formats : []);
+      } catch (err) {
+        console.error('Error loading match formats:', err);
+        setMatchFormats([]);
+      }
+      
     } catch (err) {
       console.error('Error loading initial data:', err);
       setError(err instanceof ApiError ? err.message : 'Failed to load initial data');
