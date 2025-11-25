@@ -30,6 +30,8 @@ const AdminPortal = () => {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDraftDialog, setShowDraftDialog] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   
   const [tournament, setTournament] = useState({
     name: '',
@@ -50,7 +52,69 @@ const AdminPortal = () => {
 
   useEffect(() => {
     loadInitialData();
+    checkForDraftData();
   }, []);
+
+  // Save tournament data to localStorage
+  const saveDraft = () => {
+    const draftData = {
+      tournament,
+      teams,
+      rounds,
+      step,
+      timestamp: new Date().toISOString()
+    };
+    localStorage.setItem('tournament_draft', JSON.stringify(draftData));
+    setLastSaved(new Date());
+  };
+
+  // Load tournament data from localStorage
+  const loadDraft = () => {
+    const draftData = localStorage.getItem('tournament_draft');
+    if (draftData) {
+      try {
+        const parsed = JSON.parse(draftData);
+        setTournament(parsed.tournament || tournament);
+        setTeams(parsed.teams || teams);
+        setRounds(parsed.rounds || rounds);
+        setStep(parsed.step || 1);
+        setShowDraftDialog(false);
+      } catch (err) {
+        console.error('Failed to load draft data:', err);
+      }
+    }
+  };
+
+  // Clear saved draft
+  const clearDraft = () => {
+    localStorage.removeItem('tournament_draft');
+    setShowDraftDialog(false);
+  };
+
+  // Check if there's existing draft data
+  const checkForDraftData = () => {
+    const draftData = localStorage.getItem('tournament_draft');
+    if (draftData) {
+      try {
+        const parsed = JSON.parse(draftData);
+        // Only show dialog if there's meaningful data
+        if (parsed.tournament?.name || parsed.teams?.some(t => t.players?.length > 0) || parsed.rounds?.length > 0) {
+          setShowDraftDialog(true);
+        }
+      } catch (err) {
+        console.error('Failed to parse draft data:', err);
+        localStorage.removeItem('tournament_draft');
+      }
+    }
+  };
+
+  // Auto-save when important data changes
+  useEffect(() => {
+    if (tournament.name || teams.some(t => t.players.length > 0) || rounds.length > 0) {
+      const timeoutId = setTimeout(saveDraft, 1000); // Debounce saves
+      return () => clearTimeout(timeoutId);
+    }
+  }, [tournament, teams, rounds, step]);
 
   const loadInitialData = async () => {
     try {
@@ -98,8 +162,8 @@ const AdminPortal = () => {
       const tournamentData: CreateTournamentRequest = {
         name: tournament.name,
         description: tournament.description || undefined,
-        start_date: tournament.start_date,
-        end_date: tournament.end_date,
+        start_date: tournament.start_date + 'T00:00:00Z',
+        end_date: tournament.end_date + 'T23:59:59Z',
       };
 
       const newTournament = await apiClient.createTournament(tournamentData);
@@ -126,7 +190,7 @@ const AdminPortal = () => {
         const newRound = await apiClient.createRound(newTournament.id, {
           name: round.name,
           round_number: round.round_number,
-          start_time: round.date,
+          start_time: round.date + 'T08:00:00Z',
         });
         createdRounds.push(newRound);
 
@@ -158,8 +222,16 @@ const AdminPortal = () => {
       }
 
       alert('Tournament created successfully!');
+      // Clear the saved draft on successful creation
+      localStorage.removeItem('tournament_draft');
       // Reset form or redirect
       setStep(1);
+      setTournament({ name: '', description: '', start_date: '', end_date: '' });
+      setTeams([
+        { name: 'Team USA', color: '#DC2626', players: [] },
+        { name: 'Team Europe', color: '#2563EB', players: [] }
+      ]);
+      setRounds([]);
       
     } catch (err) {
       console.error('Error creating tournament:', err);
@@ -171,9 +243,71 @@ const AdminPortal = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Draft Data Dialog */}
+      {showDraftDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+            <h3 className="text-lg font-bold mb-4">Resume Tournament Creation?</h3>
+            <p className="text-gray-600 mb-6">
+              We found saved tournament data from a previous session. Would you like to continue where you left off?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={loadDraft}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                Continue Draft
+              </button>
+              <button
+                onClick={clearDraft}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Start Fresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-green-800 text-white p-6">
-        <h1 className="text-3xl font-bold">Tournament Setup</h1>
-        <p className="text-green-100 mt-2">Create and configure your Ryder Cup style tournament</p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold">Tournament Setup</h1>
+            <p className="text-green-100 mt-2">Create and configure your Ryder Cup style tournament</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={saveDraft}
+              className="px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-600 text-sm"
+              title="Save current progress"
+            >
+              💾 Save Progress
+            </button>
+            {lastSaved && (
+              <span className="text-green-100 text-xs">
+                Saved {lastSaved.toLocaleTimeString()}
+              </span>
+            )}
+            <button
+              onClick={() => {
+                if (confirm('Are you sure you want to clear all data and start over?')) {
+                  clearDraft();
+                  setTournament({ name: '', description: '', start_date: '', end_date: '' });
+                  setTeams([
+                    { name: 'Team USA', color: '#DC2626', players: [] },
+                    { name: 'Team Europe', color: '#2563EB', players: [] }
+                  ]);
+                  setRounds([]);
+                  setStep(1);
+                }
+              }}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+              title="Clear all data and start over"
+            >
+              🗑️ Clear All
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="max-w-7xl mx-auto p-6">
@@ -194,24 +328,31 @@ const AdminPortal = () => {
         {/* Progress Steps */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
-            {[1, 2, 3, 4].map((s) => (
-              <React.Fragment key={s}>
-                <div className="flex items-center">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                    step >= s ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600'
-                  }`}>
-                    {s}
+            <div className="flex items-center flex-1">
+              {[1, 2, 3, 4].map((s) => (
+                <React.Fragment key={s}>
+                  <div className="flex items-center">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                      step >= s ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600'
+                    }`}>
+                      {s}
+                    </div>
+                    <span className="ml-2 font-medium">
+                      {s === 1 && 'Tournament Info'}
+                      {s === 2 && 'Teams & Players'}
+                      {s === 3 && 'Rounds & Matches'}
+                      {s === 4 && 'Review'}
+                    </span>
                   </div>
-                  <span className="ml-2 font-medium">
-                    {s === 1 && 'Tournament Info'}
-                    {s === 2 && 'Teams & Players'}
-                    {s === 3 && 'Rounds & Matches'}
-                    {s === 4 && 'Review'}
-                  </span>
-                </div>
-                {s < 4 && <div className={`flex-1 h-1 mx-4 ${step > s ? 'bg-green-600' : 'bg-gray-300'}`} />}
-              </React.Fragment>
-            ))}
+                  {s < 4 && <div className={`flex-1 h-1 mx-4 ${step > s ? 'bg-green-600' : 'bg-gray-300'}`} />}
+                </React.Fragment>
+              ))}
+            </div>
+            {lastSaved && (
+              <div className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                ✓ Auto-saved {lastSaved.toLocaleTimeString()}
+              </div>
+            )}
           </div>
         </div>
 
