@@ -1,9 +1,9 @@
 package models
 
 import (
-	"time"
 	"database/sql/driver"
 	"fmt"
+	"time"
 )
 
 // ============================================
@@ -11,13 +11,13 @@ import (
 // ============================================
 
 type User struct {
-	ID        string     `json:"id" db:"id"`
-	Email     string     `json:"email" db:"email"`
-	Name      string     `json:"name" db:"name"`
-	Handicap  *float64   `json:"handicap,omitempty" db:"handicap"`
-	IsAdmin   bool       `json:"is_admin" db:"is_admin"`
-	CreatedAt time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+	ID        string    `json:"id" db:"id"`
+	Email     string    `json:"email" db:"email"`
+	Name      string    `json:"name" db:"name"`
+	Handicap  *float64  `json:"handicap,omitempty" db:"handicap"`
+	IsAdmin   bool      `json:"is_admin" db:"is_admin"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type Tournament struct {
@@ -49,14 +49,15 @@ type TeamMember struct {
 }
 
 type Round struct {
-	ID           string    `json:"id" db:"id"`
-	TournamentID string    `json:"tournament_id" db:"tournament_id"`
-	Name         string    `json:"name" db:"name"`
-	RoundNumber  int       `json:"round_number" db:"round_number"`
-	StartTime    time.Time `json:"start_time" db:"start_time"`
-	Status       string    `json:"status" db:"status"`
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+	ID           string     `json:"id" db:"id"`
+	TournamentID string     `json:"tournament_id" db:"tournament_id"`
+	Name         string     `json:"name" db:"name"`
+	RoundNumber  int        `json:"round_number" db:"round_number"`
+	RoundDate    time.Time  `json:"round_date" db:"round_date"`
+	StartTime    *time.Time `json:"start_time,omitempty" db:"start_time"`
+	Status       string     `json:"status" db:"status"`
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // MatchFormat represents the type of golf match format
@@ -143,9 +144,10 @@ type CreateTeamRequest struct {
 }
 
 type CreateRoundRequest struct {
-	Name        string    `json:"name" binding:"required"`
-	RoundNumber int       `json:"round_number" binding:"required"`
-	StartTime   time.Time `json:"start_time" binding:"required"`
+	Name        string     `json:"name" binding:"required"`
+	RoundNumber int        `json:"round_number" binding:"required"`
+	RoundDate   string     `json:"round_date" binding:"required"`
+	StartTime   *time.Time `json:"start_time,omitempty"`
 }
 
 type CreateMatchRequest struct {
@@ -174,22 +176,22 @@ type HoleScore struct {
 // ============================================
 
 type LeaderboardEntry struct {
-	TeamID     string  `json:"team_id"`
-	TeamName   string  `json:"team_name"`
-	Points     float64 `json:"points"`
-	MatchesWon int     `json:"matches_won"`
-	MatchesLost int    `json:"matches_lost"`
-	MatchesTied int    `json:"matches_tied"`
+	TeamID      string  `json:"team_id"`
+	TeamName    string  `json:"team_name"`
+	Points      float64 `json:"points"`
+	MatchesWon  int     `json:"matches_won"`
+	MatchesLost int     `json:"matches_lost"`
+	MatchesTied int     `json:"matches_tied"`
 }
 
 type MatchResult struct {
-	MatchID        string   `json:"match_id"`
-	Team1Name      string   `json:"team1_name"`
-	Team2Name      string   `json:"team2_name"`
-	Team1Points    float64  `json:"team1_points"`
-	Team2Points    float64  `json:"team2_points"`
-	WinnerTeamID   *string  `json:"winner_team_id"`
-	Status         string   `json:"status"`
-	Format         string   `json:"format"`
-	HolesCompleted int      `json:"holes_completed"`
+	MatchID        string  `json:"match_id"`
+	Team1Name      string  `json:"team1_name"`
+	Team2Name      string  `json:"team2_name"`
+	Team1Points    float64 `json:"team1_points"`
+	Team2Points    float64 `json:"team2_points"`
+	WinnerTeamID   *string `json:"winner_team_id"`
+	Status         string  `json:"status"`
+	Format         string  `json:"format"`
+	HolesCompleted int     `json:"holes_completed"`
 }

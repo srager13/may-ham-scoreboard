@@ -155,15 +155,15 @@ func (r *Repository) AddTeamMember(teamID, userID string) (*models.TeamMember, e
 
 func (r *Repository) CreateRound(tournamentID string, req *models.CreateRoundRequest) (*models.Round, error) {
 	query := `
-		INSERT INTO rounds (tournament_id, name, round_number, start_time, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, 'scheduled', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, tournament_id, name, round_number, start_time, status, created_at, updated_at
+		INSERT INTO rounds (tournament_id, name, round_number, round_date, start_time, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, 'scheduled', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, tournament_id, name, round_number, round_date, start_time, status, created_at, updated_at
 	`
 
 	var round models.Round
-	err := r.db.QueryRow(query, tournamentID, req.Name, req.RoundNumber, req.StartTime).Scan(
+	err := r.db.QueryRow(query, tournamentID, req.Name, req.RoundNumber, req.RoundDate, req.StartTime).Scan(
 		&round.ID, &round.TournamentID, &round.Name, &round.RoundNumber,
-		&round.StartTime, &round.Status, &round.CreatedAt, &round.UpdatedAt,
+		&round.RoundDate, &round.StartTime, &round.Status, &round.CreatedAt, &round.UpdatedAt,
 	)
 
 	if err != nil {
@@ -174,7 +174,7 @@ func (r *Repository) CreateRound(tournamentID string, req *models.CreateRoundReq
 }
 
 func (r *Repository) GetRoundsByTournament(tournamentID string) ([]models.Round, error) {
-	query := `SELECT id, tournament_id, name, round_number, start_time, status, created_at, updated_at FROM rounds WHERE tournament_id = $1 ORDER BY round_number`
+	query := `SELECT id, tournament_id, name, round_number, round_date, start_time, status, created_at, updated_at FROM rounds WHERE tournament_id = $1 ORDER BY round_number`
 
 	rows, err := r.db.Query(query, tournamentID)
 	if err != nil {
@@ -187,7 +187,7 @@ func (r *Repository) GetRoundsByTournament(tournamentID string) ([]models.Round,
 		var round models.Round
 		err := rows.Scan(
 			&round.ID, &round.TournamentID, &round.Name, &round.RoundNumber,
-			&round.StartTime, &round.Status, &round.CreatedAt, &round.UpdatedAt,
+			&round.RoundDate, &round.StartTime, &round.Status, &round.CreatedAt, &round.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan round: %w", err)

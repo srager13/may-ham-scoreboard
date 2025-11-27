@@ -47,8 +47,10 @@ export interface Round {
   name: string;
   round_number: number;
   round_date: string;
+  start_time?: string;
   status: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface MatchFormat {
@@ -114,7 +116,8 @@ export interface CreateTeamRequest {
 export interface CreateRoundRequest {
   name: string;
   round_number: number;
-  start_time: string;
+  round_date: string;
+  start_time?: string;
 }
 
 export interface CreateMatchRequest {

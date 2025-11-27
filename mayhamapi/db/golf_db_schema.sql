@@ -30,15 +30,16 @@ CREATE TABLE IF NOT EXISTS teams (
     tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     color VARCHAR(50), -- for UI display
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Players assigned to teams for a tournament
-CREATE TABLE IF NOT EXISTS team_players (
+CREATE TABLE IF NOT EXISTS team_members (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(team_id, user_id)
 );
 
@@ -49,8 +50,10 @@ CREATE TABLE IF NOT EXISTS rounds (
     name VARCHAR(255) NOT NULL,
     round_number INT NOT NULL,
     round_date DATE NOT NULL,
+    start_time TIMESTAMP, -- optional tee time
     status VARCHAR(50) DEFAULT 'upcoming', -- upcoming, in_progress, completed
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(tournament_id, round_number)
 );
 
@@ -142,7 +145,7 @@ CREATE INDEX IF NOT EXISTS idx_match_players_match ON match_players(match_id);
 CREATE INDEX IF NOT EXISTS idx_hole_scores_match ON hole_scores(match_id, hole_number);
 CREATE INDEX IF NOT EXISTS idx_hole_results_match ON hole_results(match_id);
 CREATE INDEX IF NOT EXISTS idx_player_stats_tournament ON player_stats(tournament_id);
-CREATE INDEX IF NOT EXISTS idx_team_players_team ON team_players(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id);
 
 -- Sample match formats data
 INSERT INTO match_formats (name, description, players_per_side, scoring_type) VALUES

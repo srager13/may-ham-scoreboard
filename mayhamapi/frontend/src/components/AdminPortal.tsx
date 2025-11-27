@@ -221,7 +221,9 @@ const AdminPortal = () => {
         const newRound = await apiClient.createRound(newTournament.id, {
           name: round.name,
           round_number: round.round_number,
-          start_time: round.date + 'T08:00:00Z',
+          round_date: round.date,
+          // Optional: could include start_time if we want to support tee times
+          // start_time: '08:00:00', 
         });
         createdRounds.push(newRound);
 
@@ -636,12 +638,17 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, loading }) => {
     );
   }
   const addRound = () => {
-    setRounds([...rounds, {
+    // Try to use the last entered date, or default to empty string
+    const lastDate = rounds.length > 0 ? rounds[rounds.length - 1].date : '';
+    setRounds([
+      ...rounds,
+      {
       name: `Round ${rounds.length + 1}`,
       round_number: rounds.length + 1,
-      date: '',
+      date: lastDate,
       matches: []
-    }]);
+      }
+    ]);
   };
 
   const updateRound = (idx, field, value) => {
