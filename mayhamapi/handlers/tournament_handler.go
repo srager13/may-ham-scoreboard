@@ -209,55 +209,10 @@ func (h *TournamentHandler) GetMatch(c *gin.Context) {
 
 // GET /api/v1/public/match-formats
 func (h *TournamentHandler) GetMatchFormats(c *gin.Context) {
-	formats := []gin.H{
-		{
-			"id":               "match_play",
-			"name":             "Match Play",
-			"description":      "Head-to-head match where each hole is won, lost, or halved",
-			"players_per_side": 1,
-			"scoring_type":     "match_play",
-			"created_at":       "2025-01-01T00:00:00Z",
-		},
-		{
-			"id":               "scramble",
-			"name":             "Scramble",
-			"description":      "Team plays from the best shot on each stroke",
-			"players_per_side": 2,
-			"scoring_type":     "stroke_play",
-			"created_at":       "2025-01-01T00:00:00Z",
-		},
-		{
-			"id":               "best_ball",
-			"name":             "Best Ball",
-			"description":      "Team uses the lowest score from any team member on each hole",
-			"players_per_side": 2,
-			"scoring_type":     "stroke_play",
-			"created_at":       "2025-01-01T00:00:00Z",
-		},
-		{
-			"id":               "alternate_shot",
-			"name":             "Alternate Shot",
-			"description":      "Team members alternate shots throughout the hole",
-			"players_per_side": 2,
-			"scoring_type":     "stroke_play",
-			"created_at":       "2025-01-01T00:00:00Z",
-		},
-		{
-			"id":               "high_low",
-			"name":             "High-Low",
-			"description":      "Combines highest and lowest scores from each team",
-			"players_per_side": 2,
-			"scoring_type":     "stroke_play",
-			"created_at":       "2025-01-01T00:00:00Z",
-		},
-		{
-			"id":               "shamble",
-			"name":             "Shamble",
-			"description":      "Team tees off, selects best drive, then plays individual balls",
-			"players_per_side": 2,
-			"scoring_type":     "stroke_play",
-			"created_at":       "2025-01-01T00:00:00Z",
-		},
+	formats, err := h.repo.GetAllMatchFormats()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"formats": formats})

@@ -204,16 +204,16 @@ func (r *Repository) GetRoundsByTournament(tournamentID string) ([]models.Round,
 
 func (r *Repository) CreateMatch(roundID string, req *models.CreateMatchRequest) (*models.Match, error) {
 	query := `
-		INSERT INTO matches (round_id, team1_id, team2_id, format, holes, status, created_at, updated_at)
+		INSERT INTO matches (round_id, team1_id, team2_id, match_format_id, holes, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, 'scheduled', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, round_id, team1_id, team2_id, format, holes, status, winner_team_id, start_time, end_time, created_at, updated_at
+		RETURNING id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at
 	`
 
 	var match models.Match
-	err := r.db.QueryRow(query, roundID, req.Team1ID, req.Team2ID, req.Format, req.Holes).Scan(
-		&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.Format,
-		&match.Holes, &match.Status, &match.WinnerTeamID, &match.StartTime, &match.EndTime,
-		&match.CreatedAt, &match.UpdatedAt,
+	err := r.db.QueryRow(query, roundID, req.Team1ID, req.Team2ID, req.MatchFormatID, req.Holes).Scan(
+		&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
+		&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
+		&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
 	)
 
 	if err != nil {
@@ -224,13 +224,13 @@ func (r *Repository) CreateMatch(roundID string, req *models.CreateMatchRequest)
 }
 
 func (r *Repository) GetMatch(id string) (*models.Match, error) {
-	query := `SELECT id, round_id, team1_id, team2_id, format, holes, status, winner_team_id, start_time, end_time, created_at, updated_at FROM matches WHERE id = $1`
+	query := `SELECT id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE id = $1`
 
 	var match models.Match
 	err := r.db.QueryRow(query, id).Scan(
-		&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.Format,
-		&match.Holes, &match.Status, &match.WinnerTeamID, &match.StartTime, &match.EndTime,
-		&match.CreatedAt, &match.UpdatedAt,
+		&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
+		&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
+		&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
 	)
 
 	if err != nil {
@@ -244,7 +244,7 @@ func (r *Repository) GetMatch(id string) (*models.Match, error) {
 }
 
 func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
-	query := `SELECT id, round_id, team1_id, team2_id, format, holes, status, winner_team_id, start_time, end_time, created_at, updated_at FROM matches WHERE round_id = $1 ORDER BY created_at`
+	query := `SELECT id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE round_id = $1 ORDER BY match_number`
 
 	rows, err := r.db.Query(query, roundID)
 	if err != nil {
@@ -256,9 +256,9 @@ func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 	for rows.Next() {
 		var match models.Match
 		err := rows.Scan(
-			&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.Format,
-			&match.Holes, &match.Status, &match.WinnerTeamID, &match.StartTime, &match.EndTime,
-			&match.CreatedAt, &match.UpdatedAt,
+			&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
+			&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
+			&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan match: %w", err)
@@ -389,17 +389,9 @@ func (r *Repository) GetAllUsers() ([]*models.User, error) {
 	return users, nil
 }
 
-func (r *Repository) UpdateMatchStatus(matchID, status string, winnerTeamID *string) error {
-	var query string
-	var args []interface{}
-
-	if winnerTeamID != nil {
-		query = `UPDATE matches SET status = $1, winner_team_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`
-		args = []interface{}{status, *winnerTeamID, matchID}
-	} else {
-		query = `UPDATE matches SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`
-		args = []interface{}{status, matchID}
-	}
+func (r *Repository) UpdateMatchStatus(matchID, status string) error {
+	query := `UPDATE matches SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`
+	args := []interface{}{status, matchID}
 
 	_, err := r.db.Exec(query, args...)
 	if err != nil {
@@ -407,4 +399,41 @@ func (r *Repository) UpdateMatchStatus(matchID, status string, winnerTeamID *str
 	}
 
 	return nil
+}
+
+// ============================================
+// Match Format Repository Methods
+// ============================================
+
+func (r *Repository) GetAllMatchFormats() ([]map[string]interface{}, error) {
+	query := `SELECT id, name, description, players_per_side, scoring_type, created_at FROM match_formats ORDER BY name`
+
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get match formats: %w", err)
+	}
+	defer rows.Close()
+
+	var formats []map[string]interface{}
+	for rows.Next() {
+		var id, name, description, scoringType, createdAt string
+		var playersPerSide int
+
+		err := rows.Scan(&id, &name, &description, &playersPerSide, &scoringType, &createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan match format: %w", err)
+		}
+
+		format := map[string]interface{}{
+			"id":               id,
+			"name":             name,
+			"description":      description,
+			"players_per_side": playersPerSide,
+			"scoring_type":     scoringType,
+			"created_at":       createdAt,
+		}
+		formats = append(formats, format)
+	}
+
+	return formats, nil
 }

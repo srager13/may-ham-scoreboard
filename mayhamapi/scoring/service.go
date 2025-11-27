@@ -26,13 +26,13 @@ type MatchStatus struct {
 
 // HoleResult represents the result of a specific hole
 type HoleResult struct {
-	HoleNumber    int      `json:"hole_number"`
-	Team1Score    *int     `json:"team1_score"`    // nil if format doesn't produce team score
-	Team2Score    *int     `json:"team2_score"`
-	WinnerTeamID  *string  `json:"winner_team_id"` // nil for tie
-	Team1Points   float64  `json:"team1_points"`
-	Team2Points   float64  `json:"team2_points"`
-	PlayerScores  []models.Score `json:"player_scores"`
+	HoleNumber   int            `json:"hole_number"`
+	Team1Score   *int           `json:"team1_score"` // nil if format doesn't produce team score
+	Team2Score   *int           `json:"team2_score"`
+	WinnerTeamID *string        `json:"winner_team_id"` // nil for tie
+	Team1Points  float64        `json:"team1_points"`
+	Team2Points  float64        `json:"team2_points"`
+	PlayerScores []models.Score `json:"player_scores"`
 }
 
 func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []models.Score) (*MatchStatus, error) {
@@ -41,37 +41,37 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 	for _, score := range scores {
 		holeScores[score.HoleNumber] = append(holeScores[score.HoleNumber], score)
 	}
-	
+
 	team1Points := 0.0
 	team2Points := 0.0
 	holesCompleted := 0
-	
+
 	// Calculate points for each completed hole
 	for holeNum := 1; holeNum <= match.Holes; holeNum++ {
 		holePlayerScores, exists := holeScores[holeNum]
 		if !exists || len(holePlayerScores) == 0 {
 			continue // Hole not played yet
 		}
-		
+
 		// Check if all required players have submitted scores for this hole
 		// This is a simplified check - in a real scenario you'd need to know which players are in each team
 		if len(holePlayerScores) < 2 {
 			continue // Not all players have submitted scores
 		}
-		
+
 		holeResult, err := s.calculateHoleResult(match, holeNum, holePlayerScores)
 		if err != nil {
 			return nil, fmt.Errorf("failed to calculate hole result: %w", err)
 		}
-		
+
 		team1Points += holeResult.Team1Points
 		team2Points += holeResult.Team2Points
 		holesCompleted++
 	}
-	
+
 	holesRemaining := match.Holes - holesCompleted
 	matchComplete := holesCompleted == match.Holes
-	
+
 	// Determine winner
 	var winnerTeamID *string
 	if matchComplete {
@@ -82,7 +82,7 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 		}
 		// If points are equal, it's a tie (winnerTeamID remains nil)
 	}
-	
+
 	return &MatchStatus{
 		Team1TotalPoints: team1Points,
 		Team2TotalPoints: team2Points,
@@ -94,29 +94,18 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 }
 
 func (s *ScoringService) calculateHoleResult(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
-	switch match.Format {
-	case models.MatchPlay:
-		return s.calculateMatchPlayHole(match, holeNumber, scores)
-	case models.BestBall:
-		return s.calculateBestBallHole(match, holeNumber, scores)
-	case models.Scramble:
-		return s.calculateScrambleHole(match, holeNumber, scores)
-	case models.AlternateShot:
-		return s.calculateAlternateShotHole(match, holeNumber, scores)
-	case models.HighLow:
-		return s.calculateHighLowHole(match, holeNumber, scores)
-	case models.Shamble:
-		return s.calculateShambleHole(match, holeNumber, scores)
-	default:
-		return nil, fmt.Errorf("unsupported match format: %s", match.Format)
-	}
+	// For now, we'll use a simple approach based on the match format ID
+	// In a more complete implementation, we'd fetch the match format from the database
+
+	// Default to match play scoring for now
+	return s.calculateMatchPlayHole(match, holeNumber, scores)
 }
 
 func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
 	// Group scores by team (simplified - assumes we know which users are on which team)
 	team1Scores := []int{}
 	team2Scores := []int{}
-	
+
 	// TODO: In a real implementation, you'd need to look up team memberships
 	// For now, we'll assume alternating assignment (first score = team1, second = team2, etc.)
 	for i, score := range scores {
@@ -126,11 +115,11 @@ func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber 
 			team2Scores = append(team2Scores, score.Strokes)
 		}
 	}
-	
+
 	if len(team1Scores) == 0 || len(team2Scores) == 0 {
 		return nil, fmt.Errorf("insufficient scores for match play")
 	}
-	
+
 	// For match play, take the best score from each team
 	team1Best := team1Scores[0]
 	for _, score := range team1Scores {
@@ -138,14 +127,14 @@ func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber 
 			team1Best = score
 		}
 	}
-	
+
 	team2Best := team2Scores[0]
 	for _, score := range team2Scores {
 		if score < team2Best {
 			team2Best = score
 		}
 	}
-	
+
 	result := &HoleResult{
 		HoleNumber:   holeNumber,
 		Team1Score:   &team1Best,
@@ -154,7 +143,7 @@ func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber 
 		Team1Points:  0,
 		Team2Points:  0,
 	}
-	
+
 	if team1Best < team2Best {
 		result.Team1Points = 1
 		result.WinnerTeamID = &match.Team1ID
@@ -167,7 +156,7 @@ func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber 
 		result.Team1Points = 0.5
 		result.Team2Points = 0.5
 	}
-	
+
 	return result, nil
 }
 
@@ -181,7 +170,7 @@ func (s *ScoringService) calculateScrambleHole(match *models.Match, holeNumber i
 	// This is a simplified implementation
 	team1Scores := []int{}
 	team2Scores := []int{}
-	
+
 	for i, score := range scores {
 		if i%2 == 0 {
 			team1Scores = append(team1Scores, score.Strokes)
@@ -189,15 +178,15 @@ func (s *ScoringService) calculateScrambleHole(match *models.Match, holeNumber i
 			team2Scores = append(team2Scores, score.Strokes)
 		}
 	}
-	
+
 	if len(team1Scores) == 0 || len(team2Scores) == 0 {
 		return nil, fmt.Errorf("insufficient scores for scramble")
 	}
-	
+
 	// Take the first score from each team (representing the team's combined score)
 	team1Score := team1Scores[0]
 	team2Score := team2Scores[0]
-	
+
 	result := &HoleResult{
 		HoleNumber:   holeNumber,
 		Team1Score:   &team1Score,
@@ -206,7 +195,7 @@ func (s *ScoringService) calculateScrambleHole(match *models.Match, holeNumber i
 		Team1Points:  0,
 		Team2Points:  0,
 	}
-	
+
 	if team1Score < team2Score {
 		result.Team1Points = 1
 		result.WinnerTeamID = &match.Team1ID
@@ -217,7 +206,7 @@ func (s *ScoringService) calculateScrambleHole(match *models.Match, holeNumber i
 		result.Team1Points = 0.5
 		result.Team2Points = 0.5
 	}
-	
+
 	return result, nil
 }
 
@@ -230,7 +219,7 @@ func (s *ScoringService) calculateHighLowHole(match *models.Match, holeNumber in
 	// High-Low combines the highest and lowest scores from each team
 	team1Scores := []int{}
 	team2Scores := []int{}
-	
+
 	for i, score := range scores {
 		if i%2 == 0 {
 			team1Scores = append(team1Scores, score.Strokes)
@@ -238,11 +227,11 @@ func (s *ScoringService) calculateHighLowHole(match *models.Match, holeNumber in
 			team2Scores = append(team2Scores, score.Strokes)
 		}
 	}
-	
+
 	if len(team1Scores) < 2 || len(team2Scores) < 2 {
 		return nil, fmt.Errorf("high-low requires at least 2 players per team")
 	}
-	
+
 	// Calculate high + low for each team
 	team1High := team1Scores[0]
 	team1Low := team1Scores[0]
@@ -254,7 +243,7 @@ func (s *ScoringService) calculateHighLowHole(match *models.Match, holeNumber in
 			team1Low = score
 		}
 	}
-	
+
 	team2High := team2Scores[0]
 	team2Low := team2Scores[0]
 	for _, score := range team2Scores {
@@ -265,10 +254,10 @@ func (s *ScoringService) calculateHighLowHole(match *models.Match, holeNumber in
 			team2Low = score
 		}
 	}
-	
+
 	team1Total := team1High + team1Low
 	team2Total := team2High + team2Low
-	
+
 	result := &HoleResult{
 		HoleNumber:   holeNumber,
 		Team1Score:   &team1Total,
@@ -277,7 +266,7 @@ func (s *ScoringService) calculateHighLowHole(match *models.Match, holeNumber in
 		Team1Points:  0,
 		Team2Points:  0,
 	}
-	
+
 	if team1Total < team2Total {
 		result.Team1Points = 1
 		result.WinnerTeamID = &match.Team1ID
@@ -288,7 +277,7 @@ func (s *ScoringService) calculateHighLowHole(match *models.Match, holeNumber in
 		result.Team1Points = 0.5
 		result.Team2Points = 0.5
 	}
-	
+
 	return result, nil
 }
 

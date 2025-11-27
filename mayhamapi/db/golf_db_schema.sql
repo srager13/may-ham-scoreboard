@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS matches (
     team1_points DECIMAL(3,1) DEFAULT 0,
     team2_points DECIMAL(3,1) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(round_id, match_number)
 );
 

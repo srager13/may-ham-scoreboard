@@ -241,11 +241,10 @@ const AdminPortal = () => {
             .filter(id => id !== undefined);
 
           await apiClient.createMatch(newRound.id, {
-            match_format_id: match.format_id,
-            match_number: match.match_number,
-            holes: match.holes,
             team1_id: createdTeams[0].id,
             team2_id: createdTeams[1].id,
+            match_format_id: match.format_id, // Send as 'match_format_id' to match database
+            holes: match.holes,
             player_assignments: {
               team1_players: team1PlayerIds,
               team2_players: team2PlayerIds,

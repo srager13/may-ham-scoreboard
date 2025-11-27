@@ -121,11 +121,10 @@ export interface CreateRoundRequest {
 }
 
 export interface CreateMatchRequest {
-  match_format_id: string;
-  match_number: number;
-  holes: number;
   team1_id: string;
   team2_id: string;
+  match_format_id: string;
+  holes: number;
   player_assignments: {
     team1_players: string[];
     team2_players: string[];

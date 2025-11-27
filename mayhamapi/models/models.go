@@ -95,18 +95,21 @@ func (mf *MatchFormat) Scan(value interface{}) error {
 }
 
 type Match struct {
-	ID           string      `json:"id" db:"id"`
-	RoundID      string      `json:"round_id" db:"round_id"`
-	Team1ID      string      `json:"team1_id" db:"team1_id"`
-	Team2ID      string      `json:"team2_id" db:"team2_id"`
-	Format       MatchFormat `json:"format" db:"format"`
-	Holes        int         `json:"holes" db:"holes"`
-	Status       string      `json:"status" db:"status"`
-	WinnerTeamID *string     `json:"winner_team_id,omitempty" db:"winner_team_id"`
-	StartTime    *time.Time  `json:"start_time,omitempty" db:"start_time"`
-	EndTime      *time.Time  `json:"end_time,omitempty" db:"end_time"`
-	CreatedAt    time.Time   `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time   `json:"updated_at" db:"updated_at"`
+	ID              string     `json:"id" db:"id"`
+	RoundID         string     `json:"round_id" db:"round_id"`
+	Team1ID         string     `json:"team1_id" db:"team1_id"`
+	Team2ID         string     `json:"team2_id" db:"team2_id"`
+	MatchFormatID   string     `json:"match_format_id" db:"match_format_id"`
+	MatchNumber     int        `json:"match_number" db:"match_number"`
+	Holes           int        `json:"holes" db:"holes"`
+	Status          string     `json:"status" db:"status"`
+	PointsAvailable float64    `json:"points_available" db:"points_available"`
+	Team1Points     float64    `json:"team1_points" db:"team1_points"`
+	Team2Points     float64    `json:"team2_points" db:"team2_points"`
+	StartTime       *time.Time `json:"start_time,omitempty" db:"start_time"`
+	EndTime         *time.Time `json:"end_time,omitempty" db:"end_time"`
+	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 type MatchPlayer struct {
@@ -151,10 +154,10 @@ type CreateRoundRequest struct {
 }
 
 type CreateMatchRequest struct {
-	Team1ID string      `json:"team1_id" binding:"required"`
-	Team2ID string      `json:"team2_id" binding:"required"`
-	Format  MatchFormat `json:"format" binding:"required"`
-	Holes   int         `json:"holes" binding:"required,min=6,max=18"`
+	Team1ID       string `json:"team1_id" binding:"required"`
+	Team2ID       string `json:"team2_id" binding:"required"`
+	MatchFormatID string `json:"match_format_id" binding:"required"`
+	Holes         int    `json:"holes" binding:"required,min=6,max=18"`
 }
 
 type AddTeamMemberRequest struct {

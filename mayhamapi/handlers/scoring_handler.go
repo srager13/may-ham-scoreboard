@@ -3,11 +3,12 @@ package handlers
 import (
 	"net/http"
 	"strconv"
-	
-	"github.com/gin-gonic/gin"
+
 	"mayhamapi/models"
 	"mayhamapi/repository"
 	"mayhamapi/scoring"
+
+	"github.com/gin-gonic/gin"
 )
 
 type ScoringHandler struct {
@@ -25,13 +26,13 @@ func NewScoringHandler(repo *repository.Repository, scoringService *scoring.Scor
 // POST /api/v1/matches/:match_id/scores
 func (h *ScoringHandler) SubmitScores(c *gin.Context) {
 	matchID := c.Param("match_id")
-	
+
 	var req models.SubmitScoreRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	// Submit each score to the database
 	var submittedScores []models.Score
 	for _, holeScore := range req.Scores {
@@ -42,36 +43,36 @@ func (h *ScoringHandler) SubmitScores(c *gin.Context) {
 		}
 		submittedScores = append(submittedScores, *score)
 	}
-	
+
 	// Get match details
 	match, err := h.repo.GetMatch(matchID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	// Calculate match status using scoring service
 	scores, err := h.repo.GetMatchScores(matchID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	matchStatus, err := h.scoringService.CalculateMatchStatus(match, scores)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	// Update match if complete
 	if matchStatus.MatchComplete {
-		err = h.repo.UpdateMatchStatus(matchID, "completed", matchStatus.WinnerTeamID)
+		err = h.repo.UpdateMatchStatus(matchID, "completed")
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"scores":       submittedScores,
 		"match_status": matchStatus,
@@ -81,27 +82,27 @@ func (h *ScoringHandler) SubmitScores(c *gin.Context) {
 // GET /api/v1/matches/:match_id/scores
 func (h *ScoringHandler) GetMatchScores(c *gin.Context) {
 	matchID := c.Param("match_id")
-	
+
 	scores, err := h.repo.GetMatchScores(matchID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	// Get match details for context
 	match, err := h.repo.GetMatch(matchID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	// Calculate current match status
 	matchStatus, err := h.scoringService.CalculateMatchStatus(match, scores)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"scores":       scores,
 		"match_status": matchStatus,
@@ -112,19 +113,19 @@ func (h *ScoringHandler) GetMatchScores(c *gin.Context) {
 func (h *ScoringHandler) UpdateHoleScore(c *gin.Context) {
 	matchID := c.Param("match_id")
 	holeNumberStr := c.Param("hole_number")
-	
+
 	holeNumber, err := strconv.Atoi(holeNumberStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid hole number"})
 		return
 	}
-	
+
 	var req models.SubmitScoreRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	// Update scores for the specific hole
 	var updatedScores []models.Score
 	for _, holeScore := range req.Scores {
@@ -137,26 +138,26 @@ func (h *ScoringHandler) UpdateHoleScore(c *gin.Context) {
 			updatedScores = append(updatedScores, *score)
 		}
 	}
-	
+
 	// Get updated match status
 	match, err := h.repo.GetMatch(matchID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	allScores, err := h.repo.GetMatchScores(matchID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	matchStatus, err := h.scoringService.CalculateMatchStatus(match, allScores)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"updated_scores": updatedScores,
 		"match_status":   matchStatus,
