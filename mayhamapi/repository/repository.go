@@ -203,14 +203,22 @@ func (r *Repository) GetRoundsByTournament(tournamentID string) ([]models.Round,
 // ============================================
 
 func (r *Repository) CreateMatch(roundID string, req *models.CreateMatchRequest) (*models.Match, error) {
+	// First, get the next match number for this round
+	var nextMatchNumber int
+	countQuery := `SELECT COALESCE(MAX(match_number), 0) + 1 FROM matches WHERE round_id = $1`
+	err := r.db.QueryRow(countQuery, roundID).Scan(&nextMatchNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get next match number: %w", err)
+	}
+
 	query := `
-		INSERT INTO matches (round_id, team1_id, team2_id, match_format_id, holes, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 'scheduled', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		INSERT INTO matches (round_id, team1_id, team2_id, match_format_id, match_number, holes, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		RETURNING id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at
 	`
 
 	var match models.Match
-	err := r.db.QueryRow(query, roundID, req.Team1ID, req.Team2ID, req.MatchFormatID, req.Holes).Scan(
+	err = r.db.QueryRow(query, roundID, req.Team1ID, req.Team2ID, req.MatchFormatID, nextMatchNumber, req.Holes).Scan(
 		&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
 		&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
 		&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
