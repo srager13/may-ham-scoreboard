@@ -11,6 +11,26 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Groups (collections of users who can participate in tournaments together)
+CREATE TABLE IF NOT EXISTS groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Group memberships (users can belong to multiple groups)
+CREATE TABLE IF NOT EXISTS group_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    role VARCHAR(50) DEFAULT 'member', -- member, admin
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(group_id, user_id)
+);
+
 -- Tournaments (e.g., "Summer Ryder Cup 2025")
 CREATE TABLE IF NOT EXISTS tournaments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -18,6 +38,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
     description TEXT,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
+    group_id UUID REFERENCES groups(id),
     created_by UUID REFERENCES users(id),
     status VARCHAR(50) DEFAULT 'draft', -- draft, active, completed
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -140,6 +161,7 @@ CREATE TABLE IF NOT EXISTS player_stats (
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_tournaments_status ON tournaments(status);
+CREATE INDEX IF NOT EXISTS idx_tournaments_group ON tournaments(group_id);
 CREATE INDEX IF NOT EXISTS idx_rounds_tournament ON rounds(tournament_id, round_number);
 CREATE INDEX IF NOT EXISTS idx_matches_round ON matches(round_id);
 CREATE INDEX IF NOT EXISTS idx_match_players_match ON match_players(match_id);
@@ -147,6 +169,8 @@ CREATE INDEX IF NOT EXISTS idx_hole_scores_match ON hole_scores(match_id, hole_n
 CREATE INDEX IF NOT EXISTS idx_hole_results_match ON hole_results(match_id);
 CREATE INDEX IF NOT EXISTS idx_player_stats_tournament ON player_stats(tournament_id);
 CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
 
 -- Sample match formats data
 INSERT INTO match_formats (name, description, players_per_side, scoring_type) VALUES

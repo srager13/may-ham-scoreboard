@@ -12,6 +12,7 @@ func setupRouter(
 	authHandler *handlers.AuthHandler,
 	tournamentHandler *handlers.TournamentHandler,
 	scoringHandler *handlers.ScoringHandler,
+	groupHandler *handlers.GroupHandler,
 	wsHub *websocket.Hub,
 ) *gin.Engine {
 	r := gin.Default()
@@ -58,6 +59,13 @@ func setupRouter(
 		{
 			// User management
 			protected.GET("/users", authHandler.GetUsers)
+
+			// Group management
+			protected.POST("/groups", groupHandler.CreateGroup)
+			protected.GET("/groups", groupHandler.GetUserGroups)
+			protected.GET("/groups/:groupId/members", groupHandler.GetGroupMembers)
+			protected.POST("/groups/:groupId/members", groupHandler.AddGroupMember)
+			protected.GET("/groups/:groupId/users", groupHandler.GetGroupUsers)
 
 			// Tournament management (admin or tournament creator)
 			protected.POST("/tournaments", tournamentHandler.CreateTournament)

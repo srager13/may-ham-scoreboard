@@ -21,15 +21,15 @@ func NewRepository(database *db.DB) *Repository {
 
 func (r *Repository) CreateTournament(req *models.CreateTournamentRequest, createdBy string) (*models.Tournament, error) {
 	query := `
-		INSERT INTO tournaments (name, description, start_date, end_date, created_by, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 'draft', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, name, description, start_date, end_date, created_by, status, created_at, updated_at
+		INSERT INTO tournaments (name, description, start_date, end_date, group_id, created_by, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'draft', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, name, description, start_date, end_date, group_id, created_by, status, created_at, updated_at
 	`
 
 	var tournament models.Tournament
-	err := r.db.QueryRow(query, req.Name, req.Description, req.StartDate, req.EndDate, createdBy).Scan(
+	err := r.db.QueryRow(query, req.Name, req.Description, req.StartDate, req.EndDate, req.GroupID, createdBy).Scan(
 		&tournament.ID, &tournament.Name, &tournament.Description, &tournament.StartDate,
-		&tournament.EndDate, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
+		&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
 	)
 
 	if err != nil {
@@ -40,12 +40,12 @@ func (r *Repository) CreateTournament(req *models.CreateTournamentRequest, creat
 }
 
 func (r *Repository) GetTournament(id string) (*models.Tournament, error) {
-	query := `SELECT id, name, description, start_date, end_date, created_by, status, created_at, updated_at FROM tournaments WHERE id = $1`
+	query := `SELECT id, name, description, start_date, end_date, group_id, created_by, status, created_at, updated_at FROM tournaments WHERE id = $1`
 
 	var tournament models.Tournament
 	err := r.db.QueryRow(query, id).Scan(
 		&tournament.ID, &tournament.Name, &tournament.Description, &tournament.StartDate,
-		&tournament.EndDate, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
+		&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
 	)
 
 	if err != nil {
@@ -59,7 +59,7 @@ func (r *Repository) GetTournament(id string) (*models.Tournament, error) {
 }
 
 func (r *Repository) ListTournaments() ([]models.Tournament, error) {
-	query := `SELECT id, name, description, start_date, end_date, created_by, status, created_at, updated_at FROM tournaments ORDER BY created_at DESC`
+	query := `SELECT id, name, description, start_date, end_date, group_id, created_by, status, created_at, updated_at FROM tournaments ORDER BY created_at DESC`
 
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -72,7 +72,7 @@ func (r *Repository) ListTournaments() ([]models.Tournament, error) {
 		var tournament models.Tournament
 		err := rows.Scan(
 			&tournament.ID, &tournament.Name, &tournament.Description, &tournament.StartDate,
-			&tournament.EndDate, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
+			&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan tournament: %w", err)
@@ -397,6 +397,40 @@ func (r *Repository) GetAllUsers() ([]*models.User, error) {
 	return users, nil
 }
 
+func (r *Repository) GetGroupUsers(groupID string) ([]*models.User, error) {
+	query := `
+		SELECT u.id, u.email, u.name, u.handicap, u.is_admin, u.created_at, u.updated_at 
+		FROM users u
+		JOIN group_members gm ON u.id = gm.user_id
+		WHERE gm.group_id = $1
+		ORDER BY u.name ASC
+	`
+
+	rows, err := r.db.Query(query, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query group users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		var user models.User
+		err := rows.Scan(
+			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, &user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating users: %w", err)
+	}
+
+	return users, nil
+}
+
 func (r *Repository) UpdateMatchStatus(matchID, status string) error {
 	query := `UPDATE matches SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`
 	args := []interface{}{status, matchID}
@@ -444,4 +478,132 @@ func (r *Repository) GetAllMatchFormats() ([]map[string]interface{}, error) {
 	}
 
 	return formats, nil
+}
+
+// ============================================
+// Group Repository Methods
+// ============================================
+
+func (r *Repository) CreateGroup(req *models.CreateGroupRequest, createdBy string) (*models.Group, error) {
+	query := `
+		INSERT INTO groups (name, description, created_by, created_at, updated_at)
+		VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, name, description, created_by, created_at, updated_at
+	`
+
+	var group models.Group
+	err := r.db.QueryRow(query, req.Name, req.Description, createdBy).Scan(
+		&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create group: %w", err)
+	}
+
+	// Add creator as admin
+	_, err = r.AddGroupMember(group.ID, createdBy, "admin")
+	if err != nil {
+		return nil, fmt.Errorf("failed to add creator as admin: %w", err)
+	}
+
+	return &group, nil
+}
+
+func (r *Repository) GetUserGroups(userID string) ([]models.Group, error) {
+	query := `
+		SELECT g.id, g.name, g.description, g.created_by, g.created_at, g.updated_at 
+		FROM groups g
+		JOIN group_members gm ON g.id = gm.group_id
+		WHERE gm.user_id = $1
+		ORDER BY g.created_at DESC
+	`
+
+	rows, err := r.db.Query(query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user groups: %w", err)
+	}
+	defer rows.Close()
+
+	var groups []models.Group
+	for rows.Next() {
+		var group models.Group
+		err := rows.Scan(
+			&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan group: %w", err)
+		}
+		groups = append(groups, group)
+	}
+
+	return groups, nil
+}
+
+func (r *Repository) GetGroupMembers(groupID string) ([]*models.GroupMember, error) {
+	query := `
+		SELECT gm.id, gm.group_id, gm.user_id, gm.role, gm.created_at,
+		       u.id, u.email, u.name, u.handicap, u.is_admin, u.created_at, u.updated_at
+		FROM group_members gm
+		JOIN users u ON gm.user_id = u.id
+		WHERE gm.group_id = $1
+		ORDER BY gm.role DESC, u.name
+	`
+
+	rows, err := r.db.Query(query, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get group members: %w", err)
+	}
+	defer rows.Close()
+
+	var members []*models.GroupMember
+	for rows.Next() {
+		var member models.GroupMember
+		var user models.User
+		err := rows.Scan(
+			&member.ID, &member.GroupID, &member.UserID, &member.Role, &member.CreatedAt,
+			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan group member: %w", err)
+		}
+		member.User = &user
+		members = append(members, &member)
+	}
+
+	return members, nil
+}
+
+func (r *Repository) AddGroupMember(groupID, userID, role string) (*models.GroupMember, error) {
+	if role == "" {
+		role = "member"
+	}
+
+	query := `
+		INSERT INTO group_members (group_id, user_id, role, created_at)
+		VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+		RETURNING id, group_id, user_id, role, created_at
+	`
+
+	var member models.GroupMember
+	err := r.db.QueryRow(query, groupID, userID, role).Scan(
+		&member.ID, &member.GroupID, &member.UserID, &member.Role, &member.CreatedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to add group member: %w", err)
+	}
+
+	return &member, nil
+}
+
+func (r *Repository) IsGroupAdmin(groupID, userID string) (bool, error) {
+	query := `SELECT COUNT(*) FROM group_members WHERE group_id = $1 AND user_id = $2 AND role = 'admin'`
+
+	var count int
+	err := r.db.QueryRow(query, groupID, userID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check group admin status: %w", err)
+	}
+
+	return count > 0, nil
 }

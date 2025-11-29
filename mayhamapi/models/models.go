@@ -20,12 +20,31 @@ type User struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
+type Group struct {
+	ID          string    `json:"id" db:"id"`
+	Name        string    `json:"name" db:"name"`
+	Description *string   `json:"description,omitempty" db:"description"`
+	CreatedBy   string    `json:"created_by" db:"created_by"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+}
+
+type GroupMember struct {
+	ID        string    `json:"id" db:"id"`
+	GroupID   string    `json:"group_id" db:"group_id"`
+	UserID    string    `json:"user_id" db:"user_id"`
+	Role      string    `json:"role" db:"role"`
+	User      *User     `json:"user,omitempty"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+}
+
 type Tournament struct {
 	ID          string    `json:"id" db:"id"`
 	Name        string    `json:"name" db:"name"`
 	Description *string   `json:"description,omitempty" db:"description"`
 	StartDate   time.Time `json:"start_date" db:"start_date"`
 	EndDate     time.Time `json:"end_date" db:"end_date"`
+	GroupID     string    `json:"group_id" db:"group_id"`
 	CreatedBy   string    `json:"created_by" db:"created_by"`
 	Status      string    `json:"status" db:"status"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
@@ -134,11 +153,22 @@ type Score struct {
 // Request/Response Models
 // ============================================
 
+type CreateGroupRequest struct {
+	Name        string  `json:"name" binding:"required"`
+	Description *string `json:"description,omitempty"`
+}
+
+type AddGroupMemberRequest struct {
+	UserID string `json:"user_id" binding:"required"`
+	Role   string `json:"role,omitempty"`
+}
+
 type CreateTournamentRequest struct {
 	Name        string    `json:"name" binding:"required"`
 	Description *string   `json:"description,omitempty"`
 	StartDate   time.Time `json:"start_date" binding:"required"`
 	EndDate     time.Time `json:"end_date" binding:"required"`
+	GroupID     string    `json:"group_id" binding:"required"`
 }
 
 type CreateTeamRequest struct {

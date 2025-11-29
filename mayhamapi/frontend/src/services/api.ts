@@ -19,6 +19,7 @@ export interface Tournament {
   description?: string;
   start_date: string;
   end_date: string;
+  group_id?: string;
   created_by: string;
   status: string;
   created_at: string;
@@ -98,6 +99,43 @@ export interface Score {
   strokes: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupMember {
+  id: string;
+  group_id: string;
+  user_id: string;
+  role: string;
+  created_at: string;
+  user?: User;
+}
+
+// Request types
+export interface CreateGroupRequest {
+  name: string;
+  description?: string;
+}
+
+export interface AddGroupMemberRequest {
+  user_id: string;
+  role: string;
+}
+
+export interface CreateTournamentRequest {
+  name: string;
+  description?: string;
+  start_date: string;
+  end_date: string;
+  group_id?: string;
 }
 
 // Request types
@@ -350,6 +388,33 @@ class ApiClient {
       method: 'PATCH',
       body: JSON.stringify({ user_id: userId, strokes }),
     });
+  }
+
+  // Groups
+  async createGroup(data: CreateGroupRequest): Promise<Group> {
+    return this.request<Group>('/groups', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getUserGroups(): Promise<Group[]> {
+    return this.request<Group[]>('/groups');
+  }
+
+  async getGroupMembers(groupId: string): Promise<{ members: GroupMember[]; is_admin: boolean }> {
+    return this.request<{ members: GroupMember[]; is_admin: boolean }>(`/groups/${groupId}/members`);
+  }
+
+  async addGroupMember(groupId: string, data: AddGroupMemberRequest): Promise<GroupMember> {
+    return this.request<GroupMember>(`/groups/${groupId}/members`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getGroupUsers(groupId: string): Promise<User[]> {
+    return this.request<User[]>(`/groups/${groupId}/users`);
   }
 }
 

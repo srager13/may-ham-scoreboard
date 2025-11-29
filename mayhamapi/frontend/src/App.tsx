@@ -5,6 +5,7 @@ import Leaderboard from './components/Leaderboard';
 import AdminPortal from './components/AdminPortal';
 import ScoreInterface from './components/ScoreInterface';
 import LandingPage from './components/LandingPage';
+import Groups from './components/Groups';
 import { AuthProvider, AuthModal, LoginButton, useAuth } from './components/Auth';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -68,6 +69,12 @@ const ApiErrorNotification = () => {
   );
 };
 
+// Groups wrapper to get current user
+const GroupsWrapper: React.FC = () => {
+  const { user } = useAuth();
+  return <Groups user={user} />;
+};
+
 function AppContent() {
   const location = useLocation();
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -77,6 +84,7 @@ function AppContent() {
     { name: 'Home', href: '/', icon: Trophy },
     { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
     { name: 'Score Entry', href: '/score', icon: BarChart3 },
+    { name: 'Groups', href: '/groups', icon: Users },
     { name: 'Admin Portal', href: '/admin', icon: Settings },
   ];
 
@@ -164,6 +172,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <ScoreInterface />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/groups" 
+            element={
+              <ProtectedRoute>
+                <GroupsWrapper />
               </ProtectedRoute>
             } 
           />

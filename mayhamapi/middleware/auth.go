@@ -3,14 +3,21 @@ package middleware
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
-	
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret = []byte("your-secret-key") // In production, use environment variable
+func getJWTSecret() []byte {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "your-secret-key" // fallback for development
+	}
+	return []byte(secret)
+}
 
 type Claims struct {
 	UserID  string `json:"user_id"`
@@ -55,7 +62,7 @@ func JWTAuth() gin.HandlerFunc {
 		}
 
 		token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-			return jwtSecret, nil
+			return getJWTSecret(), nil
 		})
 
 		if err != nil {
@@ -72,7 +79,7 @@ func JWTAuth() gin.HandlerFunc {
 		}
 
 		// Store user info in context
-		c.Set("user_id", claims.UserID)
+		c.Set("userID", claims.UserID)
 		c.Set("user_email", claims.Email)
 		c.Set("is_admin", claims.IsAdmin)
 		c.Next()
@@ -108,12 +115,12 @@ func OptionalAuth() gin.HandlerFunc {
 		}
 
 		token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-			return jwtSecret, nil
+			return getJWTSecret(), nil
 		})
 
 		if err == nil {
 			if claims, ok := token.Claims.(*Claims); ok && token.Valid {
-				c.Set("user_id", claims.UserID)
+				c.Set("userID", claims.UserID)
 				c.Set("user_email", claims.Email)
 				c.Set("is_admin", claims.IsAdmin)
 			}
@@ -136,7 +143,7 @@ func GenerateToken(userID, email string, isAdmin bool) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+	return token.SignedString(getJWTSecret())
 }
 
 // Logging middleware

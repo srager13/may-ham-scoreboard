@@ -48,9 +48,10 @@ func main() {
 	authHandler := handlers.NewAuthHandler(repo)
 	tournamentHandler := handlers.NewTournamentHandler(repo)
 	scoringHandler := handlers.NewScoringHandler(repo, scoringService)
+	groupHandler := handlers.NewGroupHandler(repo)
 
 	// Setup router
-	router := setupRouter(authHandler, tournamentHandler, scoringHandler, wsHub)
+	router := setupRouter(authHandler, tournamentHandler, scoringHandler, groupHandler, wsHub)
 
 	// Start server
 	port := os.Getenv("PORT")
@@ -68,6 +69,7 @@ func setupRouter(
 	authHandler *handlers.AuthHandler,
 	tournamentHandler *handlers.TournamentHandler,
 	scoringHandler *handlers.ScoringHandler,
+	groupHandler *handlers.GroupHandler,
 	wsHub *websocket.Hub,
 ) *gin.Engine {
 	r := gin.Default()
@@ -129,6 +131,13 @@ func setupRouter(
 		{
 			// User management
 			protected.GET("/users", authHandler.GetUsers)
+
+			// Group management
+			protected.POST("/groups", groupHandler.CreateGroup)
+			protected.GET("/groups", groupHandler.GetUserGroups)
+			protected.GET("/groups/:groupId/members", groupHandler.GetGroupMembers)
+			protected.POST("/groups/:groupId/members", groupHandler.AddGroupMember)
+			protected.GET("/groups/:groupId/users", groupHandler.GetGroupUsers)
 
 			// Tournament management (admin or tournament creator)
 			protected.POST("/tournaments", tournamentHandler.CreateTournament)

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Users, Trophy, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
-import { apiClient, ApiError, User, MatchFormat, Tournament, Team, Round, CreateTournamentRequest } from '../services/api';
+import { apiClient, ApiError, User, MatchFormat, Tournament, Team, Round, CreateTournamentRequest, Group } from '../services/api';
 
 interface TeamData {
   id?: string;
@@ -37,7 +37,8 @@ const AdminPortal = () => {
     name: '',
     description: '',
     start_date: '',
-    end_date: ''
+    end_date: '',
+    group_id: ''
   });
   
   const [teams, setTeams] = useState<TeamData[]>([
@@ -48,6 +49,8 @@ const AdminPortal = () => {
   const [rounds, setRounds] = useState<RoundData[]>([]);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [matchFormats, setMatchFormats] = useState<MatchFormat[]>([]);
+  const [userGroups, setUserGroups] = useState<Group[]>([]);
+  const [selectedGroupUsers, setSelectedGroupUsers] = useState<User[]>([]);
   const [createdTournament, setCreatedTournament] = useState<Tournament | null>(null);
 
   useEffect(() => {
@@ -164,14 +167,39 @@ const AdminPortal = () => {
         setMatchFormats([]);
       }
       
+      try {
+        const groups = await apiClient.getUserGroups();
+        console.log('Groups loaded:', groups);
+        setUserGroups(Array.isArray(groups) ? groups : []);
+      } catch (err) {
+        console.error('Error loading groups:', err);
+        setUserGroups([]);
+      }
+      
     } catch (err) {
       console.error('Error loading initial data:', err);
       setError(err instanceof ApiError ? err.message : 'Failed to load initial data');
       // Set safe defaults on error
       setAvailableUsers([]);
       setMatchFormats([]);
+      setUserGroups([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadGroupUsers = async (groupId: string) => {
+    if (!groupId) {
+      setSelectedGroupUsers([]);
+      return;
+    }
+    
+    try {
+      const groupUsers = await apiClient.getGroupUsers(groupId);
+      setSelectedGroupUsers(Array.isArray(groupUsers) ? groupUsers : []);
+    } catch (err) {
+      console.error('Error loading group users:', err);
+      setSelectedGroupUsers([]);
     }
   };
 
@@ -186,6 +214,7 @@ const AdminPortal = () => {
         description: tournament.description || undefined,
         start_date: tournament.start_date + 'T00:00:00Z',
         end_date: tournament.end_date + 'T23:59:59Z',
+        group_id: tournament.group_id || undefined,
       };
 
       const newTournament = await apiClient.createTournament(tournamentData);
@@ -258,7 +287,7 @@ const AdminPortal = () => {
       localStorage.removeItem('tournament_draft');
       // Reset form or redirect
       setStep(1);
-      setTournament({ name: '', description: '', start_date: '', end_date: '' });
+      setTournament({ name: '', description: '', start_date: '', end_date: '', group_id: '' });
       setTeams([
         { name: 'Team USA', color: '#DC2626', players: [] },
         { name: 'Team Europe', color: '#2563EB', players: [] }
@@ -324,7 +353,7 @@ const AdminPortal = () => {
               onClick={() => {
                 if (confirm('Are you sure you want to clear all data and start over?')) {
                   clearDraft();
-                  setTournament({ name: '', description: '', start_date: '', end_date: '' });
+                  setTournament({ name: '', description: '', start_date: '', end_date: '', group_id: '' });
                   setTeams([
                     { name: 'Team USA', color: '#DC2626', players: [] },
                     { name: 'Team Europe', color: '#2563EB', players: [] }
@@ -390,10 +419,19 @@ const AdminPortal = () => {
 
         {/* Step Content */}
         {step === 1 && (
-          <TournamentInfoStep tournament={tournament} setTournament={setTournament} />
+          <TournamentInfoStep 
+            tournament={tournament} 
+            setTournament={setTournament}
+            userGroups={userGroups}
+            onGroupSelect={loadGroupUsers}
+          />
         )}
         {step === 2 && (
-          <TeamsStep teams={teams} setTeams={setTeams} availableUsers={availableUsers} />
+          <TeamsStep 
+            teams={teams} 
+            setTeams={setTeams} 
+            availableUsers={tournament.group_id ? selectedGroupUsers : availableUsers} 
+          />
         )}
         {step === 3 && (
           <RoundsStep 
@@ -439,7 +477,12 @@ const AdminPortal = () => {
 };
 
 // Step 1: Tournament Info
-const TournamentInfoStep = ({ tournament, setTournament }) => {
+const TournamentInfoStep = ({ tournament, setTournament, userGroups, onGroupSelect }) => {
+  const handleGroupChange = (groupId: string) => {
+    setTournament({ ...tournament, group_id: groupId });
+    onGroupSelect(groupId);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-2xl font-bold mb-6 flex items-center">
@@ -468,6 +511,26 @@ const TournamentInfoStep = ({ tournament, setTournament }) => {
             rows={3}
             placeholder="Annual summer golf tournament..."
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Group (optional)
+            <span className="text-xs text-gray-500 ml-2">Select a group to limit team member selection</span>
+          </label>
+          <select
+            value={tournament.group_id}
+            onChange={(e) => handleGroupChange(e.target.value)}
+            className="w-full p-3 border rounded-lg"
+          >
+            <option value="">No group - use all users</option>
+            {userGroups.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.name}
+                {group.description && ` - ${group.description}`}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
