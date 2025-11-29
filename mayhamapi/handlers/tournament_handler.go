@@ -26,7 +26,7 @@ func (h *TournamentHandler) CreateTournament(c *gin.Context) {
 	}
 
 	// Get user ID from JWT token
-	userID, exists := c.Get("user_id")
+	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
