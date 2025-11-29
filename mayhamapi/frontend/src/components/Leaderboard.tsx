@@ -609,9 +609,72 @@ const IndividualStandings = ({ players }: { players: PlayerStanding[] }) => {
 };
 
 const Leaderboard = () => {
-  // Default to first tournament for demo purposes
-  // In a real app, you'd get this from URL params or tournament selection
-  return <TournamentLeaderboard tournamentId="demo-tournament" />;
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [selectedTournamentId, setSelectedTournamentId] = useState<string>('demo-tournament');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadTournaments();
+  }, []);
+
+  const loadTournaments = async () => {
+    try {
+      setLoading(true);
+      const tournamentList = await apiClient.getTournaments();
+      setTournaments(tournamentList);
+      
+      // If we have real tournaments, select the first one
+      if (tournamentList.length > 0) {
+        setSelectedTournamentId(tournamentList[0].id);
+      }
+    } catch (err) {
+      console.error('Error loading tournaments:', err);
+      // Keep default demo tournament if API fails
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading tournaments...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Tournament Selector */}
+      {tournaments.length > 0 && (
+        <div className="bg-white border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-6 py-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-medium text-gray-900">Select Tournament</h2>
+              <div className="flex items-center space-x-4">
+                <select
+                  value={selectedTournamentId}
+                  onChange={(e) => setSelectedTournamentId(e.target.value)}
+                  className="block w-64 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                >
+                  {tournaments.map((tournament) => (
+                    <option key={tournament.id} value={tournament.id}>
+                      {tournament.name} ({tournament.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <TournamentLeaderboard tournamentId={selectedTournamentId} />
+    </div>
+  );
 };
 
 export default Leaderboard;

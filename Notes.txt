@@ -6,6 +6,10 @@ npm run build        # Build for production
 # Full-stack development  
 go run .             # Serves both API and React app
 
+Start Backend: cd mayhamapi && go run main.go
+Start Frontend: cd mayhamapi/frontend && npm run dev
+Visit: http://localhost:5173
+
 Usage Example:
 
 ```
