@@ -129,14 +129,22 @@ type Match struct {
 	EndTime         *time.Time `json:"end_time,omitempty" db:"end_time"`
 	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at" db:"updated_at"`
+	// Related data (not in DB table)
+	Team1   *Team         `json:"team1,omitempty"`
+	Team2   *Team         `json:"team2,omitempty"`
+	Format  *MatchFormat  `json:"format,omitempty"`
+	Players []MatchPlayer `json:"players,omitempty"`
 }
 
 type MatchPlayer struct {
-	ID       string `json:"id" db:"id"`
-	MatchID  string `json:"match_id" db:"match_id"`
-	UserID   string `json:"user_id" db:"user_id"`
-	TeamID   string `json:"team_id" db:"team_id"`
-	Position int    `json:"position" db:"position"`
+	ID        string    `json:"id" db:"id"`
+	MatchID   string    `json:"match_id" db:"match_id"`
+	UserID    string    `json:"user_id" db:"user_id"`
+	TeamID    string    `json:"team_id" db:"team_id"`
+	Position  int       `json:"position" db:"position"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	// Related data (not in DB table)
+	User *User `json:"user,omitempty"`
 }
 
 type Score struct {
@@ -184,10 +192,16 @@ type CreateRoundRequest struct {
 }
 
 type CreateMatchRequest struct {
-	Team1ID       string `json:"team1_id" binding:"required"`
-	Team2ID       string `json:"team2_id" binding:"required"`
-	MatchFormatID string `json:"match_format_id" binding:"required"`
-	Holes         int    `json:"holes" binding:"required,min=6,max=18"`
+	Team1ID           string             `json:"team1_id" binding:"required"`
+	Team2ID           string             `json:"team2_id" binding:"required"`
+	MatchFormatID     string             `json:"match_format_id" binding:"required"`
+	Holes             int                `json:"holes" binding:"required,min=6,max=18"`
+	PlayerAssignments *PlayerAssignments `json:"player_assignments,omitempty"`
+}
+
+type PlayerAssignments struct {
+	Team1Players []string `json:"team1_players"`
+	Team2Players []string `json:"team2_players"`
 }
 
 type AddTeamMemberRequest struct {

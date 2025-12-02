@@ -260,6 +260,41 @@ func (r *Repository) CreateMatch(roundID string, req *models.CreateMatchRequest)
 		return nil, fmt.Errorf("failed to create match: %w", err)
 	}
 
+	// If player assignments are provided, create match players
+	if req.PlayerAssignments != nil {
+		// Add team1 players
+		for i, userID := range req.PlayerAssignments.Team1Players {
+			matchPlayer := &models.MatchPlayer{
+				MatchID:  match.ID,
+				UserID:   userID,
+				TeamID:   req.Team1ID,
+				Position: i + 1,
+			}
+			if err := r.CreateMatchPlayer(matchPlayer); err != nil {
+				return nil, fmt.Errorf("failed to create team1 player assignment: %w", err)
+			}
+		}
+
+		// Add team2 players
+		for i, userID := range req.PlayerAssignments.Team2Players {
+			matchPlayer := &models.MatchPlayer{
+				MatchID:  match.ID,
+				UserID:   userID,
+				TeamID:   req.Team2ID,
+				Position: i + 1,
+			}
+			if err := r.CreateMatchPlayer(matchPlayer); err != nil {
+				return nil, fmt.Errorf("failed to create team2 player assignment: %w", err)
+			}
+		}
+	} else {
+		// Auto-assign all team members if no specific assignments provided
+		if err := r.AutoAssignTeamMembers(match.ID, req.Team1ID, req.Team2ID); err != nil {
+			// Don't fail the match creation if auto-assignment fails, just log it
+			fmt.Printf("Warning: failed to auto-assign players for match %s: %v\n", match.ID, err)
+		}
+	}
+
 	return &match, nil
 }
 
@@ -303,6 +338,17 @@ func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan match: %w", err)
 		}
+
+		// Load match players
+		players, err := r.GetMatchPlayersByMatch(match.ID)
+		if err != nil {
+			// Log warning but don't fail the whole request
+			// In production you might want to use a proper logger here
+			fmt.Printf("Warning: failed to load players for match %s: %v\n", match.ID, err)
+		} else {
+			match.Players = players
+		}
+
 		matches = append(matches, match)
 	}
 
@@ -638,4 +684,119 @@ func (r *Repository) IsGroupAdmin(groupID, userID string) (bool, error) {
 	}
 
 	return count > 0, nil
+}
+
+// Match Players
+func (r *Repository) CreateMatchPlayer(matchPlayer *models.MatchPlayer) error {
+	query := `
+		INSERT INTO match_players (match_id, user_id, team_id, player_order, created_at)
+		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+		RETURNING id, created_at
+	`
+
+	err := r.db.QueryRow(query, matchPlayer.MatchID, matchPlayer.UserID, matchPlayer.TeamID, matchPlayer.Position).Scan(
+		&matchPlayer.ID, &matchPlayer.CreatedAt,
+	)
+	return err
+}
+
+func (r *Repository) GetMatchPlayersByMatch(matchID string) ([]models.MatchPlayer, error) {
+	query := `
+		SELECT mp.id, mp.match_id, mp.user_id, mp.team_id, mp.player_order, mp.created_at,
+		       u.id, u.email, u.name, u.handicap, u.is_admin, u.created_at, u.updated_at
+		FROM match_players mp
+		JOIN users u ON mp.user_id = u.id
+		WHERE mp.match_id = $1
+		ORDER BY mp.team_id, mp.player_order
+	`
+
+	rows, err := r.db.Query(query, matchID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get match players: %w", err)
+	}
+	defer rows.Close()
+
+	var players []models.MatchPlayer
+	for rows.Next() {
+		var player models.MatchPlayer
+		var user models.User
+
+		err := rows.Scan(
+			&player.ID, &player.MatchID, &player.UserID, &player.TeamID, &player.Position, &player.CreatedAt,
+			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan match player: %w", err)
+		}
+
+		player.User = &user
+		players = append(players, player)
+	}
+
+	return players, nil
+}
+
+// Auto-assign team members to a match
+func (r *Repository) AutoAssignTeamMembers(matchID, team1ID, team2ID string) error {
+	// Get team1 members
+	team1Members, err := r.GetTeamMembersByTeam(team1ID)
+	if err != nil {
+		return fmt.Errorf("failed to get team1 members: %w", err)
+	}
+
+	// Get team2 members
+	team2Members, err := r.GetTeamMembersByTeam(team2ID)
+	if err != nil {
+		return fmt.Errorf("failed to get team2 members: %w", err)
+	}
+
+	// Assign team1 members
+	for i, member := range team1Members {
+		matchPlayer := &models.MatchPlayer{
+			MatchID:  matchID,
+			UserID:   member.UserID,
+			TeamID:   team1ID,
+			Position: i + 1,
+		}
+		if err := r.CreateMatchPlayer(matchPlayer); err != nil {
+			return fmt.Errorf("failed to assign team1 member: %w", err)
+		}
+	}
+
+	// Assign team2 members
+	for i, member := range team2Members {
+		matchPlayer := &models.MatchPlayer{
+			MatchID:  matchID,
+			UserID:   member.UserID,
+			TeamID:   team2ID,
+			Position: i + 1,
+		}
+		if err := r.CreateMatchPlayer(matchPlayer); err != nil {
+			return fmt.Errorf("failed to assign team2 member: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *Repository) GetTeamMembersByTeam(teamID string) ([]models.TeamMember, error) {
+	query := `SELECT id, team_id, user_id, created_at FROM team_members WHERE team_id = $1`
+
+	rows, err := r.db.Query(query, teamID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team members: %w", err)
+	}
+	defer rows.Close()
+
+	var members []models.TeamMember
+	for rows.Next() {
+		var member models.TeamMember
+		err := rows.Scan(&member.ID, &member.TeamID, &member.UserID, &member.CreatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan team member: %w", err)
+		}
+		members = append(members, member)
+	}
+
+	return members, nil
 }
