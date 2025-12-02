@@ -8,6 +8,8 @@ interface MatchWithScores extends ApiMatch {
 }
 
 const ScoreInterface: React.FC = () => {
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
   const [matches, setMatches] = useState<MatchWithScores[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithScores | null>(null);
   const [currentHole, setCurrentHole] = useState(1);
@@ -17,47 +19,69 @@ const ScoreInterface: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadMatches();
+    loadTournaments();
   }, []);
 
-  const loadMatches = async () => {
+  useEffect(() => {
+    if (selectedTournamentId) {
+      loadMatches();
+    }
+  }, [selectedTournamentId]);
+
+  const loadTournaments = async () => {
     try {
       setLoading(true);
       setError(null);
       
       // Get tournaments where the current user is a team member
-      const tournaments = await apiClient.getUserTournaments();
-      const tournamentsArray = Array.isArray(tournaments) ? tournaments : [];
+      const tournamentList = await apiClient.getUserTournaments();
+      setTournaments(tournamentList);
+      
+      // If we have tournaments, select the first one
+      if (tournamentList.length > 0) {
+        setSelectedTournamentId(tournamentList[0].id);
+      } else {
+        setError('You are not a member of any tournaments. Ask an admin to add you to a tournament team.');
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error('Error loading tournaments:', err);
+      setError('Failed to load tournaments. Please make sure you are logged in.');
+      setLoading(false);
+    }
+  };
+
+  const loadMatches = async () => {
+    if (!selectedTournamentId) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Get rounds for the selected tournament
+      const roundsResponse = await apiClient.getTournamentRounds(selectedTournamentId);
+      const rounds = Array.isArray(roundsResponse) ? roundsResponse : [];
       
       const allMatches: MatchWithScores[] = [];
       
-      for (const tournament of tournamentsArray) {
+      for (const round of rounds) {
         try {
-          const roundsResponse = await apiClient.getTournamentRounds(tournament.id);
-          const rounds = Array.isArray(roundsResponse) ? roundsResponse : [];
+          const matchesResponse = await apiClient.getRoundMatches(round.id);
+          const matches = Array.isArray(matchesResponse) ? matchesResponse : [];
           
-          for (const round of rounds) {
-            try {
-              const matchesResponse = await apiClient.getRoundMatches(round.id);
-              const matches = Array.isArray(matchesResponse) ? matchesResponse : [];
-              
-              // Show all matches except completed ones
-              const matchesWithScores: MatchWithScores[] = matches
-                .filter(m => m.status !== 'completed')
-                .map(match => ({
-                  ...match,
-                  current_hole: 1,
-                  scores: {},
-                  players: match.players || [] // Ensure players array exists
-                }));
-              
-              allMatches.push(...matchesWithScores);
-            } catch (matchErr) {
-              console.warn('Error loading matches for round:', round.id, matchErr);
-            }
-          }
-        } catch (roundErr) {
-          console.warn('Error loading rounds for tournament:', tournament.id, roundErr);
+          // Show all matches except completed ones
+          const matchesWithScores: MatchWithScores[] = matches
+            .filter(m => m.status !== 'completed')
+            .map(match => ({
+              ...match,
+              current_hole: 1,
+              scores: {},
+              players: match.players || [] // Ensure players array exists
+            }));
+          
+          allMatches.push(...matchesWithScores);
+        } catch (matchErr) {
+          console.warn('Error loading matches for round:', round.id, matchErr);
         }
       }
       
@@ -65,6 +89,8 @@ const ScoreInterface: React.FC = () => {
       if (allMatches.length > 0) {
         setSelectedMatch(allMatches[0]);
         setCurrentHole(1);
+      } else {
+        setSelectedMatch(null);
       }
     } catch (err) {
       console.error('Error loading matches:', err);
@@ -160,17 +186,66 @@ const ScoreInterface: React.FC = () => {
     return (
       <div className="flex items-center justify-center h-64">
         <RefreshCw className="h-8 w-8 animate-spin text-gray-500" />
-        <span className="ml-2 text-gray-500">Loading matches...</span>
+        <span className="ml-2 text-gray-500">
+          {tournaments.length === 0 ? 'Loading tournaments...' : 'Loading matches...'}
+        </span>
       </div>
     );
   }
 
-  if (matches.length === 0) {
+  if (error || tournaments.length === 0) {
     return (
       <div className="text-center py-12">
         <Target className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Matches</h3>
-        <p className="text-gray-500">There are no matches currently in progress.</p>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">No Tournaments Available</h3>
+        <p className="text-gray-500 mb-6">
+          {error || 'You are not currently participating in any tournaments.'}
+        </p>
+        <button
+          onClick={loadTournaments}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (matches.length === 0 && selectedTournamentId) {
+    return (
+      <div className="space-y-6">
+        {/* Tournament Selector */}
+        <div className="bg-white border-b border-gray-200 rounded-lg p-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-medium text-gray-900">Select Tournament</h2>
+            <div className="flex items-center space-x-4">
+              <select
+                value={selectedTournamentId}
+                onChange={(e) => setSelectedTournamentId(e.target.value)}
+                className="block w-64 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              >
+                {tournaments.map((tournament) => (
+                  <option key={tournament.id} value={tournament.id}>
+                    {tournament.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={loadMatches}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div className="text-center py-12">
+          <Target className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Matches</h3>
+          <p className="text-gray-500">There are no matches currently available for scoring in this tournament.</p>
+        </div>
       </div>
     );
   }
@@ -184,6 +259,33 @@ const ScoreInterface: React.FC = () => {
         </div>
       )}
 
+      {/* Tournament Selector */}
+      <div className="bg-white border-b border-gray-200 rounded-lg p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-medium text-gray-900">Select Tournament</h2>
+          <div className="flex items-center space-x-4">
+            <select
+              value={selectedTournamentId}
+              onChange={(e) => setSelectedTournamentId(e.target.value)}
+              className="block w-64 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            >
+              {tournaments.map((tournament) => (
+                <option key={tournament.id} value={tournament.id}>
+                  {tournament.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={loadMatches}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="bg-white shadow-sm rounded-lg p-6">
         <div className="flex items-center justify-between">
@@ -191,13 +293,6 @@ const ScoreInterface: React.FC = () => {
             <h1 className="text-2xl font-bold text-gray-900">Score Entry</h1>
             <p className="text-gray-500">Record scores for active matches</p>
           </div>
-          <button
-            onClick={loadMatches}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </button>
         </div>
       </div>
 
