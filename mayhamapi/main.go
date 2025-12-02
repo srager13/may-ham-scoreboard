@@ -111,20 +111,6 @@ func setupRouter(
 			auth.POST("/refresh", middleware.JWTAuth(), authHandler.RefreshToken)
 		}
 
-		// Public tournament data (read-only)
-		public := api.Group("/public")
-		public.Use(middleware.OptionalAuth())
-		{
-			public.GET("/tournaments", tournamentHandler.ListTournaments)
-			public.GET("/tournaments/:tournament_id", tournamentHandler.GetTournament)
-			public.GET("/tournaments/:tournament_id/teams", tournamentHandler.GetTeams)
-			public.GET("/tournaments/:tournament_id/rounds", tournamentHandler.GetRounds)
-			public.GET("/rounds/:round_id/matches", tournamentHandler.GetMatches)
-			public.GET("/matches/:match_id", tournamentHandler.GetMatch)
-			public.GET("/matches/:match_id/scores", scoringHandler.GetMatchScores)
-			public.GET("/match-formats", tournamentHandler.GetMatchFormats)
-		}
-
 		// Protected routes (authentication required)
 		protected := api.Group("/")
 		protected.Use(middleware.JWTAuth())
@@ -132,6 +118,16 @@ func setupRouter(
 			// User management
 			protected.GET("/users", authHandler.GetUsers)
 			protected.GET("/user/tournaments", tournamentHandler.GetUserTournaments)
+
+			// Tournament data (user-scoped)
+			protected.GET("/tournaments", tournamentHandler.ListTournaments)
+			protected.GET("/tournaments/:tournament_id", tournamentHandler.GetTournament)
+			protected.GET("/tournaments/:tournament_id/teams", tournamentHandler.GetTeams)
+			protected.GET("/tournaments/:tournament_id/rounds", tournamentHandler.GetRounds)
+			protected.GET("/rounds/:round_id/matches", tournamentHandler.GetMatches)
+			protected.GET("/matches/:match_id", tournamentHandler.GetMatch)
+			protected.GET("/matches/:match_id/scores", scoringHandler.GetMatchScores)
+			protected.GET("/match-formats", tournamentHandler.GetMatchFormats)
 
 			// Group management
 			protected.POST("/groups", groupHandler.CreateGroup)

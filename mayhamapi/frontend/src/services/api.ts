@@ -299,7 +299,7 @@ class ApiClient {
 
   // Tournaments
   async getTournaments(): Promise<Tournament[]> {
-    return this.request<Tournament[]>('/public/tournaments');
+    return this.request<Tournament[]>('/tournaments');
   }
 
   async getUserTournaments(): Promise<Tournament[]> {
@@ -307,7 +307,7 @@ class ApiClient {
   }
 
   async getTournament(id: string): Promise<Tournament> {
-    return this.request<Tournament>(`/public/tournaments/${id}`);
+    return this.request<Tournament>(`/tournaments/${id}`);
   }
 
   async createTournament(data: CreateTournamentRequest): Promise<Tournament> {
@@ -319,7 +319,7 @@ class ApiClient {
 
   // Teams
   async getTournamentTeams(tournamentId: string): Promise<Team[]> {
-    const response = await this.request<{teams: Team[]}>(`/public/tournaments/${tournamentId}/teams`);
+    const response = await this.request<{teams: Team[]}>(`/tournaments/${tournamentId}/teams`);
     return response.teams || [];
   }
 
@@ -339,7 +339,7 @@ class ApiClient {
 
   // Rounds
   async getTournamentRounds(tournamentId: string): Promise<Round[]> {
-    return this.request<Round[]>(`/public/tournaments/${tournamentId}/rounds`);
+    return this.request<Round[]>(`/tournaments/${tournamentId}/rounds`);
   }
 
   async createRound(tournamentId: string, data: CreateRoundRequest): Promise<Round> {
@@ -351,11 +351,11 @@ class ApiClient {
 
   // Matches
   async getRoundMatches(roundId: string): Promise<Match[]> {
-    return this.request<Match[]>(`/public/rounds/${roundId}/matches`);
+    return this.request<Match[]>(`/rounds/${roundId}/matches`);
   }
 
   async getMatch(matchId: string): Promise<Match> {
-    return this.request<Match>(`/public/matches/${matchId}`);
+    return this.request<Match>(`/matches/${matchId}`);
   }
 
   async createMatch(roundId: string, data: CreateMatchRequest): Promise<Match> {
@@ -367,13 +367,13 @@ class ApiClient {
 
   // Match Formats
   async getMatchFormats(): Promise<MatchFormat[]> {
-    const response = await this.request<{ formats: MatchFormat[] }>('/public/match-formats');
+    const response = await this.request<{ formats: MatchFormat[] }>('/match-formats');
     return response.formats;
   }
 
   // Scoring
   async getMatchScores(matchId: string): Promise<Score[]> {
-    return this.request<Score[]>(`/public/matches/${matchId}/scores`);
+    return this.request<Score[]>(`/matches/${matchId}/scores`);
   }
 
   async submitScores(matchId: string, data: SubmitScoresRequest): Promise<void> {
