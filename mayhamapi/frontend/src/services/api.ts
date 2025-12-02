@@ -319,7 +319,8 @@ class ApiClient {
 
   // Teams
   async getTournamentTeams(tournamentId: string): Promise<Team[]> {
-    return this.request<Team[]>(`/public/tournaments/${tournamentId}/teams`);
+    const response = await this.request<{teams: Team[]}>(`/public/tournaments/${tournamentId}/teams`);
+    return response.teams || [];
   }
 
   async createTeam(tournamentId: string, data: CreateTeamRequest): Promise<Team> {

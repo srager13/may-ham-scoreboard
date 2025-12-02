@@ -633,7 +633,7 @@ const Leaderboard = () => {
               >
                 {tournaments.map((tournament) => (
                   <option key={tournament.id} value={tournament.id}>
-                    {tournament.name} ({tournament.status})
+                    {tournament.name}
                   </option>
                 ))}
               </select>
