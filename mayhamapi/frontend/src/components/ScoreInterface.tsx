@@ -69,7 +69,7 @@ const ScoreInterface: React.FC = () => {
           const matchesResponse = await apiClient.getRoundMatches(round.id);
           const matches = Array.isArray(matchesResponse) ? matchesResponse : [];
           
-          // Show all matches except completed ones
+          // Show scheduled, not_started, and in_progress matches (exclude completed)
           const matchesWithScores: MatchWithScores[] = matches
             .filter(m => m.status !== 'completed')
             .map(match => ({
@@ -318,11 +318,11 @@ const ScoreInterface: React.FC = () => {
                 <div className="flex justify-between items-start mb-2">
                   <div className="font-medium">Match {match.match_number}</div>
                   <div className={`text-xs px-2 py-1 rounded-full ${
-                    match.status === 'not_started' ? 'bg-gray-200 text-gray-700' :
+                    match.status === 'not_started' || match.status === 'scheduled' ? 'bg-gray-200 text-gray-700' :
                     match.status === 'in_progress' ? 'bg-green-200 text-green-700' :
                     'bg-blue-200 text-blue-700'
                   }`}>
-                    {match.status.replace('_', ' ')}
+                    {match.status === 'scheduled' ? 'ready to start' : match.status.replace('_', ' ')}
                   </div>
                 </div>
                 <div className="text-sm text-gray-500 mb-2">{match.format?.name}</div>
@@ -344,8 +344,8 @@ const ScoreInterface: React.FC = () => {
       {/* Score Entry */}
       {selectedMatch && (
         <div className="bg-white shadow-sm rounded-lg p-6">
-          {/* Start Match Section for not_started matches */}
-          {selectedMatch.status === 'not_started' && (
+          {/* Start Match Section for scheduled and not_started matches */}
+          {(selectedMatch.status === 'not_started' || selectedMatch.status === 'scheduled') && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -496,7 +496,7 @@ const ScoreInterface: React.FC = () => {
           )}
           
           {/* Show info for other statuses */}
-          {selectedMatch.status !== 'not_started' && selectedMatch.status !== 'in_progress' && (
+          {selectedMatch.status !== 'not_started' && selectedMatch.status !== 'scheduled' && selectedMatch.status !== 'in_progress' && (
             <div className="text-center py-8">
               <p className="text-gray-500">
                 This match is {selectedMatch.status.replace('_', ' ')}.

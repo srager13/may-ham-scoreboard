@@ -339,7 +339,8 @@ class ApiClient {
 
   // Rounds
   async getTournamentRounds(tournamentId: string): Promise<Round[]> {
-    return this.request<Round[]>(`/tournaments/${tournamentId}/rounds`);
+    const response = await this.request<{rounds: Round[]}>(`/tournaments/${tournamentId}/rounds`);
+    return response.rounds || [];
   }
 
   async createRound(tournamentId: string, data: CreateRoundRequest): Promise<Round> {
@@ -351,7 +352,8 @@ class ApiClient {
 
   // Matches
   async getRoundMatches(roundId: string): Promise<Match[]> {
-    return this.request<Match[]>(`/rounds/${roundId}/matches`);
+    const response = await this.request<{matches: Match[]}>(`/rounds/${roundId}/matches`);
+    return response.matches || [];
   }
 
   async getMatch(matchId: string): Promise<Match> {
