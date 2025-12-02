@@ -25,27 +25,39 @@ const ScoreInterface: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Get all tournaments to find matches
-      const tournaments = await apiClient.getTournaments();
+      // Get tournaments where the current user is a team member
+      const tournaments = await apiClient.getUserTournaments();
+      const tournamentsArray = Array.isArray(tournaments) ? tournaments : [];
       
       const allMatches: MatchWithScores[] = [];
       
-      for (const tournament of tournaments) {
-        const rounds = await apiClient.getTournamentRounds(tournament.id);
-        
-        for (const round of rounds) {
-          const matches = await apiClient.getRoundMatches(round.id);
+      for (const tournament of tournamentsArray) {
+        try {
+          const roundsResponse = await apiClient.getTournamentRounds(tournament.id);
+          const rounds = Array.isArray(roundsResponse) ? roundsResponse : [];
           
-          // Convert API matches to matches with scores
-          const matchesWithScores: MatchWithScores[] = matches
-            .filter(m => m.status === 'in_progress' || m.status === 'not_started')
-            .map(match => ({
-              ...match,
-              current_hole: 1,
-              scores: {}
-            }));
-          
-          allMatches.push(...matchesWithScores);
+          for (const round of rounds) {
+            try {
+              const matchesResponse = await apiClient.getRoundMatches(round.id);
+              const matches = Array.isArray(matchesResponse) ? matchesResponse : [];
+              
+              // Show all matches except completed ones
+              const matchesWithScores: MatchWithScores[] = matches
+                .filter(m => m.status !== 'completed')
+                .map(match => ({
+                  ...match,
+                  current_hole: 1,
+                  scores: {},
+                  players: match.players || [] // Ensure players array exists
+                }));
+              
+              allMatches.push(...matchesWithScores);
+            } catch (matchErr) {
+              console.warn('Error loading matches for round:', round.id, matchErr);
+            }
+          }
+        } catch (roundErr) {
+          console.warn('Error loading rounds for tournament:', tournament.id, roundErr);
         }
       }
       
@@ -67,6 +79,30 @@ const ScoreInterface: React.FC = () => {
       ...prev,
       [playerId]: score
     }));
+  };
+
+  const startMatch = async (matchId: string) => {
+    try {
+      setError(null);
+      // Update match status to in_progress
+      // Note: You'll need to add this endpoint to your API
+      await apiClient.updateMatchStatus(matchId, 'in_progress');
+      
+      // Update local state
+      setMatches(prev => prev.map(match => 
+        match.id === matchId 
+          ? { ...match, status: 'in_progress' }
+          : match
+      ));
+      
+      // If this is the selected match, update it too
+      if (selectedMatch?.id === matchId) {
+        setSelectedMatch(prev => prev ? { ...prev, status: 'in_progress' } : null);
+      }
+    } catch (err) {
+      console.error('Error starting match:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to start match');
+    }
   };
 
   const submitHoleScores = async () => {
@@ -109,7 +145,15 @@ const ScoreInterface: React.FC = () => {
   };
 
   const getTeamPlayers = (teamId: string) => {
-    return selectedMatch?.players.filter(p => p.team_id === teamId) || [];
+    if (!selectedMatch?.players) {
+      return [];
+    }
+    return selectedMatch.players.filter(p => p.team_id === teamId) || [];
+  };
+
+  // Helper function to check if we have player data
+  const hasPlayerData = () => {
+    return selectedMatch?.players && selectedMatch.players.length > 0;
   };
 
   if (loading) {
@@ -176,15 +220,24 @@ const ScoreInterface: React.FC = () => {
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
-                <div className="font-medium">Match {match.match_number}</div>
-                <div className="text-sm text-gray-500">{match.format.name}</div>
-                <div className="flex justify-between mt-2">
-                  <span className="text-sm" style={{ color: match.team1.color }}>
-                    {match.team1.name}
+                <div className="flex justify-between items-start mb-2">
+                  <div className="font-medium">Match {match.match_number}</div>
+                  <div className={`text-xs px-2 py-1 rounded-full ${
+                    match.status === 'not_started' ? 'bg-gray-200 text-gray-700' :
+                    match.status === 'in_progress' ? 'bg-green-200 text-green-700' :
+                    'bg-blue-200 text-blue-700'
+                  }`}>
+                    {match.status.replace('_', ' ')}
+                  </div>
+                </div>
+                <div className="text-sm text-gray-500 mb-2">{match.format?.name}</div>
+                <div className="flex justify-between">
+                  <span className="text-sm" style={{ color: match.team1?.color }}>
+                    {match.team1?.name}
                   </span>
                   <span className="text-sm text-gray-400">vs</span>
-                  <span className="text-sm" style={{ color: match.team2.color }}>
-                    {match.team2.name}
+                  <span className="text-sm" style={{ color: match.team2?.color }}>
+                    {match.team2?.name}
                   </span>
                 </div>
               </button>
@@ -196,6 +249,42 @@ const ScoreInterface: React.FC = () => {
       {/* Score Entry */}
       {selectedMatch && (
         <div className="bg-white shadow-sm rounded-lg p-6">
+          {/* Start Match Section for not_started matches */}
+          {selectedMatch.status === 'not_started' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium text-blue-900 mb-2">
+                    Match {selectedMatch.match_number} - Ready to Start
+                  </h3>
+                  <p className="text-blue-700">
+                    {selectedMatch.team1?.name} vs {selectedMatch.team2?.name}
+                  </p>
+                  <p className="text-sm text-blue-600 mt-1">
+                    Click "Start Match" to begin entering scores for this {selectedMatch.format?.name} match.
+                  </p>
+                </div>
+                <button
+                  onClick={() => startMatch(selectedMatch.id)}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+                >
+                  Start Match
+                </button>
+              </div>
+            </div>
+          )}
+
+          {selectedMatch.status === 'in_progress' && (
+            <>
+              {!hasPlayerData() && (
+                <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
+                  <p className="text-sm">
+                    <strong>Note:</strong> Player data not available for this match. 
+                    You may need to assign team members before entering scores.
+                  </p>
+                </div>
+              )}
+          
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-lg font-medium text-gray-900">
@@ -282,16 +371,22 @@ const ScoreInterface: React.FC = () => {
           {/* Submit Button */}
           <div className="flex justify-between items-center pt-4 border-t border-gray-200">
             <div className="text-sm text-gray-500">
-              {Object.keys(holeScores).length > 0 && (
+              {hasPlayerData() && Object.keys(holeScores).length > 0 && (
                 <span className="flex items-center">
                   <AlertCircle className="h-4 w-4 mr-1" />
                   {Object.keys(holeScores).length} of {selectedMatch.players.length} scores entered
                 </span>
               )}
+              {!hasPlayerData() && (
+                <span className="flex items-center text-yellow-600">
+                  <AlertCircle className="h-4 w-4 mr-1" />
+                  No player data available
+                </span>
+              )}
             </div>
             <button
               onClick={submitHoleScores}
-              disabled={isSubmitting || Object.keys(holeScores).length === 0}
+              disabled={isSubmitting || Object.keys(holeScores).length === 0 || !hasPlayerData()}
               className="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
             >
               {isSubmitting ? (
@@ -302,6 +397,17 @@ const ScoreInterface: React.FC = () => {
               {isSubmitting ? 'Submitting...' : 'Submit Hole'}
             </button>
           </div>
+            </>
+          )}
+          
+          {/* Show info for other statuses */}
+          {selectedMatch.status !== 'not_started' && selectedMatch.status !== 'in_progress' && (
+            <div className="text-center py-8">
+              <p className="text-gray-500">
+                This match is {selectedMatch.status.replace('_', ' ')}.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -146,6 +146,7 @@ func setupRouter(
 			protected.POST("/teams/:team_id/members", tournamentHandler.AddTeamMember)
 			protected.POST("/tournaments/:tournament_id/rounds", tournamentHandler.CreateRound)
 			protected.POST("/rounds/:round_id/matches", tournamentHandler.CreateMatch)
+			protected.PATCH("/matches/:match_id/status", tournamentHandler.UpdateMatchStatus)
 
 			// Scoring (players can submit their own scores)
 			protected.POST("/matches/:match_id/scores", scoringHandler.SubmitScores)

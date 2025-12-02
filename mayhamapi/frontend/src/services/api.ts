@@ -382,6 +382,13 @@ class ApiClient {
     });
   }
 
+  async updateMatchStatus(matchId: string, status: string): Promise<void> {
+    return this.request<void>(`/matches/${matchId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
   async updateHoleScore(
     matchId: string,
     holeNumber: number,

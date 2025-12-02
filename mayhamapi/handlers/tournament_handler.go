@@ -99,6 +99,41 @@ func (h *TournamentHandler) GetUserTournaments(c *gin.Context) {
 	c.JSON(http.StatusOK, tournaments)
 }
 
+// PATCH /api/v1/matches/:match_id/status
+func (h *TournamentHandler) UpdateMatchStatus(c *gin.Context) {
+	matchID := c.Param("match_id")
+
+	var req struct {
+		Status string `json:"status" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate status
+	validStatuses := []string{"not_started", "in_progress", "completed"}
+	isValid := false
+	for _, status := range validStatuses {
+		if req.Status == status {
+			isValid = true
+			break
+		}
+	}
+	if !isValid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status. Must be one of: not_started, in_progress, completed"})
+		return
+	}
+
+	err := h.repo.UpdateMatchStatus(matchID, req.Status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Match status updated successfully"})
+}
+
 // POST /api/v1/tournaments/:tournament_id/teams
 func (h *TournamentHandler) CreateTeam(c *gin.Context) {
 	tournamentID := c.Param("tournament_id")

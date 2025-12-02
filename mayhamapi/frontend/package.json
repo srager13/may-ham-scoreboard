@@ -4,7 +4,7 @@
   "description": "React frontend for Mayham Golf Tournament API",
   "private": true,
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --port 5173",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit"
