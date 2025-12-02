@@ -302,6 +302,10 @@ class ApiClient {
     return this.request<Tournament[]>('/public/tournaments');
   }
 
+  async getUserTournaments(): Promise<Tournament[]> {
+    return this.request<Tournament[]>('/user/tournaments');
+  }
+
   async getTournament(id: string): Promise<Tournament> {
     return this.request<Tournament>(`/public/tournaments/${id}`);
   }

@@ -75,6 +75,30 @@ func (h *TournamentHandler) ListTournaments(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"tournaments": tournaments})
 }
 
+// GET /api/v1/user/tournaments
+func (h *TournamentHandler) GetUserTournaments(c *gin.Context) {
+	// Get user ID from JWT token
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userID.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	tournaments, err := h.repo.GetUserTournaments(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, tournaments)
+}
+
 // POST /api/v1/tournaments/:tournament_id/teams
 func (h *TournamentHandler) CreateTeam(c *gin.Context) {
 	tournamentID := c.Param("tournament_id")

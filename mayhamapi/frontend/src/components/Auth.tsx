@@ -346,15 +346,15 @@ const UserProfile: React.FC = () => {
         className="flex items-center space-x-2 text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md"
       >
         <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white font-medium">
-          {user.name.charAt(0).toUpperCase()}
+          {user.name?.charAt(0)?.toUpperCase() || user.email?.charAt(0)?.toUpperCase() || '?'}
         </div>
-        <span className="hidden md:block font-medium">{user.name}</span>
+        <span className="hidden md:block font-medium">{user.name || user.email}</span>
       </button>
 
       {showDropdown && (
         <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
           <div className="px-4 py-2 border-b border-gray-100">
-            <p className="text-sm font-medium text-gray-900">{user.name}</p>
+            <p className="text-sm font-medium text-gray-900">{user.name || user.email}</p>
             <p className="text-sm text-gray-500">{user.email}</p>
             {user.handicap && (
               <p className="text-xs text-gray-500">Handicap: {user.handicap}</p>

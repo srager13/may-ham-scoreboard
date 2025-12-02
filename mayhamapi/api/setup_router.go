@@ -59,6 +59,7 @@ func setupRouter(
 		{
 			// User management
 			protected.GET("/users", authHandler.GetUsers)
+			protected.GET("/user/tournaments", tournamentHandler.GetUserTournaments)
 
 			// Group management
 			protected.POST("/groups", groupHandler.CreateGroup)

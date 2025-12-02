@@ -83,6 +83,38 @@ func (r *Repository) ListTournaments() ([]models.Tournament, error) {
 	return tournaments, nil
 }
 
+func (r *Repository) GetUserTournaments(userID string) ([]models.Tournament, error) {
+	query := `
+		SELECT DISTINCT t.id, t.name, t.description, t.start_date, t.end_date, t.group_id, t.created_by, t.status, t.created_at, t.updated_at
+		FROM tournaments t
+		INNER JOIN teams teams ON teams.tournament_id = t.id
+		INNER JOIN team_members tm ON tm.team_id = teams.id
+		WHERE tm.user_id = $1
+		ORDER BY t.created_at DESC
+	`
+
+	rows, err := r.db.Query(query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user tournaments: %w", err)
+	}
+	defer rows.Close()
+
+	var tournaments []models.Tournament
+	for rows.Next() {
+		var tournament models.Tournament
+		err := rows.Scan(
+			&tournament.ID, &tournament.Name, &tournament.Description, &tournament.StartDate,
+			&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan tournament: %w", err)
+		}
+		tournaments = append(tournaments, tournament)
+	}
+
+	return tournaments, nil
+}
+
 // ============================================
 // Team Repository Methods
 // ============================================

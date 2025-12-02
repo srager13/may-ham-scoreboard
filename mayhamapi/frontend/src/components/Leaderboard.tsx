@@ -58,63 +58,47 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
       const tournament = await apiClient.getTournament(tournamentId);
       
       // Get teams
-      const teams = await apiClient.getTournamentTeams(tournamentId);
+      const teamsResponse = await apiClient.getTournamentTeams(tournamentId);
+      const teams = Array.isArray(teamsResponse) ? teamsResponse : [];
       
       // Get rounds and matches for live match data
-      const rounds = await apiClient.getTournamentRounds(tournamentId);
+      const roundsResponse = await apiClient.getTournamentRounds(tournamentId);
+      const rounds = Array.isArray(roundsResponse) ? roundsResponse : [];
       const liveMatches: Match[] = [];
       
       for (const round of rounds) {
-        const matches = await apiClient.getRoundMatches(round.id);
-        // Filter for in-progress matches
-        liveMatches.push(...matches.filter(m => m.status === 'in_progress'));
+        try {
+          const matches = await apiClient.getRoundMatches(round.id);
+          const matchesArray = Array.isArray(matches) ? matches : [];
+          // Filter for in-progress matches
+          liveMatches.push(...matchesArray.filter(m => m.status === 'in_progress'));
+        } catch (matchErr) {
+          console.warn('Error loading matches for round:', round.id, matchErr);
+        }
       }
 
-      // For now, create mock standings since we don't have player stats endpoint yet
-      // In a real app, you'd want to add a GET /api/v1/tournaments/:id/leaderboard endpoint
+      // Create basic team standings from actual teams
+      // TODO: Add API call to get team members and their statistics
+      // This would involve calling an endpoint like /api/v1/tournaments/:id/leaderboard
+      // that returns calculated standings based on match results
       const teamStandings: TeamStanding[] = teams.map((team, index) => ({
         team,
-        points_won: Math.random() * 15 + 5,
-        points_lost: Math.random() * 10,
-        matches_won: Math.floor(Math.random() * 8) + 1,
-        matches_lost: Math.floor(Math.random() * 6),
-        matches_tied: Math.floor(Math.random() * 3),
-        holes_won: Math.floor(Math.random() * 50) + 20,
-        holes_lost: Math.floor(Math.random() * 40) + 10,
-        holes_tied: Math.floor(Math.random() * 20) + 5,
+        points_won: 0, // Will be calculated from actual match results
+        points_lost: 0,
+        matches_won: 0,
+        matches_lost: 0,
+        matches_tied: 0,
+        holes_won: 0,
+        holes_lost: 0,
+        holes_tied: 0,
       }));
 
-      // Create mock individual standings
-      const individualStandings: PlayerStanding[] = [
-        {
-          user: { id: '1', name: 'John Doe', handicap: 12.5 },
-          team: teams[0] || { id: '1', name: 'Team 1', tournament_id: tournamentId, color: '#DC2626', created_at: '' },
-          points_won: 8.5,
-          points_lost: 3.5,
-          matches_played: 6,
-          matches_won: 5,
-          matches_lost: 1,
-          matches_tied: 0,
-          holes_won: 22,
-          holes_lost: 12,
-          holes_tied: 8,
-          win_percentage: 0.833
-        },
-        {
-          user: { id: '2', name: 'Jane Smith', handicap: 8.0 },
-          team: teams[0] || { id: '1', name: 'Team 1', tournament_id: tournamentId, color: '#DC2626', created_at: '' },
-          points_won: 7.0,
-          points_lost: 4.0,
-          matches_played: 5,
-          matches_won: 4,
-          matches_lost: 1,
-          matches_tied: 0,
-          holes_won: 18,
-          holes_lost: 14,
-          holes_tied: 6,
-          win_percentage: 0.8
-        }
-      ];
+      // Create basic individual standings - will be populated when we have team members
+      const individualStandings: PlayerStanding[] = [];
+      
+      // TODO: Add API call to get team members and their statistics
+      // This would involve calling an endpoint like /api/v1/tournaments/:id/leaderboard
+      // that returns calculated standings based on match results
 
       setData({
         tournament,
@@ -126,63 +110,26 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
     } catch (err) {
       console.error('Error loading leaderboard:', err);
       
-      // If API fails, show demo data but indicate it's demo mode
+      // Show error message instead of demo data
+      setError(`Failed to load tournament data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      
+      // Set empty data on error
       setData({
         tournament: {
-          id: 'demo',
-          name: 'Demo Tournament - Connect Your Database',
-          description: 'This is demo data. Create a tournament via the Admin Portal to see real data.',
-          status: 'active',
-          start_date: '2025-10-09',
-          end_date: '2025-10-10',
-          created_by: 'demo',
-          created_at: '2025-10-09',
-          updated_at: '2025-10-09'
+          id: tournamentId,
+          name: 'Tournament Not Found',
+          description: 'Unable to load tournament data.',
+          status: 'error',
+          start_date: '',
+          end_date: '',
+          created_by: '',
+          created_at: '',
+          updated_at: ''
         },
-        team_standings: [
-          {
-            team: { id: '1', name: 'Team USA', color: '#DC2626', tournament_id: 'demo', created_at: '2025-10-09' },
-            points_won: 12.5,
-            points_lost: 7.5,
-            matches_won: 8,
-            matches_lost: 4,
-            matches_tied: 3,
-            holes_won: 45,
-            holes_lost: 32,
-            holes_tied: 18
-          },
-          {
-            team: { id: '2', name: 'Team Europe', color: '#2563EB', tournament_id: 'demo', created_at: '2025-10-09' },
-            points_won: 7.5,
-            points_lost: 12.5,
-            matches_won: 4,
-            matches_lost: 8,
-            matches_tied: 3,
-            holes_won: 32,
-            holes_lost: 45,
-            holes_tied: 18
-          }
-        ],
-        individual_standings: [
-          {
-            user: { id: '1', name: 'John Doe', handicap: 12.5 },
-            team: { id: '1', name: 'Team USA', color: '#DC2626', tournament_id: 'demo', created_at: '2025-10-09' },
-            points_won: 3.5,
-            points_lost: 1.5,
-            matches_played: 4,
-            matches_won: 3,
-            matches_lost: 1,
-            matches_tied: 0,
-            holes_won: 15,
-            holes_lost: 8,
-            holes_tied: 4,
-            win_percentage: 0.75
-          }
-        ],
+        team_standings: [],
+        individual_standings: [],
         live_matches: []
       });
-      
-      setError('Using demo data - create tournaments to see real leaderboard');
     } finally {
       setLoading(false);
     }
@@ -610,8 +557,9 @@ const IndividualStandings = ({ players }: { players: PlayerStanding[] }) => {
 
 const Leaderboard = () => {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [selectedTournamentId, setSelectedTournamentId] = useState<string>('demo-tournament');
+  const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadTournaments();
@@ -620,16 +568,21 @@ const Leaderboard = () => {
   const loadTournaments = async () => {
     try {
       setLoading(true);
-      const tournamentList = await apiClient.getTournaments();
+      setError(null);
+      
+      // Get tournaments where the current user is a team member
+      const tournamentList = await apiClient.getUserTournaments();
       setTournaments(tournamentList);
       
-      // If we have real tournaments, select the first one
+      // If we have tournaments, select the first one
       if (tournamentList.length > 0) {
         setSelectedTournamentId(tournamentList[0].id);
+      } else {
+        setError('You are not a member of any tournaments. Ask an admin to add you to a tournament team.');
       }
     } catch (err) {
       console.error('Error loading tournaments:', err);
-      // Keep default demo tournament if API fails
+      setError('Failed to load tournaments. Please make sure you are logged in.');
     } finally {
       setLoading(false);
     }
@@ -646,33 +599,50 @@ const Leaderboard = () => {
     );
   }
 
+  if (error || tournaments.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center max-w-md">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">No Tournaments Available</h2>
+          <p className="text-gray-600 mb-6">
+            {error || 'You are not currently participating in any tournaments.'}
+          </p>
+          <button
+            onClick={loadTournaments}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Tournament Selector */}
-      {tournaments.length > 0 && (
-        <div className="bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-medium text-gray-900">Select Tournament</h2>
-              <div className="flex items-center space-x-4">
-                <select
-                  value={selectedTournamentId}
-                  onChange={(e) => setSelectedTournamentId(e.target.value)}
-                  className="block w-64 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
-                >
-                  {tournaments.map((tournament) => (
-                    <option key={tournament.id} value={tournament.id}>
-                      {tournament.name} ({tournament.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-medium text-gray-900">Select Tournament</h2>
+            <div className="flex items-center space-x-4">
+              <select
+                value={selectedTournamentId}
+                onChange={(e) => setSelectedTournamentId(e.target.value)}
+                className="block w-64 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+              >
+                {tournaments.map((tournament) => (
+                  <option key={tournament.id} value={tournament.id}>
+                    {tournament.name} ({tournament.status})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
-      )}
+      </div>
       
-      <TournamentLeaderboard tournamentId={selectedTournamentId} />
+      {selectedTournamentId && <TournamentLeaderboard tournamentId={selectedTournamentId} />}
     </div>
   );
 };
