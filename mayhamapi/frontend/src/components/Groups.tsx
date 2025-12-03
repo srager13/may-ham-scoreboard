@@ -39,10 +39,13 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
     try {
       setLoading(true);
       const groupsList = await apiClient.getUserGroups();
-      setGroups(groupsList);
+      // Ensure we always have an array, even if the API returns null/undefined
+      setGroups(Array.isArray(groupsList) ? groupsList : []);
     } catch (err) {
       setError('Failed to load groups');
       console.error(err);
+      // Set empty array on error to prevent null reference
+      setGroups([]);
     } finally {
       setLoading(false);
     }
@@ -51,20 +54,27 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
   const loadAllUsers = async () => {
     try {
       const usersList = await apiClient.getUsers();
-      setAllUsers(usersList);
+      // Ensure we always have an array
+      setAllUsers(Array.isArray(usersList) ? usersList : []);
     } catch (err) {
       console.error('Failed to load users:', err);
+      // Set empty array on error
+      setAllUsers([]);
     }
   };
 
   const loadGroupMembers = async (groupId: string) => {
     try {
       const result = await apiClient.getGroupMembers(groupId);
-      setGroupMembers(result.members);
-      setIsGroupAdmin(result.is_admin);
+      // Ensure we always have an array for members
+      setGroupMembers(Array.isArray(result.members) ? result.members : []);
+      setIsGroupAdmin(result.is_admin || false);
     } catch (err) {
       setError('Failed to load group members');
       console.error(err);
+      // Set empty array on error
+      setGroupMembers([]);
+      setIsGroupAdmin(false);
     }
   };
 
@@ -79,7 +89,9 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
         description: newGroupDescription,
       });
       
-      setGroups([...groups, newGroup]);
+      // Ensure groups is an array before spreading
+      const currentGroups = Array.isArray(groups) ? groups : [];
+      setGroups([...currentGroups, newGroup]);
       setNewGroupName('');
       setNewGroupDescription('');
       setShowCreateForm(false);
@@ -117,7 +129,7 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
     !groupMembers.some(member => member.user_id === user.id)
   );
 
-  if (loading && groups.length === 0) {
+  if (loading && (!groups || groups.length === 0)) {
     return <div className="text-center py-8">Loading groups...</div>;
   }
 
@@ -198,11 +210,11 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
         {/* Groups Sidebar */}
         <div className="bg-white p-6 border border-gray-200 rounded-lg shadow-sm">
           <h3 className="text-lg font-semibold mb-4">My Groups</h3>
-          {groups.length === 0 ? (
+          {!groups || groups.length === 0 ? (
             <p className="text-gray-500">You are not a member of any groups yet.</p>
           ) : (
             <div className="space-y-2">
-              {groups.map((group) => (
+              {(groups || []).map((group) => (
                 <div
                   key={group.id}
                   onClick={() => setSelectedGroup(group)}
@@ -304,13 +316,13 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
               {/* Members List */}
               <div>
                 <h4 className="font-medium mb-3">
-                  Members ({groupMembers.length})
+                  Members ({(groupMembers || []).length})
                 </h4>
-                {groupMembers.length === 0 ? (
+                {!groupMembers || groupMembers.length === 0 ? (
                   <p className="text-gray-500 text-sm">No members yet.</p>
                 ) : (
                   <div className="space-y-2">
-                    {groupMembers.map((member) => (
+                    {(groupMembers || []).map((member) => (
                       <div
                         key={member.id}
                         className="flex items-center justify-between p-2 bg-gray-50 rounded-md"
