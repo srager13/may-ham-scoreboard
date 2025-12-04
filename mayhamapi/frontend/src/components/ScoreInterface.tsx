@@ -5,6 +5,7 @@ import { apiClient, ApiError, Match as ApiMatch, Tournament, Team, Round } from 
 interface MatchWithScores extends ApiMatch {
   current_hole: number;
   scores: Record<number, Record<string, number>>;
+  round?: Round;
 }
 
 const ScoreInterface: React.FC = () => {
@@ -76,7 +77,8 @@ const ScoreInterface: React.FC = () => {
               ...match,
               current_hole: 1,
               scores: {},
-              players: match.players || [] // Ensure players array exists
+              players: match.players || [], // Ensure players array exists
+              round: round // Add round info to match
             }));
           
           allMatches.push(...matchesWithScores);
@@ -316,7 +318,9 @@ const ScoreInterface: React.FC = () => {
                 }`}
               >
                 <div className="flex justify-between items-start mb-2">
-                  <div className="font-medium">Match {match.match_number}</div>
+                  <div className="font-medium">
+                    Round {match.round?.round_number || '?'} - Match {match.match_number}
+                  </div>
                   <div className={`text-xs px-2 py-1 rounded-full ${
                     match.status === 'not_started' || match.status === 'scheduled' ? 'bg-gray-200 text-gray-700' :
                     match.status === 'in_progress' ? 'bg-green-200 text-green-700' :
@@ -325,15 +329,26 @@ const ScoreInterface: React.FC = () => {
                     {match.status === 'scheduled' ? 'ready to start' : match.status.replace('_', ' ')}
                   </div>
                 </div>
-                <div className="text-sm text-gray-500 mb-2">{match.format?.name}</div>
-                <div className="flex justify-between">
-                  <span className="text-sm" style={{ color: match.team1?.color }}>
+                <div className="text-sm text-gray-500 mb-3">{match.format?.name}</div>
+                
+                {/* Team 1 Players */}
+                <div className="mb-2">
+                  <div className="text-xs font-medium mb-1" style={{ color: match.team1?.color }}>
                     {match.team1?.name}
-                  </span>
-                  <span className="text-sm text-gray-400">vs</span>
-                  <span className="text-sm" style={{ color: match.team2?.color }}>
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    {getTeamPlayers(match.team1?.id || '').map(p => p.user?.name || `Player ${p.user_id}`).join(', ') || 'No players assigned'}
+                  </div>
+                </div>
+                
+                {/* Team 2 Players */}
+                <div className="mb-2">
+                  <div className="text-xs font-medium mb-1" style={{ color: match.team2?.color }}>
                     {match.team2?.name}
-                  </span>
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    {getTeamPlayers(match.team2?.id || '').map(p => p.user?.name || `Player ${p.user_id}`).join(', ') || 'No players assigned'}
+                  </div>
                 </div>
               </button>
             ))}

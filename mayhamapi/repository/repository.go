@@ -162,6 +162,24 @@ func (r *Repository) GetTeamsByTournament(tournamentID string) ([]models.Team, e
 	return teams, nil
 }
 
+func (r *Repository) GetTeam(teamID string) (*models.Team, error) {
+	query := `SELECT id, tournament_id, name, color, created_at, updated_at FROM teams WHERE id = $1`
+
+	var team models.Team
+	err := r.db.QueryRow(query, teamID).Scan(
+		&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.CreatedAt, &team.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("team not found")
+		}
+		return nil, fmt.Errorf("failed to get team: %w", err)
+	}
+
+	return &team, nil
+}
+
 func (r *Repository) AddTeamMember(teamID, userID string) (*models.TeamMember, error) {
 	query := `
 		INSERT INTO team_members (team_id, user_id, created_at)
@@ -339,6 +357,27 @@ func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 			return nil, fmt.Errorf("failed to scan match: %w", err)
 		}
 
+		// Load related data
+		// Load teams
+		if team1, err := r.GetTeam(match.Team1ID); err == nil {
+			match.Team1 = team1
+		} else {
+			fmt.Printf("Warning: failed to load team1 for match %s: %v\n", match.ID, err)
+		}
+
+		if team2, err := r.GetTeam(match.Team2ID); err == nil {
+			match.Team2 = team2
+		} else {
+			fmt.Printf("Warning: failed to load team2 for match %s: %v\n", match.ID, err)
+		}
+
+		// Load match format
+		if format, err := r.GetMatchFormat(match.MatchFormatID); err == nil {
+			match.Format = format
+		} else {
+			fmt.Printf("Warning: failed to load format for match %s: %v\n", match.ID, err)
+		}
+
 		// Load match players
 		players, err := r.GetMatchPlayersByMatch(match.ID)
 		if err != nil {
@@ -361,7 +400,7 @@ func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 
 func (r *Repository) SubmitScore(matchID, userID string, holeNumber, strokes int) (*models.Score, error) {
 	query := `
-		INSERT INTO scores (match_id, user_id, hole_number, strokes, created_at, updated_at)
+		INSERT INTO hole_scores (match_id, user_id, hole_number, strokes, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		ON CONFLICT (match_id, user_id, hole_number) 
 		DO UPDATE SET strokes = EXCLUDED.strokes, updated_at = CURRENT_TIMESTAMP
@@ -524,6 +563,24 @@ func (r *Repository) UpdateMatchStatus(matchID, status string) error {
 // ============================================
 // Match Format Repository Methods
 // ============================================
+
+func (r *Repository) GetMatchFormat(formatID string) (*models.MatchFormatEntity, error) {
+	query := `SELECT id, name, description, players_per_side, scoring_type, created_at FROM match_formats WHERE id = $1`
+
+	var format models.MatchFormatEntity
+	err := r.db.QueryRow(query, formatID).Scan(
+		&format.ID, &format.Name, &format.Description, &format.PlayersPerSide, &format.ScoringType, &format.CreatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("match format not found")
+		}
+		return nil, fmt.Errorf("failed to get match format: %w", err)
+	}
+
+	return &format, nil
+}
 
 func (r *Repository) GetAllMatchFormats() ([]map[string]interface{}, error) {
 	query := `SELECT id, name, description, players_per_side, scoring_type, created_at FROM match_formats ORDER BY name`

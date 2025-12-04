@@ -113,6 +113,16 @@ func (mf *MatchFormat) Scan(value interface{}) error {
 	return nil
 }
 
+// MatchFormatEntity represents a match format from the database
+type MatchFormatEntity struct {
+	ID             string    `json:"id" db:"id"`
+	Name           string    `json:"name" db:"name"`
+	Description    string    `json:"description" db:"description"`
+	PlayersPerSide int       `json:"players_per_side" db:"players_per_side"`
+	ScoringType    string    `json:"scoring_type" db:"scoring_type"`
+	CreatedAt      time.Time `json:"created_at" db:"created_at"`
+}
+
 type Match struct {
 	ID              string     `json:"id" db:"id"`
 	RoundID         string     `json:"round_id" db:"round_id"`
@@ -130,10 +140,10 @@ type Match struct {
 	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at" db:"updated_at"`
 	// Related data (not in DB table)
-	Team1   *Team         `json:"team1,omitempty"`
-	Team2   *Team         `json:"team2,omitempty"`
-	Format  *MatchFormat  `json:"format,omitempty"`
-	Players []MatchPlayer `json:"players,omitempty"`
+	Team1   *Team              `json:"team1,omitempty"`
+	Team2   *Team              `json:"team2,omitempty"`
+	Format  *MatchFormatEntity `json:"format,omitempty"`
+	Players []MatchPlayer      `json:"players,omitempty"`
 }
 
 type MatchPlayer struct {
