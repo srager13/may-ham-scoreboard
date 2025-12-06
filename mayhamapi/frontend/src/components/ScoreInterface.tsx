@@ -416,7 +416,7 @@ const ScoreInterface: React.FC = () => {
                     {match.team1?.name}
                   </div>
                   <div className="text-xs text-gray-600">
-                    {getTeamPlayers(match.team1?.id || '').map(p => p.user?.name || `Player ${p.user_id}`).join(', ') || 'No players assigned'}
+                    {(match.players?.filter(p => p.team_id === match.team1?.id) || []).map(p => p.user?.name || `Player ${p.user_id}`).join(', ') || 'No players assigned'}
                   </div>
                 </div>
                 
@@ -426,7 +426,7 @@ const ScoreInterface: React.FC = () => {
                     {match.team2?.name}
                   </div>
                   <div className="text-xs text-gray-600">
-                    {getTeamPlayers(match.team2?.id || '').map(p => p.user?.name || `Player ${p.user_id}`).join(', ') || 'No players assigned'}
+                    {(match.players?.filter(p => p.team_id === match.team2?.id) || []).map(p => p.user?.name || `Player ${p.user_id}`).join(', ') || 'No players assigned'}
                   </div>
                 </div>
               </button>
