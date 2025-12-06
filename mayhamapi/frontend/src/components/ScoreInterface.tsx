@@ -70,9 +70,8 @@ const ScoreInterface: React.FC = () => {
           const matchesResponse = await apiClient.getRoundMatches(round.id);
           const matches = Array.isArray(matchesResponse) ? matchesResponse : [];
           
-          // Show scheduled, not_started, and in_progress matches (exclude completed)
+          // Show scheduled, not_started, and in_progress matches
           const matchesWithScores: MatchWithScores[] = matches
-            .filter(m => m.status !== 'completed')
             .map(match => ({
               ...match,
               current_hole: 1,
@@ -209,7 +208,7 @@ const ScoreInterface: React.FC = () => {
       // Move to next hole or stay on current
       if (currentHole < selectedMatch.holes) {
         setCurrentHole(currentHole + 1);
-        setHoleScores({});
+        // setHoleScores({});
       }
     } catch (err) {
       console.error('Error submitting scores:', err);
@@ -556,7 +555,20 @@ const ScoreInterface: React.FC = () => {
           )}
           
           {/* Show info for other statuses */}
-          {selectedMatch.status !== 'not_started' && selectedMatch.status !== 'scheduled' && selectedMatch.status !== 'in_progress' && (
+          {selectedMatch.status === 'completed' && (
+            <div className="text-center py-8">
+              <p className="text-gray-500 mb-4">
+                This match is completed.
+              </p>
+              <button
+                onClick={() => startMatch(selectedMatch.id)}
+                className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium transition-colors"
+              >
+                Reopen for Editing
+              </button>
+            </div>
+          )}
+          {selectedMatch.status !== 'not_started' && selectedMatch.status !== 'scheduled' && selectedMatch.status !== 'in_progress' && selectedMatch.status !== 'completed' && (
             <div className="text-center py-8">
               <p className="text-gray-500">
                 This match is {selectedMatch.status.replace('_', ' ')}.

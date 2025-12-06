@@ -108,5 +108,3 @@ description: "Guidance on frontend React, Typescript, and "
     Structure: Use lowercase with dashes for directory names (e.g., components/auth-forms).
 
     Code Quality: Focus on readability, fully implement all requested functionality with no placeholders, and avoid mutating props or state directly. 
-
-            
