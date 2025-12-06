@@ -159,7 +159,6 @@ const ScoreInterface: React.FC = () => {
     try {
       setError(null);
       // Update match status to in_progress
-      // Note: You'll need to add this endpoint to your API
       await apiClient.updateMatchStatus(matchId, 'in_progress');
       
       // Update local state
@@ -176,6 +175,29 @@ const ScoreInterface: React.FC = () => {
     } catch (err) {
       console.error('Error starting match:', err);
       setError(err instanceof ApiError ? err.message : 'Failed to start match');
+    }
+  };
+
+  const completeMatch = async (matchId: string) => {
+    try {
+      setError(null);
+      // Update match status to completed
+      await apiClient.updateMatchStatus(matchId, 'completed');
+      
+      // Update local state
+      setMatches(prev => prev.map(match => 
+        match.id === matchId 
+          ? { ...match, status: 'completed' }
+          : match
+      ));
+      
+      // If this is the selected match, update it too
+      if (selectedMatch?.id === matchId) {
+        setSelectedMatch(prev => prev ? { ...prev, status: 'completed' } : null);
+      }
+    } catch (err) {
+      console.error('Error completing match:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to complete match');
     }
   };
 
@@ -538,18 +560,26 @@ const ScoreInterface: React.FC = () => {
                 </span>
               )}
             </div>
-            <button
-              onClick={submitHoleScores}
-              disabled={isSubmitting || Object.keys(holeScores).length === 0 || !hasPlayerData()}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
-            >
-              {isSubmitting ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
-              )}
-              {isSubmitting ? 'Submitting...' : 'Submit Hole'}
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => completeMatch(selectedMatch.id)}
+                className="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-green-700"
+              >
+                Complete Match
+              </button>
+              <button
+                onClick={submitHoleScores}
+                disabled={isSubmitting || Object.keys(holeScores).length === 0 || !hasPlayerData()}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
+              >
+                {isSubmitting ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                {isSubmitting ? 'Submitting...' : 'Submit Hole'}
+              </button>
+            </div>
           </div>
             </>
           )}
