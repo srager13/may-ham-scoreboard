@@ -229,8 +229,21 @@ const ScoreInterface: React.FC = () => {
 
       // Move to next hole or stay on current
       if (currentHole < selectedMatch.holes) {
-        setCurrentHole(currentHole + 1);
-        // setHoleScores({});
+        const nextHole = currentHole + 1;
+        setCurrentHole(nextHole);
+        
+        // Populate existing scores for the next hole, or set to 0 for missing players
+        const nextHoleScores: Record<string, number> = {};
+        const existingNextHoleScores = selectedMatch.scores[nextHole] || {};
+        
+        // Get all player IDs from the match
+        if (selectedMatch.players) {
+          selectedMatch.players.forEach(player => {
+            nextHoleScores[player.user_id] = existingNextHoleScores[player.user_id] || 0;
+          });
+        }
+        
+        setHoleScores(nextHoleScores);
       }
     } catch (err) {
       console.error('Error submitting scores:', err);

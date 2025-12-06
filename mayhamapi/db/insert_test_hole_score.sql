@@ -4,7 +4,7 @@
 WITH match_info AS (
     SELECT id as match_id, holes
     FROM matches 
-    WHERE id = 'a732cea0-2d63-4045-b443-92868e886cc3'  -- Replace with actual match ID
+    WHERE id = '5cddbe98-746b-4501-b870-f67dd859e538'  -- Replace with actual match ID
 ),
 match_players_list AS (
     SELECT mp.user_id, mi.match_id, mi.holes

@@ -219,13 +219,13 @@ type AddTeamMemberRequest struct {
 }
 
 type SubmitScoreRequest struct {
-	Scores []HoleScore `json:"scores" binding:"required"`
+	HoleNumber int         `json:"hole_number" binding:"required"`
+	Scores     []HoleScore `json:"scores" binding:"required"`
 }
 
 type HoleScore struct {
-	UserID     string `json:"user_id" binding:"required"`
-	HoleNumber int    `json:"hole_number" binding:"required"`
-	Strokes    int    `json:"strokes" binding:"required,min=1"`
+	UserID  string `json:"user_id" binding:"required"`
+	Strokes int    `json:"strokes" binding:"required,min=1"`
 }
 
 // ============================================
