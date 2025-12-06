@@ -156,6 +156,7 @@ The application broadcasts real-time updates via WebSocket:
 mayhamapi/
 ├── main.go                 # Application entry point
 ├── go.mod                  # Go module definition
+├── .env                   # Environment variables
 ├── .env.example           # Environment variables template
 ├── db/
 │   ├── connection.go      # Database connection and migrations

@@ -421,7 +421,7 @@ func (r *Repository) SubmitScore(matchID, userID string, holeNumber, strokes int
 }
 
 func (r *Repository) GetMatchScores(matchID string) ([]models.Score, error) {
-	query := `SELECT id, match_id, user_id, hole_number, strokes, created_at, updated_at FROM scores WHERE match_id = $1 ORDER BY hole_number, user_id`
+	query := `SELECT id, match_id, user_id, hole_number, strokes, created_at, updated_at FROM hole_scores WHERE match_id = $1 ORDER BY hole_number, user_id`
 
 	rows, err := r.db.Query(query, matchID)
 	if err != nil {

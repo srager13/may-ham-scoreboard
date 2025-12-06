@@ -440,8 +440,8 @@ const ScoreInterface: React.FC = () => {
                       type="number"
                       min="1"
                       max="12"
-                      value={holeScores[player.id] || ''}
-                      onChange={(e) => handleScoreChange(player.id, parseInt(e.target.value) || 0)}
+                      value={holeScores[player.user_id] || ''}
+                      onChange={(e) => handleScoreChange(player.user_id, parseInt(e.target.value) || 0)}
                       className="w-16 px-3 py-2 border border-gray-300 rounded-md text-center"
                       placeholder="0"
                     />
@@ -467,8 +467,8 @@ const ScoreInterface: React.FC = () => {
                       type="number"
                       min="1"
                       max="12"
-                      value={holeScores[player.id] || ''}
-                      onChange={(e) => handleScoreChange(player.id, parseInt(e.target.value) || 0)}
+                      value={holeScores[player.user_id] || ''}
+                      onChange={(e) => handleScoreChange(player.user_id, parseInt(e.target.value) || 0)}
                       className="w-16 px-3 py-2 border border-gray-300 rounded-md text-center"
                       placeholder="0"
                     />
