@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Target, Award, RefreshCw, Save, AlertCircle } from 'lucide-react';
-import { apiClient, ApiError, Match as ApiMatch, Tournament, Team, Round } from '../services/api';
+import { apiClient, ApiError, Match as ApiMatch, Tournament, Team, Round, Score } from '../services/api';
 
 interface MatchWithScores extends ApiMatch {
   current_hole: number;
@@ -89,8 +89,8 @@ const ScoreInterface: React.FC = () => {
       
       setMatches(allMatches);
       if (allMatches.length > 0) {
-        setSelectedMatch(allMatches[0]);
-        setCurrentHole(1);
+        const firstMatch = allMatches[0];
+        await loadExistingScores(firstMatch);
       } else {
         setSelectedMatch(null);
       }
@@ -99,6 +99,52 @@ const ScoreInterface: React.FC = () => {
       setError(err instanceof ApiError ? err.message : 'Failed to load matches');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadExistingScores = async (match: MatchWithScores) => {
+    try {
+      const scores = await apiClient.getMatchScores(match.id);
+      
+      // Convert scores array to the format expected by the UI
+      const scoresMap: Record<number, Record<string, number>> = {};
+      
+      scores.forEach(score => {
+        if (!scoresMap[score.hole_number]) {
+          scoresMap[score.hole_number] = {};
+        }
+        scoresMap[score.hole_number][score.user_id] = score.strokes;
+      });
+      
+      // Update the match with existing scores
+      const updatedMatch = {
+        ...match,
+        scores: scoresMap
+      };
+      
+      setSelectedMatch(updatedMatch);
+      
+      // If there are existing scores, set the current hole to the first incomplete hole
+      const completedHoles = Object.keys(scoresMap).map(h => parseInt(h));
+      const nextHole = completedHoles.length > 0 
+        ? Math.max(...completedHoles) + 1 
+        : 1;
+      
+      if (nextHole <= match.holes) {
+        setCurrentHole(nextHole);
+        setHoleScores(scoresMap[nextHole] || {});
+      } else {
+        // All holes completed, show the last hole
+        setCurrentHole(match.holes);
+        setHoleScores(scoresMap[match.holes] || {});
+      }
+      
+    } catch (err) {
+      console.warn('Error loading existing scores:', err);
+      // Don't show error to user, just proceed without existing scores
+      setSelectedMatch(match);
+      setCurrentHole(1);
+      setHoleScores({});
     }
   };
 
@@ -306,10 +352,8 @@ const ScoreInterface: React.FC = () => {
             {matches.map((match) => (
               <button
                 key={match.id}
-                onClick={() => {
-                  setSelectedMatch(match);
-                  setCurrentHole(match.current_hole);
-                  setHoleScores({});
+                onClick={async () => {
+                  await loadExistingScores(match);
                 }}
                 className={`p-4 rounded-lg border-2 text-left transition-colors ${
                   selectedMatch?.id === match.id
