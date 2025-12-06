@@ -374,8 +374,8 @@ class ApiClient {
   }
 
   // Scoring
-  async getMatchScores(matchId: string): Promise<Score[]> {
-    return this.request<Score[]>(`/matches/${matchId}/scores`);
+  async getMatchScores(matchId: string): Promise<{scores: Score[], match_status: any}> {
+    return this.request<{scores: Score[], match_status: any}>(`/matches/${matchId}/scores`);
   }
 
   async submitScores(matchId: string, data: SubmitScoresRequest): Promise<void> {

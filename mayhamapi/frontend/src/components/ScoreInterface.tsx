@@ -104,7 +104,8 @@ const ScoreInterface: React.FC = () => {
 
   const loadExistingScores = async (match: MatchWithScores) => {
     try {
-      const scores = await apiClient.getMatchScores(match.id);
+      const response = await apiClient.getMatchScores(match.id);
+      const scores = response.scores || [];
       
       // Convert scores array to the format expected by the UI
       const scoresMap: Record<number, Record<string, number>> = {};
