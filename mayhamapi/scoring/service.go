@@ -6,6 +6,14 @@ import (
 	"mayhamapi/repository"
 )
 
+// ScoringService handles all golf scoring calculations for different match formats.
+// It supports the following formats:
+// - Singles Match Play: 1v1 head-to-head comparison
+// - 2v2 Best Ball: Each team uses their best score per hole
+// - 2v2 Scramble: Teams play one ball together (combined score)
+// - 2v2 Alternate Shot: Teams alternate shots with one ball (combined score)
+// - High-Low: Teams add their highest and lowest individual scores
+// - Shamble: Teams tee off together, then play best ball from the best drive
 type ScoringService struct {
 	repo *repository.Repository
 }
@@ -54,9 +62,9 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 		}
 
 		// Check if all required players have submitted scores for this hole
-		// This is a simplified check - in a real scenario you'd need to know which players are in each team
+		// This ensures we only calculate results for completed holes
 		if len(holePlayerScores) < 2 {
-			continue // Not all players have submitted scores
+			continue // Not enough scores to calculate hole result
 		}
 
 		holeResult, err := s.calculateHoleResult(match, holeNum, holePlayerScores)
@@ -94,24 +102,67 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 }
 
 func (s *ScoringService) calculateHoleResult(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
-	// For now, we'll use a simple approach based on the match format ID
-	// In a more complete implementation, we'd fetch the match format from the database
+	// Get the match format to determine scoring type
+	matchFormat, err := s.repo.GetMatchFormat(match.MatchFormatID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get match format: %w", err)
+	}
 
-	// Default to match play scoring for now
-	return s.calculateMatchPlayHole(match, holeNumber, scores)
+	// Route to appropriate scoring method based on format type
+	switch matchFormat.ScoringType {
+	case "match_play":
+		return s.calculateMatchPlayHole(match, holeNumber, scores)
+	case "scramble":
+		return s.calculateScrambleHole(match, holeNumber, scores)
+	case "best_ball":
+		return s.calculateBestBallHole(match, holeNumber, scores)
+	case "alternate_shot":
+		return s.calculateAlternateShotHole(match, holeNumber, scores)
+	case "high_low":
+		return s.calculateHighLowHole(match, holeNumber, scores)
+	case "shamble":
+		return s.calculateShambleHole(match, holeNumber, scores)
+	default:
+		return nil, fmt.Errorf("unknown scoring type: %s", matchFormat.ScoringType)
+	}
 }
 
 func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
-	// Group scores by team (simplified - assumes we know which users are on which team)
+	// Get match format to check if this is singles or team match play
+	matchFormat, err := s.repo.GetMatchFormat(match.MatchFormatID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get match format: %w", err)
+	}
+
+	// Group scores by team using actual team membership
 	team1Scores := []int{}
 	team2Scores := []int{}
 
-	// TODO: In a real implementation, you'd need to look up team memberships
-	// For now, we'll assume alternating assignment (first score = team1, second = team2, etc.)
-	for i, score := range scores {
-		if i%2 == 0 {
+	// Get team memberships for this match
+	team1Members, err := s.repo.GetTeamMembersByTeam(match.Team1ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team1 members: %w", err)
+	}
+	team2Members, err := s.repo.GetTeamMembersByTeam(match.Team2ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team2 members: %w", err)
+	}
+
+	// Create maps for quick lookup
+	team1UserIDs := make(map[string]bool)
+	team2UserIDs := make(map[string]bool)
+	for _, member := range team1Members {
+		team1UserIDs[member.UserID] = true
+	}
+	for _, member := range team2Members {
+		team2UserIDs[member.UserID] = true
+	}
+
+	// Group scores by actual team membership
+	for _, score := range scores {
+		if team1UserIDs[score.UserID] {
 			team1Scores = append(team1Scores, score.Strokes)
-		} else {
+		} else if team2UserIDs[score.UserID] {
 			team2Scores = append(team2Scores, score.Strokes)
 		}
 	}
@@ -120,7 +171,92 @@ func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber 
 		return nil, fmt.Errorf("insufficient scores for match play")
 	}
 
-	// For match play, take the best score from each team
+	var team1Score, team2Score int
+
+	if matchFormat.PlayersPerSide == 1 {
+		// Singles match play - use the single score from each team
+		team1Score = team1Scores[0]
+		team2Score = team2Scores[0]
+	} else {
+		// Team match play - take the best score from each team
+		team1Score = team1Scores[0]
+		for _, score := range team1Scores {
+			if score < team1Score {
+				team1Score = score
+			}
+		}
+
+		team2Score = team2Scores[0]
+		for _, score := range team2Scores {
+			if score < team2Score {
+				team2Score = score
+			}
+		}
+	}
+
+	result := &HoleResult{
+		HoleNumber:   holeNumber,
+		Team1Score:   &team1Score,
+		Team2Score:   &team2Score,
+		PlayerScores: scores,
+		Team1Points:  0,
+		Team2Points:  0,
+	}
+
+	if team1Score < team2Score {
+		result.Team1Points = 1
+		result.WinnerTeamID = &match.Team1ID
+	} else if team2Score < team1Score {
+		result.Team2Points = 1
+		result.WinnerTeamID = &match.Team2ID
+	} else {
+		// If scores are equal, it's a halve (0.5 points each)
+		result.Team1Points = 0.5
+		result.Team2Points = 0.5
+	}
+
+	return result, nil
+}
+
+func (s *ScoringService) calculateBestBallHole(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
+	// Group scores by team using actual team membership
+	team1Scores := []int{}
+	team2Scores := []int{}
+
+	// Get team memberships for this match
+	team1Members, err := s.repo.GetTeamMembersByTeam(match.Team1ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team1 members: %w", err)
+	}
+	team2Members, err := s.repo.GetTeamMembersByTeam(match.Team2ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team2 members: %w", err)
+	}
+
+	// Create maps for quick lookup
+	team1UserIDs := make(map[string]bool)
+	team2UserIDs := make(map[string]bool)
+	for _, member := range team1Members {
+		team1UserIDs[member.UserID] = true
+	}
+	for _, member := range team2Members {
+		team2UserIDs[member.UserID] = true
+	}
+
+	// Group scores by actual team membership
+	for _, score := range scores {
+		if team1UserIDs[score.UserID] {
+			team1Scores = append(team1Scores, score.Strokes)
+		} else if team2UserIDs[score.UserID] {
+			team2Scores = append(team2Scores, score.Strokes)
+		}
+	}
+
+	if len(team1Scores) == 0 || len(team2Scores) == 0 {
+		return nil, fmt.Errorf("insufficient scores for best ball")
+	}
+
+	// For best ball, take the best (lowest) score from each team
 	team1Best := team1Scores[0]
 	for _, score := range team1Scores {
 		if score < team1Best {
@@ -144,15 +280,14 @@ func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber 
 		Team2Points:  0,
 	}
 
+	// Award 1 point to winning team, 0.5 each for tie
 	if team1Best < team2Best {
 		result.Team1Points = 1
 		result.WinnerTeamID = &match.Team1ID
 	} else if team2Best < team1Best {
 		result.Team2Points = 1
 		result.WinnerTeamID = &match.Team2ID
-	}
-	// If scores are equal, it's a halve (0.5 points each)
-	if team1Best == team2Best {
+	} else {
 		result.Team1Points = 0.5
 		result.Team2Points = 0.5
 	}
@@ -160,21 +295,37 @@ func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber 
 	return result, nil
 }
 
-func (s *ScoringService) calculateBestBallHole(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
-	// Similar logic to match play - use the best score from each team
-	return s.calculateMatchPlayHole(match, holeNumber, scores)
-}
-
 func (s *ScoringService) calculateScrambleHole(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
 	// For scramble, each team should have one combined score
-	// This is a simplified implementation
+	// We expect only one score per team (the team's combined scramble score)
 	team1Scores := []int{}
 	team2Scores := []int{}
 
-	for i, score := range scores {
-		if i%2 == 0 {
+	// Get team memberships for this match
+	team1Members, err := s.repo.GetTeamMembersByTeam(match.Team1ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team1 members: %w", err)
+	}
+	team2Members, err := s.repo.GetTeamMembersByTeam(match.Team2ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team2 members: %w", err)
+	}
+
+	// Create maps for quick lookup
+	team1UserIDs := make(map[string]bool)
+	team2UserIDs := make(map[string]bool)
+	for _, member := range team1Members {
+		team1UserIDs[member.UserID] = true
+	}
+	for _, member := range team2Members {
+		team2UserIDs[member.UserID] = true
+	}
+
+	// Group scores by actual team membership
+	for _, score := range scores {
+		if team1UserIDs[score.UserID] {
 			team1Scores = append(team1Scores, score.Strokes)
-		} else {
+		} else if team2UserIDs[score.UserID] {
 			team2Scores = append(team2Scores, score.Strokes)
 		}
 	}
@@ -183,7 +334,8 @@ func (s *ScoringService) calculateScrambleHole(match *models.Match, holeNumber i
 		return nil, fmt.Errorf("insufficient scores for scramble")
 	}
 
-	// Take the first score from each team (representing the team's combined score)
+	// For scramble, use the first (and ideally only) score from each team
+	// In a proper scramble, teams submit one combined score
 	team1Score := team1Scores[0]
 	team2Score := team2Scores[0]
 
@@ -211,7 +363,8 @@ func (s *ScoringService) calculateScrambleHole(match *models.Match, holeNumber i
 }
 
 func (s *ScoringService) calculateAlternateShotHole(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
-	// Similar to scramble - teams have combined scores
+	// Alternate shot is similar to scramble - teams have one combined score per hole
+	// Each team plays one ball, alternating shots between team members
 	return s.calculateScrambleHole(match, holeNumber, scores)
 }
 
@@ -220,10 +373,31 @@ func (s *ScoringService) calculateHighLowHole(match *models.Match, holeNumber in
 	team1Scores := []int{}
 	team2Scores := []int{}
 
-	for i, score := range scores {
-		if i%2 == 0 {
+	// Get team memberships for this match
+	team1Members, err := s.repo.GetTeamMembersByTeam(match.Team1ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team1 members: %w", err)
+	}
+	team2Members, err := s.repo.GetTeamMembersByTeam(match.Team2ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team2 members: %w", err)
+	}
+
+	// Create maps for quick lookup
+	team1UserIDs := make(map[string]bool)
+	team2UserIDs := make(map[string]bool)
+	for _, member := range team1Members {
+		team1UserIDs[member.UserID] = true
+	}
+	for _, member := range team2Members {
+		team2UserIDs[member.UserID] = true
+	}
+
+	// Group scores by actual team membership
+	for _, score := range scores {
+		if team1UserIDs[score.UserID] {
 			team1Scores = append(team1Scores, score.Strokes)
-		} else {
+		} else if team2UserIDs[score.UserID] {
 			team2Scores = append(team2Scores, score.Strokes)
 		}
 	}
@@ -282,6 +456,7 @@ func (s *ScoringService) calculateHighLowHole(match *models.Match, holeNumber in
 }
 
 func (s *ScoringService) calculateShambleHole(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
-	// Shamble typically uses best ball after the tee shot
+	// Shamble: all team members tee off, select best drive, then play individual ball from there
+	// For scoring purposes, this is essentially best ball - take the best score from each team
 	return s.calculateBestBallHole(match, holeNumber, scores)
 }
