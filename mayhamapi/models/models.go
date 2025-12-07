@@ -232,6 +232,18 @@ type HoleScore struct {
 // Leaderboard and Statistics Models
 // ============================================
 
+type TeamStanding struct {
+	Team        Team    `json:"team"`
+	PointsWon   float64 `json:"points_won"`
+	PointsLost  float64 `json:"points_lost"`
+	MatchesWon  int     `json:"matches_won"`
+	MatchesLost int     `json:"matches_lost"`
+	MatchesTied int     `json:"matches_tied"`
+	HolesWon    int     `json:"holes_won"`
+	HolesLost   int     `json:"holes_lost"`
+	HolesTied   int     `json:"holes_tied"`
+}
+
 type LeaderboardEntry struct {
 	TeamID      string  `json:"team_id"`
 	TeamName    string  `json:"team_name"`

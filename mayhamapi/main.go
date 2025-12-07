@@ -49,9 +49,10 @@ func main() {
 	tournamentHandler := handlers.NewTournamentHandler(repo)
 	scoringHandler := handlers.NewScoringHandler(repo, scoringService)
 	groupHandler := handlers.NewGroupHandler(repo)
+	leaderboardHandler := handlers.NewLeaderboardHandler(repo)
 
 	// Setup router
-	router := setupRouter(authHandler, tournamentHandler, scoringHandler, groupHandler, wsHub)
+	router := setupRouter(authHandler, tournamentHandler, scoringHandler, groupHandler, leaderboardHandler, wsHub)
 
 	// Start server
 	port := os.Getenv("PORT")
@@ -70,6 +71,7 @@ func setupRouter(
 	tournamentHandler *handlers.TournamentHandler,
 	scoringHandler *handlers.ScoringHandler,
 	groupHandler *handlers.GroupHandler,
+	leaderboardHandler *handlers.LeaderboardHandler,
 	wsHub *websocket.Hub,
 ) *gin.Engine {
 	r := gin.Default()
@@ -124,6 +126,7 @@ func setupRouter(
 			protected.GET("/tournaments/:tournament_id", tournamentHandler.GetTournament)
 			protected.GET("/tournaments/:tournament_id/teams", tournamentHandler.GetTeams)
 			protected.GET("/tournaments/:tournament_id/rounds", tournamentHandler.GetRounds)
+			protected.GET("/tournaments/:tournament_id/leaderboard", leaderboardHandler.GetTournamentLeaderboard)
 			protected.GET("/rounds/:round_id/matches", tournamentHandler.GetMatches)
 			protected.GET("/matches/:match_id", tournamentHandler.GetMatch)
 			protected.GET("/matches/:match_id/scores", scoringHandler.GetMatchScores)

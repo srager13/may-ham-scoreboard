@@ -857,3 +857,197 @@ func (r *Repository) GetTeamMembersByTeam(teamID string) ([]models.TeamMember, e
 
 	return members, nil
 }
+
+// ============================================
+// Leaderboard Repository Methods
+// ============================================
+
+func (r *Repository) GetTeamStandings(tournamentID string) ([]models.TeamStanding, error) {
+	// First, get all teams for this tournament
+	teams, err := r.GetTeamsByTournament(tournamentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get teams: %w", err)
+	}
+
+	var standings []models.TeamStanding
+
+	for _, team := range teams {
+		standing := models.TeamStanding{
+			Team:        team,
+			PointsWon:   0,
+			PointsLost:  0,
+			MatchesWon:  0,
+			MatchesLost: 0,
+			MatchesTied: 0,
+			HolesWon:    0,
+			HolesLost:   0,
+			HolesTied:   0,
+		}
+
+		// Get match statistics for this team
+		matchStats, err := r.getTeamMatchStats(tournamentID, team.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get match stats for team %s: %w", team.ID, err)
+		}
+
+		standing.PointsWon = matchStats.PointsWon
+		standing.PointsLost = matchStats.PointsLost
+		standing.MatchesWon = matchStats.MatchesWon
+		standing.MatchesLost = matchStats.MatchesLost
+		standing.MatchesTied = matchStats.MatchesTied
+
+		// Get hole statistics for this team
+		holeStats, err := r.getTeamHoleStats(tournamentID, team.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get hole stats for team %s: %w", team.ID, err)
+		}
+
+		standing.HolesWon = holeStats.Won
+		standing.HolesLost = holeStats.Lost
+		standing.HolesTied = holeStats.Tied
+
+		standings = append(standings, standing)
+	}
+
+	return standings, nil
+}
+
+func (r *Repository) GetLiveMatches(tournamentID string) ([]models.Match, error) {
+	query := `
+		SELECT m.id, m.round_id, m.team1_id, m.team2_id, m.match_format_id, 
+		       m.match_number, m.holes, m.status, m.points_available, 
+		       m.team1_points, m.team2_points, m.created_at, m.updated_at
+		FROM matches m
+		INNER JOIN rounds r ON m.round_id = r.id
+		WHERE r.tournament_id = $1 AND m.status = 'in_progress'
+		ORDER BY m.match_number
+	`
+
+	rows, err := r.db.Query(query, tournamentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get live matches: %w", err)
+	}
+	defer rows.Close()
+
+	var matches []models.Match
+	for rows.Next() {
+		var match models.Match
+		err := rows.Scan(
+			&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
+			&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
+			&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan live match: %w", err)
+		}
+
+		// Load related data for each match
+		team1, err := r.GetTeam(match.Team1ID)
+		if err == nil {
+			match.Team1 = team1
+		}
+
+		team2, err := r.GetTeam(match.Team2ID)
+		if err == nil {
+			match.Team2 = team2
+		}
+
+		format, err := r.GetMatchFormat(match.MatchFormatID)
+		if err == nil {
+			match.Format = &models.MatchFormat{
+				ID:             format.ID,
+				Name:           format.Name,
+				Description:    format.Description,
+				PlayersPerSide: format.PlayersPerSide,
+				ScoringType:    format.ScoringType,
+			}
+		}
+
+		matches = append(matches, match)
+	}
+
+	return matches, nil
+}
+
+type teamMatchStats struct {
+	PointsWon   float64
+	PointsLost  float64
+	MatchesWon  int
+	MatchesLost int
+	MatchesTied int
+}
+
+type teamHoleStats struct {
+	Won  int
+	Lost int
+	Tied int
+}
+
+func (r *Repository) getTeamMatchStats(tournamentID, teamID string) (*teamMatchStats, error) {
+	query := `
+		SELECT 
+			COALESCE(SUM(CASE 
+				WHEN (m.team1_id = $2 AND m.team1_points > m.team2_points) OR 
+				     (m.team2_id = $2 AND m.team2_points > m.team1_points) 
+				THEN CASE WHEN m.team1_id = $2 THEN m.team1_points ELSE m.team2_points END 
+				ELSE 0 
+			END), 0) as points_won,
+			COALESCE(SUM(CASE 
+				WHEN (m.team1_id = $2 AND m.team1_points < m.team2_points) OR 
+				     (m.team2_id = $2 AND m.team2_points < m.team1_points) 
+				THEN CASE WHEN m.team1_id = $2 THEN m.team2_points ELSE m.team1_points END 
+				ELSE 0 
+			END), 0) as points_lost,
+			COUNT(CASE 
+				WHEN (m.team1_id = $2 AND m.team1_points > m.team2_points) OR 
+				     (m.team2_id = $2 AND m.team2_points > m.team1_points) 
+				THEN 1 
+			END) as matches_won,
+			COUNT(CASE 
+				WHEN (m.team1_id = $2 AND m.team1_points < m.team2_points) OR 
+				     (m.team2_id = $2 AND m.team2_points < m.team1_points) 
+				THEN 1 
+			END) as matches_lost,
+			COUNT(CASE 
+				WHEN m.team1_points = m.team2_points AND (m.team1_id = $2 OR m.team2_id = $2)
+				THEN 1 
+			END) as matches_tied
+		FROM matches m
+		INNER JOIN rounds r ON m.round_id = r.id
+		WHERE r.tournament_id = $1 
+			AND (m.team1_id = $2 OR m.team2_id = $2)
+			AND m.status = 'completed'
+	`
+
+	var stats teamMatchStats
+	err := r.db.QueryRow(query, tournamentID, teamID).Scan(
+		&stats.PointsWon, &stats.PointsLost, &stats.MatchesWon,
+		&stats.MatchesLost, &stats.MatchesTied,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team match stats: %w", err)
+	}
+
+	return &stats, nil
+}
+
+func (r *Repository) getTeamHoleStats(tournamentID, teamID string) (*teamHoleStats, error) {
+	// This is a simplified implementation - in a real tournament system,
+	// you would calculate hole-by-hole results based on individual scores
+	// For now, we'll return zeros as hole-level statistics require more complex logic
+	stats := &teamHoleStats{
+		Won:  0,
+		Lost: 0,
+		Tied: 0,
+	}
+
+	// TODO: Implement hole-by-hole statistics calculation
+	// This would involve:
+	// 1. Getting all completed matches for this team
+	// 2. For each match, getting hole scores for all players
+	// 3. Calculating which team won each hole based on format (match play, stroke play, etc.)
+	// 4. Summing up the hole results
+
+	return stats, nil
+}
