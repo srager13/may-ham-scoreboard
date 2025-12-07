@@ -51,14 +51,14 @@ func (h *ScoringHandler) SubmitScores(c *gin.Context) {
 		return
 	}
 
-	// Calculate match status using scoring service
+	// Calculate and store match status using scoring service
 	scores, err := h.repo.GetMatchScores(matchID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	matchStatus, err := h.scoringService.CalculateMatchStatus(match, scores)
+	matchStatus, err := h.scoringService.CalculateAndStoreMatchResults(match, scores)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -141,7 +141,7 @@ func (h *ScoringHandler) UpdateHoleScore(c *gin.Context) {
 		return
 	}
 
-	matchStatus, err := h.scoringService.CalculateMatchStatus(match, allScores)
+	matchStatus, err := h.scoringService.CalculateAndStoreMatchResults(match, allScores)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

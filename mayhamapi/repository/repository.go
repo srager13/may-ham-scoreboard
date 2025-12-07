@@ -1027,21 +1027,118 @@ func (r *Repository) getTeamMatchStats(tournamentID, teamID string) (*teamMatchS
 }
 
 func (r *Repository) getTeamHoleStats(tournamentID, teamID string) (*teamHoleStats, error) {
-	// This is a simplified implementation - in a real tournament system,
-	// you would calculate hole-by-hole results based on individual scores
-	// For now, we'll return zeros as hole-level statistics require more complex logic
-	stats := &teamHoleStats{
-		Won:  0,
-		Lost: 0,
-		Tied: 0,
+	// Query hole results from the database using stored data
+	query := `
+		SELECT 
+			COUNT(CASE WHEN hr.winner_team_id = $2 THEN 1 END) as holes_won,
+			COUNT(CASE WHEN hr.winner_team_id IS NOT NULL AND hr.winner_team_id != $2 THEN 1 END) as holes_lost,
+			COUNT(CASE WHEN hr.winner_team_id IS NULL THEN 1 END) as holes_tied
+		FROM hole_results hr
+		INNER JOIN matches m ON hr.match_id = m.id
+		INNER JOIN rounds r ON m.round_id = r.id
+		WHERE r.tournament_id = $1 
+			AND (m.team1_id = $2 OR m.team2_id = $2)
+	`
+
+	var stats teamHoleStats
+	err := r.db.QueryRow(query, tournamentID, teamID).Scan(
+		&stats.Won, &stats.Lost, &stats.Tied,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hole stats: %w", err)
 	}
 
-	// TODO: Implement hole-by-hole statistics calculation
-	// This would involve:
-	// 1. Getting all completed matches for this team
-	// 2. For each match, getting hole scores for all players
-	// 3. Calculating which team won each hole based on format (match play, stroke play, etc.)
-	// 4. Summing up the hole results
+	return &stats, nil
+}
 
-	return stats, nil
+// ============================================
+// Hole Results Methods
+// ============================================
+
+func (r *Repository) SaveHoleResult(holeResult *models.HoleResult) error {
+	query := `
+		INSERT INTO hole_results (match_id, hole_number, team1_score, team2_score, winner_team_id, team1_points, team2_points, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		ON CONFLICT (match_id, hole_number)
+		DO UPDATE SET 
+			team1_score = EXCLUDED.team1_score,
+			team2_score = EXCLUDED.team2_score,
+			winner_team_id = EXCLUDED.winner_team_id,
+			team1_points = EXCLUDED.team1_points,
+			team2_points = EXCLUDED.team2_points,
+			updated_at = CURRENT_TIMESTAMP
+		RETURNING id, created_at, updated_at`
+
+	err := r.db.QueryRow(
+		query,
+		holeResult.MatchID,
+		holeResult.HoleNumber,
+		holeResult.Team1Score,
+		holeResult.Team2Score,
+		holeResult.WinnerTeamID,
+		holeResult.Team1Points,
+		holeResult.Team2Points,
+	).Scan(&holeResult.ID, &holeResult.CreatedAt, &holeResult.UpdatedAt)
+
+	if err != nil {
+		return fmt.Errorf("failed to save hole result: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) GetMatchHoleResults(matchID string) ([]models.HoleResult, error) {
+	query := `
+		SELECT id, match_id, hole_number, team1_score, team2_score, winner_team_id, team1_points, team2_points, created_at, updated_at
+		FROM hole_results
+		WHERE match_id = $1
+		ORDER BY hole_number`
+
+	rows, err := r.db.Query(query, matchID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hole results: %w", err)
+	}
+	defer rows.Close()
+
+	var results []models.HoleResult
+	for rows.Next() {
+		var result models.HoleResult
+		err := rows.Scan(
+			&result.ID,
+			&result.MatchID,
+			&result.HoleNumber,
+			&result.Team1Score,
+			&result.Team2Score,
+			&result.WinnerTeamID,
+			&result.Team1Points,
+			&result.Team2Points,
+			&result.CreatedAt,
+			&result.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan hole result: %w", err)
+		}
+		results = append(results, result)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate hole results: %w", err)
+	}
+
+	return results, nil
+}
+
+func (r *Repository) UpdateMatchPoints(matchID string, team1Points, team2Points float64) error {
+	query := `
+		UPDATE matches 
+		SET team1_points = $2, team2_points = $3, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1`
+
+	_, err := r.db.Exec(query, matchID, team1Points, team2Points)
+	if err != nil {
+		return fmt.Errorf("failed to update match points: %w", err)
+	}
+
+	return nil
 }

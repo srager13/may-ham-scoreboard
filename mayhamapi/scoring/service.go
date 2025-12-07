@@ -43,7 +43,133 @@ type HoleResult struct {
 	PlayerScores []models.Score `json:"player_scores"`
 }
 
+func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scores []models.Score) (*MatchStatus, error) {
+	// Group scores by hole
+	holeScores := make(map[int][]models.Score)
+	for _, score := range scores {
+		holeScores[score.HoleNumber] = append(holeScores[score.HoleNumber], score)
+	}
+
+	team1TotalPoints := 0.0
+	team2TotalPoints := 0.0
+	holesCompleted := 0
+
+	// Calculate and store results for each completed hole
+	for holeNum := 1; holeNum <= match.Holes; holeNum++ {
+		holePlayerScores, exists := holeScores[holeNum]
+		if !exists || len(holePlayerScores) == 0 {
+			continue // Hole not played yet
+		}
+
+		// Check if all required players have submitted scores for this hole
+		// This ensures we only calculate results for completed holes
+		if len(holePlayerScores) < 2 {
+			continue // Not enough scores to calculate hole result
+		}
+
+		holeResult, err := s.calculateHoleResult(match, holeNum, holePlayerScores)
+		if err != nil {
+			return nil, fmt.Errorf("failed to calculate hole result: %w", err)
+		}
+
+		// Store hole result in database
+		dbHoleResult := &models.HoleResult{
+			MatchID:      match.ID,
+			HoleNumber:   holeNum,
+			Team1Score:   holeResult.Team1Score,
+			Team2Score:   holeResult.Team2Score,
+			WinnerTeamID: holeResult.WinnerTeamID,
+			Team1Points:  holeResult.Team1Points,
+			Team2Points:  holeResult.Team2Points,
+		}
+
+		err = s.repo.SaveHoleResult(dbHoleResult)
+		if err != nil {
+			return nil, fmt.Errorf("failed to save hole result: %w", err)
+		}
+
+		team1TotalPoints += holeResult.Team1Points
+		team2TotalPoints += holeResult.Team2Points
+		holesCompleted++
+	}
+
+	// Update match total points
+	err := s.repo.UpdateMatchPoints(match.ID, team1TotalPoints, team2TotalPoints)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update match points: %w", err)
+	}
+
+	holesRemaining := match.Holes - holesCompleted
+	matchComplete := holesCompleted == match.Holes
+
+	// Determine winner
+	var winnerTeamID *string
+	if matchComplete {
+		if team1TotalPoints > team2TotalPoints {
+			winnerTeamID = &match.Team1ID
+		} else if team2TotalPoints > team1TotalPoints {
+			winnerTeamID = &match.Team2ID
+		}
+		// If points are equal, it's a tie (winnerTeamID remains nil)
+	}
+
+	return &MatchStatus{
+		Team1TotalPoints: team1TotalPoints,
+		Team2TotalPoints: team2TotalPoints,
+		HolesCompleted:   holesCompleted,
+		HolesRemaining:   holesRemaining,
+		MatchComplete:    matchComplete,
+		WinnerTeamID:     winnerTeamID,
+	}, nil
+}
+
+// CalculateMatchStatus calculates current match status, preferring stored results when available
 func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []models.Score) (*MatchStatus, error) {
+	// First try to get stored hole results
+	storedResults, err := s.repo.GetMatchHoleResults(match.ID)
+	if err != nil {
+		// If we can't get stored results, fall back to calculation
+		return s.calculateMatchStatusFromScores(match, scores)
+	}
+
+	// Use stored results if available
+	if len(storedResults) > 0 {
+		team1TotalPoints := 0.0
+		team2TotalPoints := 0.0
+		holesCompleted := len(storedResults)
+
+		for _, result := range storedResults {
+			team1TotalPoints += result.Team1Points
+			team2TotalPoints += result.Team2Points
+		}
+
+		holesRemaining := match.Holes - holesCompleted
+		matchComplete := holesCompleted == match.Holes
+
+		var winnerTeamID *string
+		if matchComplete {
+			if team1TotalPoints > team2TotalPoints {
+				winnerTeamID = &match.Team1ID
+			} else if team2TotalPoints > team1TotalPoints {
+				winnerTeamID = &match.Team2ID
+			}
+		}
+
+		return &MatchStatus{
+			Team1TotalPoints: team1TotalPoints,
+			Team2TotalPoints: team2TotalPoints,
+			HolesCompleted:   holesCompleted,
+			HolesRemaining:   holesRemaining,
+			MatchComplete:    matchComplete,
+			WinnerTeamID:     winnerTeamID,
+		}, nil
+	}
+
+	// Fall back to calculation from scores
+	return s.calculateMatchStatusFromScores(match, scores)
+}
+
+func (s *ScoringService) calculateMatchStatusFromScores(match *models.Match, scores []models.Score) (*MatchStatus, error) {
 	// Group scores by hole
 	holeScores := make(map[int][]models.Score)
 	for _, score := range scores {
@@ -62,7 +188,6 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 		}
 
 		// Check if all required players have submitted scores for this hole
-		// This ensures we only calculate results for completed holes
 		if len(holePlayerScores) < 2 {
 			continue // Not enough scores to calculate hole result
 		}
@@ -88,7 +213,6 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 		} else if team2Points > team1Points {
 			winnerTeamID = &match.Team2ID
 		}
-		// If points are equal, it's a tie (winnerTeamID remains nil)
 	}
 
 	return &MatchStatus{

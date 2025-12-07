@@ -167,6 +167,19 @@ type Score struct {
 	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
 }
 
+type HoleResult struct {
+	ID           string    `json:"id" db:"id"`
+	MatchID      string    `json:"match_id" db:"match_id"`
+	HoleNumber   int       `json:"hole_number" db:"hole_number"`
+	Team1Score   *int      `json:"team1_score,omitempty" db:"team1_score"`
+	Team2Score   *int      `json:"team2_score,omitempty" db:"team2_score"`
+	WinnerTeamID *string   `json:"winner_team_id,omitempty" db:"winner_team_id"`
+	Team1Points  float64   `json:"team1_points" db:"team1_points"`
+	Team2Points  float64   `json:"team2_points" db:"team2_points"`
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+}
+
 // ============================================
 // Request/Response Models
 // ============================================
