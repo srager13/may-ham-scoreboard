@@ -954,13 +954,7 @@ func (r *Repository) GetLiveMatches(tournamentID string) ([]models.Match, error)
 
 		format, err := r.GetMatchFormat(match.MatchFormatID)
 		if err == nil {
-			match.Format = &models.MatchFormat{
-				ID:             format.ID,
-				Name:           format.Name,
-				Description:    format.Description,
-				PlayersPerSide: format.PlayersPerSide,
-				ScoringType:    format.ScoringType,
-			}
+			match.Format = format
 		}
 
 		matches = append(matches, match)
