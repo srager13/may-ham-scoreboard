@@ -1,40 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Trophy, Users, User, Award, Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { apiClient, ApiError, Tournament, Team, Match } from '../services/api';
-
-interface TeamStanding {
-  team: Team;
-  points_won: number;
-  points_lost: number;
-  matches_won: number;
-  matches_lost: number;
-  matches_tied: number;
-  holes_won: number;
-  holes_lost: number;
-  holes_tied: number;
-}
-
-interface PlayerStanding {
-  user: { id: string; name: string; handicap?: number };
-  team: Team;
-  points_won: number;
-  points_lost: number;
-  matches_played: number;
-  matches_won: number;
-  matches_lost: number;
-  matches_tied: number;
-  holes_won: number;
-  holes_lost: number;
-  holes_tied: number;
-  win_percentage: number;
-}
-
-interface LeaderboardData {
-  tournament: Tournament;
-  team_standings: TeamStanding[];
-  individual_standings: PlayerStanding[];
-  live_matches: Match[];
-}
+import { apiClient, ApiError, Tournament, Team, Match, TeamStanding, LeaderboardData } from '../services/api';
 
 const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
   const [data, setData] = useState<LeaderboardData | null>(null);
@@ -54,82 +20,16 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
       setLoading(true);
       setError(null);
 
-      // Get tournament details
-      const tournament = await apiClient.getTournament(tournamentId);
-      
-      // Get teams
-      const teamsResponse = await apiClient.getTournamentTeams(tournamentId);
-      const teams = Array.isArray(teamsResponse) ? teamsResponse : [];
-      
-      // Get rounds and matches for live match data
-      const roundsResponse = await apiClient.getTournamentRounds(tournamentId);
-      const rounds = Array.isArray(roundsResponse) ? roundsResponse : [];
-      const liveMatches: Match[] = [];
-      
-      for (const round of rounds) {
-        try {
-          const matches = await apiClient.getRoundMatches(round.id);
-          const matchesArray = Array.isArray(matches) ? matches : [];
-          // Filter for in-progress matches
-          liveMatches.push(...matchesArray.filter(m => m.status === 'in_progress'));
-        } catch (matchErr) {
-          console.warn('Error loading matches for round:', round.id, matchErr);
-        }
-      }
-
-      // Create basic team standings from actual teams
-      // TODO: Add API call to get team members and their statistics
-      // This would involve calling an endpoint like /api/v1/tournaments/:id/leaderboard
-      // that returns calculated standings based on match results
-      const teamStandings: TeamStanding[] = teams.map((team, index) => ({
-        team,
-        points_won: 0, // Will be calculated from actual match results
-        points_lost: 0,
-        matches_won: 0,
-        matches_lost: 0,
-        matches_tied: 0,
-        holes_won: 0,
-        holes_lost: 0,
-        holes_tied: 0,
-      }));
-
-      // Create basic individual standings - will be populated when we have team members
-      const individualStandings: PlayerStanding[] = [];
-      
-      // TODO: Add API call to get team members and their statistics
-      // This would involve calling an endpoint like /api/v1/tournaments/:id/leaderboard
-      // that returns calculated standings based on match results
-
-      setData({
-        tournament,
-        team_standings: teamStandings,
-        individual_standings: individualStandings,
-        live_matches: liveMatches,
-      });
+      // Get leaderboard data from the API
+      const leaderboardData = await apiClient.getTournamentLeaderboard(tournamentId);
+      setData(leaderboardData);
 
     } catch (err) {
       console.error('Error loading leaderboard:', err);
       
       // Show error message instead of demo data
       setError(`Failed to load tournament data: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      
-      // Set empty data on error
-      setData({
-        tournament: {
-          id: tournamentId,
-          name: 'Tournament Not Found',
-          description: 'Unable to load tournament data.',
-          status: 'error',
-          start_date: '',
-          end_date: '',
-          created_by: '',
-          created_at: '',
-          updated_at: ''
-        },
-        team_standings: [],
-        individual_standings: [],
-        live_matches: []
-      });
+      setData(null);
     } finally {
       setLoading(false);
     }
@@ -236,7 +136,11 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
         {view === 'team' ? (
           <TeamStandings teams={data.team_standings} />
         ) : (
-          <IndividualStandings players={data.individual_standings} />
+          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+            <h3 className="text-xl font-semibold text-gray-600 mb-4">Individual Standings</h3>
+            <p className="text-gray-500">Individual player statistics are not yet implemented.</p>
+            <p className="text-sm text-gray-400 mt-2">Coming soon: detailed player performance metrics and rankings.</p>
+          </div>
         )}
       </div>
     </div>
@@ -429,121 +333,6 @@ const TeamStandings = ({ teams }: { teams: TeamStanding[] }) => {
                 <td className="px-6 py-4 whitespace-nowrap text-center">
                   <div className="text-lg font-semibold text-gray-600">
                     {team.holes_tied}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
-// Individual Standings Component
-const IndividualStandings = ({ players }: { players: PlayerStanding[] }) => {
-  const sortedPlayers = [...players].sort((a, b) => {
-    if (b.points_won !== a.points_won) return b.points_won - a.points_won;
-    return b.win_percentage - a.win_percentage;
-  });
-
-  return (
-    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Rank
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Player
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Team
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Points
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Matches
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Record
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Win %
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Holes
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {sortedPlayers.map((player, index) => (
-              <tr key={player.user.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    {index === 0 && <Award size={20} className="text-yellow-500 mr-2" />}
-                    <span className="text-xl font-bold text-gray-400">
-                      {index + 1}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div>
-                    <div className="text-lg font-semibold">{player.user.name}</div>
-                    <div className="text-sm text-gray-500">HCP: {player.user.handicap}</div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium" 
-                       style={{ 
-                         backgroundColor: `${player.team.color}20`,
-                         color: player.team.color 
-                       }}>
-                    {player.team.name}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div className="text-2xl font-bold" style={{ color: player.team.color }}>
-                    {player.points_won.toFixed(1)}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    -{player.points_lost.toFixed(1)}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div className="text-lg font-semibold">{player.matches_played}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div className="text-sm font-medium">
-                    {player.matches_won}-{player.matches_lost}-{player.matches_tied}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div className="flex items-center justify-center">
-                    {player.win_percentage > 0.6 && (
-                      <TrendingUp size={16} className="text-green-600 mr-1" />
-                    )}
-                    {player.win_percentage < 0.4 && (
-                      <TrendingDown size={16} className="text-red-600 mr-1" />
-                    )}
-                    {player.win_percentage >= 0.4 && player.win_percentage <= 0.6 && (
-                      <Minus size={16} className="text-gray-600 mr-1" />
-                    )}
-                    <span className="text-lg font-semibold">
-                      {(player.win_percentage * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div className="text-sm">
-                    <span className="text-green-600 font-semibold">{player.holes_won}</span>
-                    <span className="text-gray-400 mx-1">-</span>
-                    <span className="text-red-600 font-semibold">{player.holes_lost}</span>
-                    <span className="text-gray-400 mx-1">-</span>
-                    <span className="text-gray-600 font-semibold">{player.holes_tied}</span>
                   </div>
                 </td>
               </tr>

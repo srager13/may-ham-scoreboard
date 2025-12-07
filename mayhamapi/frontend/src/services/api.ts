@@ -119,6 +119,24 @@ export interface GroupMember {
   user?: User;
 }
 
+export interface TeamStanding {
+  team: Team;
+  points_won: number;
+  points_lost: number;
+  matches_won: number;
+  matches_lost: number;
+  matches_tied: number;
+  holes_won: number;
+  holes_lost: number;
+  holes_tied: number;
+}
+
+export interface LeaderboardData {
+  tournament: Tournament;
+  team_standings: TeamStanding[];
+  live_matches: Match[];
+}
+
 // Request types
 export interface CreateGroupRequest {
   name: string;
@@ -308,6 +326,10 @@ class ApiClient {
 
   async getTournament(id: string): Promise<Tournament> {
     return this.request<Tournament>(`/tournaments/${id}`);
+  }
+
+  async getTournamentLeaderboard(tournamentId: string): Promise<LeaderboardData> {
+    return this.request<LeaderboardData>(`/tournaments/${tournamentId}/leaderboard`);
   }
 
   async createTournament(data: CreateTournamentRequest): Promise<Tournament> {
