@@ -24,8 +24,10 @@ func NewScoringService(repo *repository.Repository) *ScoringService {
 
 // MatchStatus represents the current status of a match
 type MatchStatus struct {
-	Team1TotalPoints float64 `json:"team1_total_points"`
-	Team2TotalPoints float64 `json:"team2_total_points"`
+	Team1HolePoints  float64 `json:"team1_hole_points"`  // Points from individual holes
+	Team2HolePoints  float64 `json:"team2_hole_points"`  // Points from individual holes
+	Team1MatchPoints float64 `json:"team1_match_points"` // Match-level points (for leaderboard)
+	Team2MatchPoints float64 `json:"team2_match_points"` // Match-level points (for leaderboard)
 	HolesCompleted   int     `json:"holes_completed"`
 	HolesRemaining   int     `json:"holes_remaining"`
 	MatchComplete    bool    `json:"match_complete"`
@@ -93,29 +95,47 @@ func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scor
 		holesCompleted++
 	}
 
-	// Update match total points
-	err := s.repo.UpdateMatchPoints(match.ID, team1TotalPoints, team2TotalPoints)
+	// Calculate match-level points based on overall match winner
+	// team1TotalPoints and team2TotalPoints represent hole points won
+	holesRemaining := match.Holes - holesCompleted
+	matchComplete := holesCompleted >= match.Holes
+
+	var matchTeam1Points, matchTeam2Points float64
+	var winnerTeamID *string
+
+	if matchComplete {
+		if team1TotalPoints > team2TotalPoints {
+			// Team 1 wins the match - gets the full match points
+			winnerTeamID = &match.Team1ID
+			matchTeam1Points = match.PointsAvailable
+			matchTeam2Points = 0
+		} else if team2TotalPoints > team1TotalPoints {
+			// Team 2 wins the match - gets the full match points
+			winnerTeamID = &match.Team2ID
+			matchTeam1Points = 0
+			matchTeam2Points = match.PointsAvailable
+		} else {
+			// Match is tied - each team gets half the available points
+			matchTeam1Points = match.PointsAvailable / 2
+			matchTeam2Points = match.PointsAvailable / 2
+		}
+	} else {
+		// Match not complete - no match points awarded yet
+		matchTeam1Points = 0
+		matchTeam2Points = 0
+	}
+
+	// Update match total points (these are match-level points, not hole points)
+	err := s.repo.UpdateMatchPoints(match.ID, matchTeam1Points, matchTeam2Points)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update match points: %w", err)
 	}
 
-	holesRemaining := match.Holes - holesCompleted
-	matchComplete := holesCompleted == match.Holes
-
-	// Determine winner
-	var winnerTeamID *string
-	if matchComplete {
-		if team1TotalPoints > team2TotalPoints {
-			winnerTeamID = &match.Team1ID
-		} else if team2TotalPoints > team1TotalPoints {
-			winnerTeamID = &match.Team2ID
-		}
-		// If points are equal, it's a tie (winnerTeamID remains nil)
-	}
-
 	return &MatchStatus{
-		Team1TotalPoints: team1TotalPoints,
-		Team2TotalPoints: team2TotalPoints,
+		Team1HolePoints:  team1TotalPoints,
+		Team2HolePoints:  team2TotalPoints,
+		Team1MatchPoints: matchTeam1Points,
+		Team2MatchPoints: matchTeam2Points,
 		HolesCompleted:   holesCompleted,
 		HolesRemaining:   holesRemaining,
 		MatchComplete:    matchComplete,
@@ -147,17 +167,30 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 		matchComplete := holesCompleted == match.Holes
 
 		var winnerTeamID *string
+		matchTeam1Points := 0.0
+		matchTeam2Points := 0.0
+
 		if matchComplete {
 			if team1TotalPoints > team2TotalPoints {
 				winnerTeamID = &match.Team1ID
+				matchTeam1Points = match.PointsAvailable
+				matchTeam2Points = 0.0
 			} else if team2TotalPoints > team1TotalPoints {
 				winnerTeamID = &match.Team2ID
+				matchTeam1Points = 0.0
+				matchTeam2Points = match.PointsAvailable
+			} else {
+				// Tie - split points
+				matchTeam1Points = match.PointsAvailable / 2
+				matchTeam2Points = match.PointsAvailable / 2
 			}
 		}
 
 		return &MatchStatus{
-			Team1TotalPoints: team1TotalPoints,
-			Team2TotalPoints: team2TotalPoints,
+			Team1HolePoints:  team1TotalPoints,
+			Team2HolePoints:  team2TotalPoints,
+			Team1MatchPoints: matchTeam1Points,
+			Team2MatchPoints: matchTeam2Points,
 			HolesCompleted:   holesCompleted,
 			HolesRemaining:   holesRemaining,
 			MatchComplete:    matchComplete,
@@ -205,19 +238,32 @@ func (s *ScoringService) calculateMatchStatusFromScores(match *models.Match, sco
 	holesRemaining := match.Holes - holesCompleted
 	matchComplete := holesCompleted == match.Holes
 
-	// Determine winner
+	// Determine winner and calculate match points
 	var winnerTeamID *string
+	matchTeam1Points := 0.0
+	matchTeam2Points := 0.0
+
 	if matchComplete {
 		if team1Points > team2Points {
 			winnerTeamID = &match.Team1ID
+			matchTeam1Points = match.PointsAvailable
+			matchTeam2Points = 0.0
 		} else if team2Points > team1Points {
 			winnerTeamID = &match.Team2ID
+			matchTeam1Points = 0.0
+			matchTeam2Points = match.PointsAvailable
+		} else {
+			// Tie - split points
+			matchTeam1Points = match.PointsAvailable / 2
+			matchTeam2Points = match.PointsAvailable / 2
 		}
 	}
 
 	return &MatchStatus{
-		Team1TotalPoints: team1Points,
-		Team2TotalPoints: team2Points,
+		Team1HolePoints:  team1Points,
+		Team2HolePoints:  team2Points,
+		Team1MatchPoints: matchTeam1Points,
+		Team2MatchPoints: matchTeam2Points,
 		HolesCompleted:   holesCompleted,
 		HolesRemaining:   holesRemaining,
 		MatchComplete:    matchComplete,
