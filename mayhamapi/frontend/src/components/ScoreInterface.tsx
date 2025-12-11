@@ -2,10 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { Users, Target, Award, RefreshCw, Save, AlertCircle } from 'lucide-react';
 import { apiClient, ApiError, Match as ApiMatch, Tournament, Team, Round, Score } from '../services/api';
 
+interface MatchStatus {
+  team1_hole_points: number;
+  team2_hole_points: number;
+  team1_match_points: number;
+  team2_match_points: number;
+  holes_completed: number;
+  holes_remaining: number;
+  match_complete: boolean;
+  winner_team_id?: string;
+}
+
 interface MatchWithScores extends ApiMatch {
   current_hole: number;
   scores: Record<number, Record<string, number>>;
   round?: Round;
+  match_status?: MatchStatus;
 }
 
 const ScoreInterface: React.FC = () => {
@@ -80,6 +92,18 @@ const ScoreInterface: React.FC = () => {
               round: round // Add round info to match
             }));
           
+          // Load match status for completed matches
+          for (const match of matchesWithScores) {
+            if (match.status === 'completed') {
+              try {
+                const response = await apiClient.getMatchScores(match.id);
+                match.match_status = response.match_status;
+              } catch (err) {
+                console.warn('Error loading match status for match:', match.id, err);
+              }
+            }
+          }
+          
           allMatches.push(...matchesWithScores);
         } catch (matchErr) {
           console.warn('Error loading matches for round:', round.id, matchErr);
@@ -105,6 +129,7 @@ const ScoreInterface: React.FC = () => {
     try {
       const response = await apiClient.getMatchScores(match.id);
       const scores = response.scores || [];
+      const matchStatus = response.match_status;
       
       // Convert scores array to the format expected by the UI
       const scoresMap: Record<number, Record<string, number>> = {};
@@ -116,10 +141,11 @@ const ScoreInterface: React.FC = () => {
         scoresMap[score.hole_number][score.user_id] = score.strokes;
       });
       
-      // Update the match with existing scores
+      // Update the match with existing scores and status
       const updatedMatch = {
         ...match,
-        scores: scoresMap
+        scores: scoresMap,
+        match_status: matchStatus
       };
       
       setSelectedMatch(updatedMatch);
@@ -184,16 +210,24 @@ const ScoreInterface: React.FC = () => {
       // Update match status to completed
       await apiClient.updateMatchStatus(matchId, 'completed');
       
-      // Update local state
+      // Get updated match data including the latest match results
+      const response = await apiClient.getMatchScores(matchId);
+      const updatedMatchStatus = response.match_status;
+      
+      // Update local state for matches list
       setMatches(prev => prev.map(match => 
         match.id === matchId 
-          ? { ...match, status: 'completed' }
+          ? { ...match, status: 'completed', match_status: updatedMatchStatus }
           : match
       ));
       
       // If this is the selected match, update it too
       if (selectedMatch?.id === matchId) {
-        setSelectedMatch(prev => prev ? { ...prev, status: 'completed' } : null);
+        setSelectedMatch(prev => prev ? { 
+          ...prev, 
+          status: 'completed',
+          match_status: updatedMatchStatus
+        } : null);
       }
     } catch (err) {
       console.error('Error completing match:', err);
@@ -429,6 +463,41 @@ const ScoreInterface: React.FC = () => {
                     {(match.players?.filter(p => p.team_id === match.team2?.id) || []).map(p => p.user?.name || `Player ${p.user_id}`).join(', ') || 'No players assigned'}
                   </div>
                 </div>
+                
+                {/* Match Results for Completed Matches */}
+                {match.status === 'completed' && match.match_status && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="text-xs font-medium text-gray-700 mb-2">Match Result</div>
+                    {match.match_status.winner_team_id ? (
+                      <div className="flex justify-between items-center">
+                        <div className="text-xs">
+                          <span className="font-medium">
+                            Winner: {match.match_status.winner_team_id === match.team1?.id ? match.team1?.name : match.team2?.name}
+                          </span>
+                        </div>
+                        <div className="text-xs">
+                          <span className="font-medium">
+                            {match.match_status.winner_team_id === match.team1?.id ? match.match_status.team1_match_points : match.match_status.team2_match_points} points
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-center">
+                        <div className="text-xs">
+                          <span className="font-medium">Tie</span>
+                        </div>
+                        <div className="text-xs">
+                          <span className="font-medium">
+                            {match.match_status.team1_match_points} points each
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="text-xs text-gray-500 mt-1">
+                      Holes: {match.team1?.name} {match.match_status.team1_hole_points} - {match.match_status.team2_hole_points} {match.team2?.name}
+                    </div>
+                  </div>
+                )}
               </button>
             ))}
           </div>

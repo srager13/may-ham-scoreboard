@@ -46,6 +46,13 @@ type HoleResult struct {
 }
 
 func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scores []models.Score) (*MatchStatus, error) {
+	// Get the number of players in this match to know when a hole is complete
+	expectedPlayersPerHole := len(match.Players)
+	if expectedPlayersPerHole == 0 {
+		// If no players assigned, assume 2 players minimum
+		expectedPlayersPerHole = 2
+	}
+
 	// Group scores by hole
 	holeScores := make(map[int][]models.Score)
 	for _, score := range scores {
@@ -64,9 +71,8 @@ func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scor
 		}
 
 		// Check if all required players have submitted scores for this hole
-		// This ensures we only calculate results for completed holes
-		if len(holePlayerScores) < 2 {
-			continue // Not enough scores to calculate hole result
+		if len(holePlayerScores) < expectedPlayersPerHole {
+			continue // Not all players have submitted scores for this hole
 		}
 
 		holeResult, err := s.calculateHoleResult(match, holeNum, holePlayerScores)
@@ -203,6 +209,13 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 }
 
 func (s *ScoringService) calculateMatchStatusFromScores(match *models.Match, scores []models.Score) (*MatchStatus, error) {
+	// Get the number of players in this match to know when a hole is complete
+	expectedPlayersPerHole := len(match.Players)
+	if expectedPlayersPerHole == 0 {
+		// If no players assigned, assume 2 players minimum
+		expectedPlayersPerHole = 2
+	}
+
 	// Group scores by hole
 	holeScores := make(map[int][]models.Score)
 	for _, score := range scores {
@@ -221,8 +234,8 @@ func (s *ScoringService) calculateMatchStatusFromScores(match *models.Match, sco
 		}
 
 		// Check if all required players have submitted scores for this hole
-		if len(holePlayerScores) < 2 {
-			continue // Not enough scores to calculate hole result
+		if len(holePlayerScores) < expectedPlayersPerHole {
+			continue // Not all players have submitted scores for this hole
 		}
 
 		holeResult, err := s.calculateHoleResult(match, holeNum, holePlayerScores)
