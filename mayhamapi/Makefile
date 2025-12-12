@@ -10,9 +10,9 @@ build:
 run: build
 	./mayhamapi
 
-# Run development server with live reload (requires air: go install github.com/cosmtrek/air@latest)
+# Run development server with live reload (requires air: go install github.com/air-verse/air@latest)
 dev:
-	air
+	PATH=$$PATH:/root/go/bin air
 
 # Run all tests
 test:
