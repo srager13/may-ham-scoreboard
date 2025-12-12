@@ -41,10 +41,18 @@ func (h *LeaderboardHandler) GetTournamentLeaderboard(c *gin.Context) {
 		return
 	}
 
+	// Get total available points for the tournament
+	totalAvailablePoints, err := h.repo.GetTournamentTotalAvailablePoints(tournamentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	response := gin.H{
-		"tournament":     tournament,
-		"team_standings": teamStandings,
-		"live_matches":   liveMatches,
+		"tournament":             tournament,
+		"team_standings":         teamStandings,
+		"live_matches":           liveMatches,
+		"total_available_points": totalAvailablePoints,
 	}
 
 	c.JSON(http.StatusOK, response)

@@ -135,6 +135,7 @@ export interface LeaderboardData {
   tournament: Tournament;
   team_standings: TeamStanding[];
   live_matches: Match[];
+  total_available_points: number;
 }
 
 // Request types

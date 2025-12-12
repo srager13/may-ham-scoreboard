@@ -97,7 +97,7 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
         )}
 
         {/* Team Score Banner */}
-        <TeamScoreBanner teams={data.team_standings} />
+        <TeamScoreBanner teams={data.team_standings} totalAvailablePoints={data.total_available_points} />
 
         {/* Live Matches */}
         {data.live_matches && data.live_matches.length > 0 && (
@@ -148,13 +148,22 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
 };
 
 // Team Score Banner Component
-const TeamScoreBanner = ({ teams }: { teams: TeamStanding[] }) => {
+const TeamScoreBanner = ({ teams, totalAvailablePoints }: { teams: TeamStanding[], totalAvailablePoints: number }) => {
   const sortedTeams = [...teams].sort((a, b) => b.points_won - a.points_won);
+  
+  // Calculate points needed to win (need more than half)
+  const halfPoints = totalAvailablePoints / 2;
+  const pointsNeededToWin = halfPoints % 1 === 0 ? halfPoints + 0.5 : Math.ceil(halfPoints);
   
   if (sortedTeams.length < 2) {
     return (
       <div className="bg-white rounded-lg shadow-lg p-6 mb-8 text-center">
         <h2 className="text-xl font-semibold text-gray-600">Waiting for teams...</h2>
+        {totalAvailablePoints > 0 && (
+          <p className="text-sm text-gray-500 mt-2">
+            Points needed to win: <span className="font-semibold">{pointsNeededToWin}</span>
+          </p>
+        )}
       </div>
     );
   }
@@ -188,6 +197,10 @@ const TeamScoreBanner = ({ teams }: { teams: TeamStanding[] }) => {
               {pointDifference.toFixed(1)}
             </div>
             <div className="text-sm text-gray-600">point lead</div>
+          </div>
+          <div className="text-center mt-4 pt-4 border-t border-gray-200">
+            <div className="text-sm text-gray-600 mb-1">Points needed to win</div>
+            <div className="text-2xl font-bold text-gray-900">{pointsNeededToWin}</div>
           </div>
         </div>
 

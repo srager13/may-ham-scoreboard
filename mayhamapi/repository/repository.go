@@ -963,6 +963,23 @@ func (r *Repository) GetLiveMatches(tournamentID string) ([]models.Match, error)
 	return matches, nil
 }
 
+func (r *Repository) GetTournamentTotalAvailablePoints(tournamentID string) (float64, error) {
+	query := `
+		SELECT COALESCE(SUM(m.points_available), 0) as total_points
+		FROM matches m
+		INNER JOIN rounds r ON m.round_id = r.id
+		WHERE r.tournament_id = $1
+	`
+
+	var totalPoints float64
+	err := r.db.QueryRow(query, tournamentID).Scan(&totalPoints)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get total available points: %w", err)
+	}
+
+	return totalPoints, nil
+}
+
 type teamMatchStats struct {
 	PointsWon   float64
 	PointsLost  float64
