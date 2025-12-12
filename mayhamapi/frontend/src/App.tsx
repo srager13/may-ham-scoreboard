@@ -81,7 +81,6 @@ function AppContent() {
   const isLandingPage = location.pathname === '/';
 
   const navigation = [
-    { name: 'Home', href: '/', icon: Trophy },
     { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
     { name: 'Score Entry', href: '/score', icon: BarChart3 },
     { name: 'Groups', href: '/groups', icon: Users },
@@ -97,12 +96,12 @@ function AppContent() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex justify-between h-16">
                 <div className="flex">
-                  <div className="flex-shrink-0 flex items-center">
+                  <Link to="/" className="flex-shrink-0 flex items-center hover:opacity-80 transition-opacity">
                     <Trophy className="h-8 w-8 text-green-600" />
                     <span className="ml-2 text-xl font-bold text-gray-900">
                       Mayham Golf
                     </span>
-                  </div>
+                  </Link>
                   <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                     {navigation.map((item) => {
                       const Icon = item.icon;

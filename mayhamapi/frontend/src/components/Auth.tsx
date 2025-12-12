@@ -1,4 +1,5 @@
 import React, { useState, useContext, createContext, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { User, Lock, Mail, UserPlus, LogIn, Eye, EyeOff, Trophy, X } from 'lucide-react';
 import { apiClient, ApiError, User as ApiUser } from '../services/api';
 
@@ -336,8 +337,15 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
 const UserProfile: React.FC = () => {
   const { user, logout, isAuthenticated } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
+  const navigate = useNavigate();
 
   if (!isAuthenticated || !user) return null;
+
+  const handleLogout = () => {
+    logout();
+    setShowDropdown(false);
+    navigate('/');
+  };
 
   return (
     <div className="relative">
@@ -361,10 +369,7 @@ const UserProfile: React.FC = () => {
             )}
           </div>
           <button
-            onClick={() => {
-              logout();
-              setShowDropdown(false);
-            }}
+            onClick={handleLogout}
             className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
           >
             Sign Out

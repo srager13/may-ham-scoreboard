@@ -8,20 +8,13 @@ const LandingPage = () => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const handleLoginClick = () => {
+  const handleGetStartedClick = () => {
     if (isAuthenticated) {
       navigate('/leaderboard');
     } else {
       setShowAuthModal(true);
     }
   };
-
-  // If user is already logged in, redirect them
-  React.useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/leaderboard');
-    }
-  }, [isAuthenticated, navigate]);
 
   const features = [
     {
@@ -67,21 +60,23 @@ const LandingPage = () => {
                 <div className="mt-5 sm:mt-8 sm:flex sm:justify-center lg:justify-start">
                   <div className="rounded-md shadow">
                     <button
-                      onClick={handleLoginClick}
+                      onClick={handleGetStartedClick}
                       className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-green-600 hover:bg-green-700 md:py-4 md:text-lg md:px-10 transition-colors"
                     >
-                      {isAuthenticated ? 'View Leaderboard' : 'Get Started'}
+                      {isAuthenticated ? 'Go to Leaderboard' : 'Get Started'}
                       <ChevronRight className="ml-2 h-5 w-5" />
                     </button>
                   </div>
-                  <div className="mt-3 sm:mt-0 sm:ml-3">
-                    <button
-                      onClick={() => navigate('/leaderboard')}
-                      className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-green-700 bg-green-100 hover:bg-green-200 md:py-4 md:text-lg md:px-10 transition-colors"
-                    >
-                      View Public Leaderboard
-                    </button>
-                  </div>
+                  {!isAuthenticated && (
+                    <div className="mt-3 sm:mt-0 sm:ml-3">
+                      <button
+                        onClick={() => navigate('/leaderboard')}
+                        className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-green-700 bg-green-100 hover:bg-green-200 md:py-4 md:text-lg md:px-10 transition-colors"
+                      >
+                        View Public Leaderboard
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Tournament Status Badge */}
@@ -152,16 +147,18 @@ const LandingPage = () => {
       <div className="bg-green-700">
         <div className="max-w-2xl mx-auto text-center py-16 px-4 sm:py-20 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-extrabold text-white sm:text-4xl">
-            <span className="block">Ready to start scoring?</span>
+            <span className="block">{isAuthenticated ? 'Ready to see the action?' : 'Ready to start scoring?'}</span>
           </h2>
           <p className="mt-4 text-lg leading-6 text-green-200">
-            Join the tournament and start tracking your golf scores today.
+            {isAuthenticated 
+              ? 'Check out the live tournament leaderboard and track the competition.'
+              : 'Join the tournament and start tracking your golf scores today.'}
           </p>
           <button
-            onClick={handleLoginClick}
+            onClick={handleGetStartedClick}
             className="mt-8 w-full inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-green-600 bg-white hover:bg-green-50 sm:w-auto transition-colors"
           >
-            {isAuthenticated ? 'Go to Dashboard' : 'Sign Up Now'}
+            {isAuthenticated ? 'View Leaderboard' : 'Sign Up Now'}
             <ChevronRight className="ml-2 h-5 w-5" />
           </button>
         </div>
