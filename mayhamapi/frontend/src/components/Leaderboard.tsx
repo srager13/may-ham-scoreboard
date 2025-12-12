@@ -2,6 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Trophy, Users, User, Award, Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { apiClient, ApiError, Tournament, Team, Match, TeamStanding, LeaderboardData } from '../services/api';
 
+// Helper function to format date as MM-DD-YYYY
+const formatDate = (dateString: string): string => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric'
+  });
+};
+
 const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [view, setView] = useState<'team' | 'individual'>('team');
@@ -67,21 +77,11 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
       {/* Tournament Header */}
       <div className="bg-gradient-to-r from-green-800 to-green-600 text-white">
         <div className="max-w-7xl mx-auto px-6 py-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">{data.tournament.name}</h1>
-              <p className="text-green-100">
-                {data.tournament.start_date} - {data.tournament.end_date}
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="text-sm text-green-100 mb-1">Tournament Status</div>
-              <div className="inline-flex items-center px-4 py-2 bg-white/20 rounded-lg">
-                <Clock size={16} className="mr-2" />
-                {data.tournament.status === 'active' ? 'In Progress' : 
-                 data.tournament.status === 'completed' ? 'Completed' : 'Demo Mode'}
-              </div>
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold mb-2">{data.tournament.name}</h1>
+            <p className="text-green-100">
+              {formatDate(data.tournament.start_date)} - {formatDate(data.tournament.end_date)}
+            </p>
           </div>
         </div>
       </div>
