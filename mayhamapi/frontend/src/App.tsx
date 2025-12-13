@@ -84,7 +84,7 @@ function AppContent() {
     { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
     { name: 'Score Entry', href: '/score', icon: BarChart3 },
     { name: 'Groups', href: '/groups', icon: Users },
-    { name: 'Tournament Setup', href: '/admin', icon: Settings },
+    { name: 'Tournament Setup', href: '/tournamentsetup', icon: Settings },
   ];
 
   return (
@@ -183,7 +183,7 @@ function AppContent() {
             } 
           />
           <Route 
-            path="/admin" 
+            path="/tournamentsetup" 
             element={
               <ProtectedRoute>
                 <TournamentSetup />

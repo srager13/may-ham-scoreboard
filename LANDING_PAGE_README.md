@@ -27,7 +27,7 @@ I've successfully designed and implemented a modern, responsive landing page for
   - `/` → Landing Page (public)
   - `/leaderboard` → Leaderboard (public) 
   - `/score` → Score Entry (protected)
-  - `/admin` → Admin Portal (protected)
+  - `/tournamentsetup` → Tournament Setup (protected)
 - **Conditional Navigation**: Landing page shows no navigation bar
 - **Protected Routes**: Score entry and admin require authentication
 
