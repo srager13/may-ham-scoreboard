@@ -26,7 +26,7 @@ interface MatchData {
   team2_players: number[];
 }
 
-const AdminPortal = () => {
+const TournamentSetup = () => {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1015,4 +1015,4 @@ const ReviewStep = ({ tournament, teams, rounds }) => {
   );
 };
 
-export default AdminPortal;
+export default TournamentSetup;

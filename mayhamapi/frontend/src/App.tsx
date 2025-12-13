@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Trophy, Users, BarChart3, Settings, AlertCircle } from 'lucide-react';
 import Leaderboard from './components/Leaderboard';
-import AdminPortal from './components/AdminPortal';
+import TournamentSetup from './components/TournamentSetup';
 import ScoreInterface from './components/ScoreInterface';
 import LandingPage from './components/LandingPage';
 import Groups from './components/Groups';
@@ -84,7 +84,7 @@ function AppContent() {
     { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
     { name: 'Score Entry', href: '/score', icon: BarChart3 },
     { name: 'Groups', href: '/groups', icon: Users },
-    { name: 'Admin Portal', href: '/admin', icon: Settings },
+    { name: 'Tournament Setup', href: '/admin', icon: Settings },
   ];
 
   return (
@@ -186,7 +186,7 @@ function AppContent() {
             path="/admin" 
             element={
               <ProtectedRoute>
-                <AdminPortal />
+                <TournamentSetup />
               </ProtectedRoute>
             } 
           />
