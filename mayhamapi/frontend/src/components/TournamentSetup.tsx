@@ -225,10 +225,17 @@ const TournamentSetup = () => {
       const teamsData = await apiClient.getTournamentTeams(tournamentId);
       const loadedTeams: TeamData[] = [];
       
+      // First, load all users if not already loaded
+      const allUsers = availableUsers.length > 0 ? availableUsers : await apiClient.getUsers();
+      if (availableUsers.length === 0) {
+        setAvailableUsers(allUsers);
+      }
+      
       for (const team of teamsData) {
         const membersData = await apiClient.getTeamMembers(team.id);
+        // Map user_id to actual User objects from availableUsers
         const players = membersData
-          .map(member => member.user)
+          .map(member => allUsers.find(user => user.id === member.user_id))
           .filter((user): user is User => user !== undefined && user !== null);
         
         loadedTeams.push({
