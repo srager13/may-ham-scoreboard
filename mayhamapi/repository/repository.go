@@ -1159,3 +1159,121 @@ func (r *Repository) UpdateMatchPoints(matchID string, team1Points, team2Points 
 
 	return nil
 }
+
+// ============================================
+// Delete Methods
+// ============================================
+
+func (r *Repository) DeleteMatch(matchID string) error {
+	query := `DELETE FROM matches WHERE id = $1`
+	_, err := r.db.Exec(query, matchID)
+	if err != nil {
+		return fmt.Errorf("failed to delete match: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) DeleteRound(roundID string) error {
+	// Note: This will cascade delete all matches due to ON DELETE CASCADE
+	query := `DELETE FROM rounds WHERE id = $1`
+	_, err := r.db.Exec(query, roundID)
+	if err != nil {
+		return fmt.Errorf("failed to delete round: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) DeleteTeam(teamID string) error {
+	// Note: This will cascade delete team members due to ON DELETE CASCADE
+	query := `DELETE FROM teams WHERE id = $1`
+	_, err := r.db.Exec(query, teamID)
+	if err != nil {
+		return fmt.Errorf("failed to delete team: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) DeleteTournament(tournamentID string) error {
+	// Note: This will cascade delete teams, rounds, and matches due to ON DELETE CASCADE
+	query := `DELETE FROM tournaments WHERE id = $1`
+	_, err := r.db.Exec(query, tournamentID)
+	if err != nil {
+		return fmt.Errorf("failed to delete tournament: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) DeleteTeamMember(teamID, userID string) error {
+	query := `DELETE FROM team_members WHERE team_id = $1 AND user_id = $2`
+	_, err := r.db.Exec(query, teamID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete team member: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) GetTeamMembers(teamID string) ([]models.TeamMember, error) {
+	query := `
+		SELECT tm.id, tm.team_id, tm.user_id, tm.created_at
+		FROM team_members tm
+		WHERE tm.team_id = $1
+	`
+
+	rows, err := r.db.Query(query, teamID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team members: %w", err)
+	}
+	defer rows.Close()
+
+	var members []models.TeamMember
+	for rows.Next() {
+		var member models.TeamMember
+
+		err := rows.Scan(
+			&member.ID, &member.TeamID, &member.UserID, &member.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan team member: %w", err)
+		}
+
+		members = append(members, member)
+	}
+
+	return members, nil
+}
+
+func (r *Repository) GetMatchPlayers(matchID string) ([]models.MatchPlayer, error) {
+	query := `
+		SELECT mp.id, mp.match_id, mp.user_id, mp.team_id, mp.player_order,
+		       u.id, u.email, u.name, u.handicap, u.is_admin, u.created_at, u.updated_at
+		FROM match_players mp
+		LEFT JOIN users u ON mp.user_id = u.id
+		WHERE mp.match_id = $1
+		ORDER BY mp.player_order
+	`
+
+	rows, err := r.db.Query(query, matchID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get match players: %w", err)
+	}
+	defer rows.Close()
+
+	var players []models.MatchPlayer
+	for rows.Next() {
+		var player models.MatchPlayer
+		var user models.User
+
+		err := rows.Scan(
+			&player.ID, &player.MatchID, &player.UserID, &player.TeamID, &player.Position,
+			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan match player: %w", err)
+		}
+
+		player.User = &user
+		players = append(players, player)
+	}
+
+	return players, nil
+}

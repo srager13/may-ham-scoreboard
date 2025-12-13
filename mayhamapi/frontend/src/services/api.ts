@@ -453,6 +453,47 @@ class ApiClient {
   async getGroupUsers(groupId: string): Promise<User[]> {
     return this.request<User[]>(`/groups/${groupId}/users`);
   }
+
+  // Delete methods
+  async deleteTournament(tournamentId: string): Promise<void> {
+    return this.request<void>(`/tournaments/${tournamentId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async deleteTeam(teamId: string): Promise<void> {
+    return this.request<void>(`/teams/${teamId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async deleteRound(roundId: string): Promise<void> {
+    return this.request<void>(`/rounds/${roundId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async deleteMatch(matchId: string): Promise<void> {
+    return this.request<void>(`/matches/${matchId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async deleteTeamMember(teamId: string, userId: string): Promise<void> {
+    return this.request<void>(`/teams/${teamId}/members/${userId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getTeamMembers(teamId: string): Promise<TeamMember[]> {
+    const response = await this.request<{ members: TeamMember[] }>(`/teams/${teamId}/members`);
+    return response.members || [];
+  }
+
+  async getMatchPlayers(matchId: string): Promise<MatchPlayer[]> {
+    const response = await this.request<{ players: MatchPlayer[] }>(`/matches/${matchId}/players`);
+    return response.players || [];
+  }
 }
 
 // Create singleton instance

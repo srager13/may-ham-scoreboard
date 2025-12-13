@@ -276,3 +276,95 @@ func (h *TournamentHandler) GetMatchFormats(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"formats": formats})
 }
+
+// DELETE /api/v1/tournaments/:tournament_id
+func (h *TournamentHandler) DeleteTournament(c *gin.Context) {
+	tournamentID := c.Param("tournament_id")
+
+	err := h.repo.DeleteTournament(tournamentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Tournament deleted successfully"})
+}
+
+// DELETE /api/v1/teams/:team_id
+func (h *TournamentHandler) DeleteTeam(c *gin.Context) {
+	teamID := c.Param("team_id")
+
+	err := h.repo.DeleteTeam(teamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Team deleted successfully"})
+}
+
+// DELETE /api/v1/rounds/:round_id
+func (h *TournamentHandler) DeleteRound(c *gin.Context) {
+	roundID := c.Param("round_id")
+
+	err := h.repo.DeleteRound(roundID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Round deleted successfully"})
+}
+
+// DELETE /api/v1/matches/:match_id
+func (h *TournamentHandler) DeleteMatch(c *gin.Context) {
+	matchID := c.Param("match_id")
+
+	err := h.repo.DeleteMatch(matchID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Match deleted successfully"})
+}
+
+// DELETE /api/v1/teams/:team_id/members/:user_id
+func (h *TournamentHandler) DeleteTeamMember(c *gin.Context) {
+	teamID := c.Param("team_id")
+	userID := c.Param("user_id")
+
+	err := h.repo.DeleteTeamMember(teamID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Team member removed successfully"})
+}
+
+// GET /api/v1/teams/:team_id/members
+func (h *TournamentHandler) GetTeamMembers(c *gin.Context) {
+	teamID := c.Param("team_id")
+
+	members, err := h.repo.GetTeamMembers(teamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"members": members})
+}
+
+// GET /api/v1/matches/:match_id/players
+func (h *TournamentHandler) GetMatchPlayers(c *gin.Context) {
+	matchID := c.Param("match_id")
+
+	players, err := h.repo.GetMatchPlayers(matchID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"players": players})
+}

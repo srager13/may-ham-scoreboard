@@ -32,6 +32,9 @@ const TournamentSetup = () => {
   const [error, setError] = useState<string | null>(null);
   const [showDraftDialog, setShowDraftDialog] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
+  const [existingTournaments, setExistingTournaments] = useState<Tournament[]>([]);
   
   const [tournament, setTournament] = useState({
     name: '',
@@ -175,6 +178,16 @@ const TournamentSetup = () => {
         console.error('Error loading groups:', err);
         setUserGroups([]);
       }
+
+      // Load existing tournaments
+      try {
+        const tournaments = await apiClient.getTournaments();
+        console.log('Tournaments loaded:', tournaments);
+        setExistingTournaments(Array.isArray(tournaments) ? tournaments : []);
+      } catch (err) {
+        console.error('Error loading tournaments:', err);
+        setExistingTournaments([]);
+      }
       
     } catch (err) {
       console.error('Error loading initial data:', err);
@@ -183,9 +196,120 @@ const TournamentSetup = () => {
       setAvailableUsers([]);
       setMatchFormats([]);
       setUserGroups([]);
+      setExistingTournaments([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadExistingTournament = async (tournamentId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load tournament details
+      const tournamentData = await apiClient.getTournament(tournamentId);
+      setTournament({
+        name: tournamentData.name,
+        description: tournamentData.description || '',
+        start_date: tournamentData.start_date.split('T')[0],
+        end_date: tournamentData.end_date.split('T')[0],
+        group_id: tournamentData.group_id || ''
+      });
+
+      if (tournamentData.group_id) {
+        await loadGroupUsers(tournamentData.group_id);
+      }
+
+      // Load teams
+      const teamsData = await apiClient.getTournamentTeams(tournamentId);
+      const loadedTeams: TeamData[] = [];
+      
+      for (const team of teamsData) {
+        const membersData = await apiClient.getTeamMembers(team.id);
+        const players = membersData
+          .map(member => member.user)
+          .filter((user): user is User => user !== undefined && user !== null);
+        
+        loadedTeams.push({
+          id: team.id,
+          name: team.name,
+          color: team.color || '#000000',
+          players
+        });
+      }
+      setTeams(loadedTeams);
+
+      // Load rounds and matches
+      const roundsData = await apiClient.getTournamentRounds(tournamentId);
+      const loadedRounds: RoundData[] = [];
+
+      for (const round of roundsData) {
+        const matchesData = await apiClient.getRoundMatches(round.id);
+        const loadedMatches: MatchData[] = [];
+
+        for (const match of matchesData) {
+          const playersData = await apiClient.getMatchPlayers(match.id);
+          
+          // Organize players by team
+          const team1Players = playersData
+            .filter(p => p.team_id === match.team1_id)
+            .sort((a, b) => (a.position || 0) - (b.position || 0));
+          const team2Players = playersData
+            .filter(p => p.team_id === match.team2_id)
+            .sort((a, b) => (a.position || 0) - (b.position || 0));
+
+          // Convert player IDs to indices in the teams array
+          const team1PlayerIndices = team1Players
+            .map(p => loadedTeams[0].players.findIndex(player => player.id === p.user_id))
+            .filter(idx => idx >= 0);
+          const team2PlayerIndices = team2Players
+            .map(p => loadedTeams[1].players.findIndex(player => player.id === p.user_id))
+            .filter(idx => idx >= 0);
+
+          loadedMatches.push({
+            id: match.id,
+            match_number: match.match_number,
+            format_id: match.match_format_id,
+            holes: match.holes,
+            team1_players: team1PlayerIndices,
+            team2_players: team2PlayerIndices
+          });
+        }
+
+        loadedRounds.push({
+          id: round.id,
+          name: round.name,
+          round_number: round.round_number,
+          date: round.round_date.split('T')[0],
+          matches: loadedMatches
+        });
+      }
+      setRounds(loadedRounds);
+
+      setEditMode(true);
+      setSelectedTournamentId(tournamentId);
+      setStep(1);
+
+    } catch (err) {
+      console.error('Error loading tournament:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to load tournament');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createNewTournament = () => {
+    setEditMode(false);
+    setSelectedTournamentId('');
+    setTournament({ name: '', description: '', start_date: '', end_date: '', group_id: '' });
+    setTeams([
+      { name: 'Team USA', color: '#DC2626', players: [] },
+      { name: 'Team Europe', color: '#2563EB', players: [] }
+    ]);
+    setRounds([]);
+    setStep(1);
+    clearDraft();
   };
 
   const loadGroupUsers = async (groupId: string) => {
@@ -208,84 +332,156 @@ const TournamentSetup = () => {
       setLoading(true);
       setError(null);
 
-      // Step 1: Create tournament
-      const tournamentData: CreateTournamentRequest = {
-        name: tournament.name,
-        description: tournament.description || undefined,
-        start_date: tournament.start_date + 'T00:00:00Z',
-        end_date: tournament.end_date + 'T23:59:59Z',
-        group_id: tournament.group_id || undefined,
-      };
-
-      const newTournament = await apiClient.createTournament(tournamentData);
-      setCreatedTournament(newTournament);
-
-      // Step 2: Create teams
-      const createdTeams = [];
-      for (const team of teams) {
-        const newTeam = await apiClient.createTeam(newTournament.id, {
-          name: team.name,
-          color: team.color,
-        });
-        createdTeams.push(newTeam);
-
-        // Add team members
-        for (const player of team.players) {
-          if (!player.id) {
-            console.warn('Skipping player with no ID:', player);
-            continue;
-          }
-          try {
-            await apiClient.addTeamMember(newTeam.id, player.id);
-          } catch (memberError) {
-            console.error(`Failed to add player ${player.name} (${player.id}) to team:`, memberError);
-            // Continue with other players even if one fails
-          }
+      if (editMode && selectedTournamentId) {
+        // EDIT MODE: Update existing tournament
+        // For simplicity, we'll delete all existing rounds/matches and recreate them
+        // This ensures consistency and avoids complex diffing logic
+        
+        // Step 1: Delete all existing rounds (cascades to matches)
+        const existingRounds = await apiClient.getTournamentRounds(selectedTournamentId);
+        for (const round of existingRounds) {
+          await apiClient.deleteRound(round.id);
         }
-      }
 
-      // Step 3: Create rounds
-      const createdRounds = [];
-      for (const round of rounds) {
-        const newRound = await apiClient.createRound(newTournament.id, {
-          name: round.name,
-          round_number: round.round_number,
-          round_date: round.date,
-          // Optional: could include start_time if we want to support tee times
-          // start_time: '08:00:00', 
-        });
-        createdRounds.push(newRound);
+        // Step 2: Delete all existing teams (cascades to team members)
+        const existingTeams = await apiClient.getTournamentTeams(selectedTournamentId);
+        for (const team of existingTeams) {
+          await apiClient.deleteTeam(team.id);
+        }
 
-        // Create matches for this round
-        for (const match of round.matches) {
-          // Convert player indices to player IDs
-          const team1PlayerIds = match.team1_players
-            .filter(playerIdx => playerIdx !== undefined && teams[0].players[playerIdx])
-            .map(playerIdx => teams[0].players[playerIdx]?.id)
-            .filter(id => id !== undefined);
-          
-          const team2PlayerIds = match.team2_players
-            .filter(playerIdx => playerIdx !== undefined && teams[1].players[playerIdx])
-            .map(playerIdx => teams[1].players[playerIdx]?.id)
-            .filter(id => id !== undefined);
-
-          await apiClient.createMatch(newRound.id, {
-            team1_id: createdTeams[0].id,
-            team2_id: createdTeams[1].id,
-            match_format_id: match.format_id, // Send as 'match_format_id' to match database
-            holes: match.holes,
-            player_assignments: {
-              team1_players: team1PlayerIds,
-              team2_players: team2PlayerIds,
-            },
+        // Step 3: Recreate teams with new data
+        const createdTeams = [];
+        for (const team of teams) {
+          const newTeam = await apiClient.createTeam(selectedTournamentId, {
+            name: team.name,
+            color: team.color,
           });
-        }
-      }
+          createdTeams.push(newTeam);
 
-      alert('Tournament created successfully!');
-      // Clear the saved draft on successful creation
-      localStorage.removeItem('tournament_draft');
-      // Reset form or redirect
+          // Add team members
+          for (const player of team.players) {
+            if (!player.id) {
+              console.warn('Skipping player with no ID:', player);
+              continue;
+            }
+            try {
+              await apiClient.addTeamMember(newTeam.id, player.id);
+            } catch (memberError) {
+              console.error(`Failed to add player ${player.name} (${player.id}) to team:`, memberError);
+            }
+          }
+        }
+
+        // Step 4: Recreate rounds and matches
+        for (const round of rounds) {
+          const newRound = await apiClient.createRound(selectedTournamentId, {
+            name: round.name,
+            round_number: round.round_number,
+            round_date: round.date,
+          });
+
+          // Create matches for this round
+          for (const match of round.matches) {
+            const team1PlayerIds = match.team1_players
+              .filter(playerIdx => playerIdx !== undefined && teams[0].players[playerIdx])
+              .map(playerIdx => teams[0].players[playerIdx]?.id)
+              .filter(id => id !== undefined);
+            
+            const team2PlayerIds = match.team2_players
+              .filter(playerIdx => playerIdx !== undefined && teams[1].players[playerIdx])
+              .map(playerIdx => teams[1].players[playerIdx]?.id)
+              .filter(id => id !== undefined);
+
+            await apiClient.createMatch(newRound.id, {
+              team1_id: createdTeams[0].id,
+              team2_id: createdTeams[1].id,
+              match_format_id: match.format_id,
+              holes: match.holes,
+              player_assignments: {
+                team1_players: team1PlayerIds,
+                team2_players: team2PlayerIds,
+              },
+            });
+          }
+        }
+
+        alert('Tournament updated successfully!');
+        localStorage.removeItem('tournament_draft');
+        
+      } else {
+        // CREATE MODE: Create new tournament
+        const tournamentData: CreateTournamentRequest = {
+          name: tournament.name,
+          description: tournament.description || undefined,
+          start_date: tournament.start_date + 'T00:00:00Z',
+          end_date: tournament.end_date + 'T23:59:59Z',
+          group_id: tournament.group_id || undefined,
+        };
+
+        const newTournament = await apiClient.createTournament(tournamentData);
+        setCreatedTournament(newTournament);
+
+        // Step 2: Create teams
+        const createdTeams = [];
+        for (const team of teams) {
+          const newTeam = await apiClient.createTeam(newTournament.id, {
+            name: team.name,
+            color: team.color,
+          });
+          createdTeams.push(newTeam);
+
+          // Add team members
+          for (const player of team.players) {
+            if (!player.id) {
+              console.warn('Skipping player with no ID:', player);
+              continue;
+            }
+            try {
+              await apiClient.addTeamMember(newTeam.id, player.id);
+            } catch (memberError) {
+              console.error(`Failed to add player ${player.name} (${player.id}) to team:`, memberError);
+            }
+          }
+        }
+
+        // Step 3: Create rounds
+        for (const round of rounds) {
+          const newRound = await apiClient.createRound(newTournament.id, {
+            name: round.name,
+            round_number: round.round_number,
+            round_date: round.date,
+          });
+
+          // Create matches for this round
+          for (const match of round.matches) {
+            const team1PlayerIds = match.team1_players
+              .filter(playerIdx => playerIdx !== undefined && teams[0].players[playerIdx])
+              .map(playerIdx => teams[0].players[playerIdx]?.id)
+              .filter(id => id !== undefined);
+            
+            const team2PlayerIds = match.team2_players
+              .filter(playerIdx => playerIdx !== undefined && teams[1].players[playerIdx])
+              .map(playerIdx => teams[1].players[playerIdx]?.id)
+              .filter(id => id !== undefined);
+
+            await apiClient.createMatch(newRound.id, {
+              team1_id: createdTeams[0].id,
+              team2_id: createdTeams[1].id,
+              match_format_id: match.format_id,
+              holes: match.holes,
+              player_assignments: {
+                team1_players: team1PlayerIds,
+                team2_players: team2PlayerIds,
+              },
+            });
+          }
+        }
+
+        alert('Tournament created successfully!');
+        localStorage.removeItem('tournament_draft');
+      }
+      
+      // Reset form
       setStep(1);
       setTournament({ name: '', description: '', start_date: '', end_date: '', group_id: '' });
       setTeams([
@@ -293,10 +489,14 @@ const TournamentSetup = () => {
         { name: 'Team Europe', color: '#2563EB', players: [] }
       ]);
       setRounds([]);
+      setEditMode(false);
+      setSelectedTournamentId('');
+      // Reload the tournaments list
+      loadInitialData();
       
     } catch (err) {
-      console.error('Error creating tournament:', err);
-      setError(err instanceof ApiError ? err.message : 'Failed to create tournament');
+      console.error('Error saving tournament:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to save tournament');
     } finally {
       setLoading(false);
     }
@@ -372,6 +572,68 @@ const TournamentSetup = () => {
       </div>
 
       <div className="max-w-7xl mx-auto p-6">
+        {/* Tournament Selector - Edit or Create New */}
+        <div className="mb-6 p-4 bg-white rounded-lg shadow">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Mode
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={createNewTournament}
+                  className={`px-4 py-2 rounded-lg font-medium ${
+                    !editMode 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Create New Tournament
+                </button>
+                <button
+                  onClick={() => {
+                    if (!editMode) {
+                      setEditMode(true);
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium ${
+                    editMode 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Edit Existing Tournament
+                </button>
+              </div>
+            </div>
+            
+            {editMode && (
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Tournament to Edit
+                </label>
+                <select
+                  value={selectedTournamentId}
+                  onChange={(e) => {
+                    const tournamentId = e.target.value;
+                    setSelectedTournamentId(tournamentId);
+                    if (tournamentId) {
+                      loadExistingTournament(tournamentId);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
+                >
+                  <option value="">-- Select a tournament --</option>
+                  {existingTournaments.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({new Date(t.start_date).toLocaleDateString()} - {new Date(t.end_date).toLocaleDateString()})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
         {/* Error Display */}
         {error && (
           <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
@@ -467,7 +729,7 @@ const TournamentSetup = () => {
               onClick={handleSubmit}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
-              Create Tournament
+              {editMode ? 'Update Tournament' : 'Create Tournament'}
             </button>
           )}
         </div>

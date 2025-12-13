@@ -141,10 +141,17 @@ func setupRouter(
 
 			// Tournament management (admin or tournament creator)
 			protected.POST("/tournaments", tournamentHandler.CreateTournament)
+			protected.DELETE("/tournaments/:tournament_id", tournamentHandler.DeleteTournament)
 			protected.POST("/tournaments/:tournament_id/teams", tournamentHandler.CreateTeam)
+			protected.DELETE("/teams/:team_id", tournamentHandler.DeleteTeam)
+			protected.GET("/teams/:team_id/members", tournamentHandler.GetTeamMembers)
 			protected.POST("/teams/:team_id/members", tournamentHandler.AddTeamMember)
+			protected.DELETE("/teams/:team_id/members/:user_id", tournamentHandler.DeleteTeamMember)
 			protected.POST("/tournaments/:tournament_id/rounds", tournamentHandler.CreateRound)
+			protected.DELETE("/rounds/:round_id", tournamentHandler.DeleteRound)
 			protected.POST("/rounds/:round_id/matches", tournamentHandler.CreateMatch)
+			protected.DELETE("/matches/:match_id", tournamentHandler.DeleteMatch)
+			protected.GET("/matches/:match_id/players", tournamentHandler.GetMatchPlayers)
 			protected.PATCH("/matches/:match_id/status", tournamentHandler.UpdateMatchStatus)
 
 			// Scoring (players can submit their own scores)
