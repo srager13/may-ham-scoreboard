@@ -179,13 +179,13 @@ const TournamentSetup = () => {
         setUserGroups([]);
       }
 
-      // Load existing tournaments
+      // Load existing tournaments (only tournaments the user is part of)
       try {
-        const tournaments = await apiClient.getTournaments();
-        console.log('Tournaments loaded:', tournaments);
+        const tournaments = await apiClient.getUserTournaments();
+        console.log('User tournaments loaded:', tournaments);
         setExistingTournaments(Array.isArray(tournaments) ? tournaments : []);
       } catch (err) {
-        console.error('Error loading tournaments:', err);
+        console.error('Error loading user tournaments:', err);
         setExistingTournaments([]);
       }
       
