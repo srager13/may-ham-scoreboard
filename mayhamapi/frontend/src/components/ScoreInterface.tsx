@@ -365,6 +365,26 @@ const ScoreInterface: React.FC = () => {
     filteredMatchIds: filteredMatches.map(m => m.id)
   });
 
+  // Group matches by round
+  const matchesByRound = filteredMatches.reduce((acc, match) => {
+    const roundId = match.round?.id || 'unknown';
+    if (!acc[roundId]) {
+      acc[roundId] = {
+        round: match.round,
+        matches: []
+      };
+    }
+    acc[roundId].matches.push(match);
+    return acc;
+  }, {} as Record<string, { round?: Round; matches: MatchWithScores[] }>);
+
+  // Sort rounds by round number
+  const sortedRounds = Object.values(matchesByRound).sort((a, b) => {
+    const roundA = a.round?.round_number || 0;
+    const roundB = b.round?.round_number || 0;
+    return roundA - roundB;
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -499,8 +519,14 @@ const ScoreInterface: React.FC = () => {
               <p>No matches found. {showMyMatchesOnly && 'Try unchecking "Show only my matches".'}</p>
             </div>
           ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredMatches.map((match) => (
+            <div className="space-y-6">
+              {sortedRounds.map(({ round, matches: roundMatches }) => (
+                <div key={round?.id || 'unknown'}>
+                  <h4 className="text-md font-semibold text-gray-700 mb-3 pb-2 border-b border-gray-200">
+                    Round {round?.round_number || '?'} {round?.name ? `- ${round.name}` : ''}
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {roundMatches.map((match) => (
               <button
                 key={match.id}
                 onClick={async () => {
@@ -514,7 +540,7 @@ const ScoreInterface: React.FC = () => {
               >
                 <div className="flex justify-between items-start mb-2">
                   <div className="font-medium">
-                    Round {match.round?.round_number || '?'} - Match {match.match_number}
+                    Match {match.match_number}
                   </div>
                   <div className={`text-xs px-2 py-1 rounded-full ${
                     match.status === 'not_started' || match.status === 'scheduled' ? 'bg-gray-200 text-gray-700' :
@@ -583,6 +609,9 @@ const ScoreInterface: React.FC = () => {
               </button>
             ))}
           </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
