@@ -30,9 +30,12 @@ const ScoreInterface: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showMyMatchesOnly, setShowMyMatchesOnly] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
     loadTournaments();
+    loadCurrentUser();
   }, []);
 
   useEffect(() => {
@@ -40,6 +43,16 @@ const ScoreInterface: React.FC = () => {
       loadMatches();
     }
   }, [selectedTournamentId]);
+
+  const loadCurrentUser = async () => {
+    try {
+      const user = await apiClient.getCurrentUser();
+      console.log('[ScoreInterface] Current user loaded:', { userId: user.id, userName: user.name });
+      setCurrentUserId(user.id);
+    } catch (err) {
+      console.error('Error loading current user:', err);
+    }
+  };
 
   const loadTournaments = async () => {
     try {
@@ -299,6 +312,59 @@ const ScoreInterface: React.FC = () => {
     return selectedMatch?.players && selectedMatch.players.length > 0;
   };
 
+  // Helper function to check if current user is in a match
+  const isUserInMatch = (match: MatchWithScores) => {
+    if (!currentUserId || !match.players) {
+      console.log('[ScoreInterface] isUserInMatch early return:', { 
+        matchId: match.id, 
+        hasCurrentUserId: !!currentUserId, 
+        hasPlayers: !!match.players,
+        currentUserId 
+      });
+      return false;
+    }
+    
+    // Check both user_id and nested user.id for compatibility
+    const isInMatch = match.players.some(player => {
+      const matchesUserId = player.user_id === currentUserId;
+      const matchesNestedId = player.user?.id === currentUserId;
+      console.log('[ScoreInterface] Checking player:', {
+        matchId: match.id,
+        playerId: player.id,
+        playerUserId: player.user_id,
+        playerNestedUserId: player.user?.id,
+        currentUserId,
+        matchesUserId,
+        matchesNestedId,
+        result: matchesUserId || matchesNestedId
+      });
+      return matchesUserId || matchesNestedId;
+    });
+    
+    console.log('[ScoreInterface] isUserInMatch result:', { 
+      matchId: match.id, 
+      matchNumber: match.match_number,
+      isInMatch,
+      playerCount: match.players.length 
+    });
+    
+    return isInMatch;
+  };
+
+  // Filter matches based on the checkbox
+  const filteredMatches = showMyMatchesOnly
+    ? matches.filter(match => isUserInMatch(match))
+    : matches;
+  
+  console.log('[ScoreInterface] Filter state:', {
+    showMyMatchesOnly,
+    currentUserId,
+    totalMatches: matches.length,
+    filteredMatches: filteredMatches.length,
+    matchIds: matches.map(m => m.id),
+    filteredMatchIds: filteredMatches.map(m => m.id)
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -414,11 +480,27 @@ const ScoreInterface: React.FC = () => {
       </div>
 
       {/* Match Selection */}
-      {matches.length > 1 && (
+      {matches.length > 0 && (
         <div className="bg-white shadow-sm rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Select Match</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Select Match</h3>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showMyMatchesOnly}
+                onChange={(e) => setShowMyMatchesOnly(e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <span className="ml-2 text-sm text-gray-700">Show only my matches</span>
+            </label>
+          </div>
+          {filteredMatches.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No matches found. {showMyMatchesOnly && 'Try unchecking "Show only my matches".'}</p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {matches.map((match) => (
+            {filteredMatches.map((match) => (
               <button
                 key={match.id}
                 onClick={async () => {
@@ -501,6 +583,7 @@ const ScoreInterface: React.FC = () => {
               </button>
             ))}
           </div>
+          )}
         </div>
       )}
 

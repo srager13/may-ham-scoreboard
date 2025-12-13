@@ -112,13 +112,14 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 		return
 	}
 
-	// In a real application, you might want to fetch fresh user data from the database
-	// For now, we'll return the data from the JWT token
-	c.JSON(http.StatusOK, gin.H{
-		"user_id":  userID,
-		"email":    c.GetString("user_email"),
-		"is_admin": c.GetBool("is_admin"),
-	})
+	// Fetch fresh user data from the database
+	user, err := h.repo.GetUserByID(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
 }
 
 // POST /api/v1/auth/refresh

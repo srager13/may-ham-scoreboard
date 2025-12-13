@@ -486,6 +486,24 @@ func (r *Repository) GetUserByEmail(email string) (*models.User, error) {
 	return &user, nil
 }
 
+func (r *Repository) GetUserByID(userID string) (*models.User, error) {
+	query := `SELECT id, email, name, handicap, is_admin, created_at, updated_at FROM users WHERE id = $1`
+
+	var user models.User
+	err := r.db.QueryRow(query, userID).Scan(
+		&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return &user, nil
+}
+
 func (r *Repository) GetAllUsers() ([]*models.User, error) {
 	query := `SELECT id, email, name, handicap, is_admin, created_at, updated_at FROM users ORDER BY name ASC`
 
