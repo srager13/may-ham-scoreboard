@@ -995,10 +995,14 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, loading }) => {
   const addMatch = (roundIdx) => {
     const newRounds = [...rounds];
     const safeMatchFormats = Array.isArray(matchFormats) ? matchFormats : [];
+    
+    // Get the last match in this round to copy format and holes from
+    const lastMatch = newRounds[roundIdx].matches[newRounds[roundIdx].matches.length - 1];
+    
     newRounds[roundIdx].matches.push({
       match_number: newRounds[roundIdx].matches.length + 1,
-      format_id: safeMatchFormats.length > 0 ? safeMatchFormats[0].id : '',
-      holes: 6,
+      format_id: lastMatch ? lastMatch.format_id : (safeMatchFormats.length > 0 ? safeMatchFormats[0].id : ''),
+      holes: lastMatch ? lastMatch.holes : 6,
       team1_players: [],
       team2_players: []
     });
