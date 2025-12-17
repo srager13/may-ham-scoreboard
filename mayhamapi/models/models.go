@@ -70,6 +70,7 @@ type TeamMember struct {
 type Round struct {
 	ID           string     `json:"id" db:"id"`
 	TournamentID string     `json:"tournament_id" db:"tournament_id"`
+	GolfCourseID *string    `json:"golf_course_id,omitempty" db:"golf_course_id"`
 	Name         string     `json:"name" db:"name"`
 	RoundNumber  int        `json:"round_number" db:"round_number"`
 	RoundDate    time.Time  `json:"round_date" db:"round_date"`
@@ -77,6 +78,53 @@ type Round struct {
 	Status       string     `json:"status" db:"status"`
 	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
+}
+
+type GolfCourse struct {
+	ID         string    `json:"id" db:"id"`
+	ExternalID *int      `json:"external_id,omitempty" db:"external_id"`
+	ClubName   string    `json:"club_name" db:"club_name"`
+	CourseName string    `json:"course_name" db:"course_name"`
+	Address    *string   `json:"address,omitempty" db:"address"`
+	City       *string   `json:"city,omitempty" db:"city"`
+	State      *string   `json:"state,omitempty" db:"state"`
+	Country    *string   `json:"country,omitempty" db:"country"`
+	Latitude   *float64  `json:"latitude,omitempty" db:"latitude"`
+	Longitude  *float64  `json:"longitude,omitempty" db:"longitude"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
+}
+
+type GolfCourseTee struct {
+	ID                string    `json:"id" db:"id"`
+	CourseID          string    `json:"course_id" db:"course_id"`
+	TeeName           string    `json:"tee_name" db:"tee_name"`
+	Gender            *string   `json:"gender,omitempty" db:"gender"`
+	CourseRating      *float64  `json:"course_rating,omitempty" db:"course_rating"`
+	SlopeRating       *int      `json:"slope_rating,omitempty" db:"slope_rating"`
+	BogeyRating       *float64  `json:"bogey_rating,omitempty" db:"bogey_rating"`
+	TotalYards        *int      `json:"total_yards,omitempty" db:"total_yards"`
+	TotalMeters       *int      `json:"total_meters,omitempty" db:"total_meters"`
+	NumberOfHoles     *int      `json:"number_of_holes,omitempty" db:"number_of_holes"`
+	ParTotal          *int      `json:"par_total,omitempty" db:"par_total"`
+	FrontCourseRating *float64  `json:"front_course_rating,omitempty" db:"front_course_rating"`
+	FrontSlopeRating  *int      `json:"front_slope_rating,omitempty" db:"front_slope_rating"`
+	FrontBogeyRating  *float64  `json:"front_bogey_rating,omitempty" db:"front_bogey_rating"`
+	BackCourseRating  *float64  `json:"back_course_rating,omitempty" db:"back_course_rating"`
+	BackSlopeRating   *int      `json:"back_slope_rating,omitempty" db:"back_slope_rating"`
+	BackBogeyRating   *float64  `json:"back_bogey_rating,omitempty" db:"back_bogey_rating"`
+	CreatedAt         time.Time `json:"created_at" db:"created_at"`
+}
+
+type GolfCourseHole struct {
+	ID         string    `json:"id" db:"id"`
+	TeeID      string    `json:"tee_id" db:"tee_id"`
+	HoleNumber int       `json:"hole_number" db:"hole_number"`
+	Par        int       `json:"par" db:"par"`
+	Yards      *int      `json:"yards,omitempty" db:"yards"`
+	Meters     *int      `json:"meters,omitempty" db:"meters"`
+	Handicap   *int      `json:"handicap,omitempty" db:"handicap"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 }
 
 // MatchFormat represents the type of golf match format

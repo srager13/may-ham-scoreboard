@@ -50,9 +50,10 @@ func main() {
 	scoringHandler := handlers.NewScoringHandler(repo, scoringService)
 	groupHandler := handlers.NewGroupHandler(repo)
 	leaderboardHandler := handlers.NewLeaderboardHandler(repo)
+	golfCourseHandler := handlers.NewGolfCourseHandler(repo)
 
 	// Setup router
-	router := setupRouter(authHandler, tournamentHandler, scoringHandler, groupHandler, leaderboardHandler, wsHub)
+	router := setupRouter(authHandler, tournamentHandler, scoringHandler, groupHandler, leaderboardHandler, golfCourseHandler, wsHub)
 
 	// Start server
 	port := os.Getenv("PORT")
@@ -72,6 +73,7 @@ func setupRouter(
 	scoringHandler *handlers.ScoringHandler,
 	groupHandler *handlers.GroupHandler,
 	leaderboardHandler *handlers.LeaderboardHandler,
+	golfCourseHandler *handlers.GolfCourseHandler,
 	wsHub *websocket.Hub,
 ) *gin.Engine {
 	r := gin.Default()
@@ -157,6 +159,19 @@ func setupRouter(
 			// Scoring (players can submit their own scores)
 			protected.POST("/matches/:match_id/scores", scoringHandler.SubmitScores)
 			protected.PATCH("/matches/:match_id/scores/:hole_number", scoringHandler.UpdateHoleScore)
+
+			// Golf courses
+			protected.GET("/golf-courses", golfCourseHandler.GetStoredGolfCourses)
+			protected.GET("/golf-courses/:id", golfCourseHandler.GetStoredGolfCourse)
+		}
+
+		// Admin-only routes
+		admin := api.Group("/admin")
+		admin.Use(middleware.JWTAuth(), middleware.AdminOnly())
+		{
+			admin.GET("/golf-courses/search", golfCourseHandler.SearchGolfCourses)
+			admin.GET("/golf-courses/external/:id", golfCourseHandler.GetGolfCourseDetails)
+			admin.POST("/golf-courses", golfCourseHandler.SaveGolfCourse)
 		}
 
 		// WebSocket endpoint (optional auth for real-time updates)

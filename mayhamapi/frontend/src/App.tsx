@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Trophy, Users, BarChart3, Settings, AlertCircle } from 'lucide-react';
+import { Trophy, Users, BarChart3, Settings, AlertCircle, Shield } from 'lucide-react';
 import Leaderboard from './components/Leaderboard';
 import TournamentSetup from './components/TournamentSetup';
 import ScoreInterface from './components/ScoreInterface';
 import LandingPage from './components/LandingPage';
 import Groups from './components/Groups';
+import AdminPortal from './components/AdminPortal';
 import { AuthProvider, AuthModal, LoginButton, useAuth } from './components/Auth';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -47,6 +48,62 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+// Admin Route Component
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isAuthenticated, loading } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Authentication Required</h2>
+          <p className="text-gray-600 mb-4">Please sign in to access this feature.</p>
+          <button
+            onClick={() => setShowAuthModal(true)}
+            className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700"
+          >
+            Sign In
+          </button>
+          <AuthModal
+            isOpen={showAuthModal}
+            onClose={() => setShowAuthModal(false)}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (!user?.is_admin) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <Shield className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Admin Access Required</h2>
+          <p className="text-gray-600 mb-4">You do not have permission to access this page.</p>
+          <Link
+            to="/"
+            className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 inline-block"
+          >
+            Return Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+};
+
 // API Error Notification
 const ApiErrorNotification = () => {
   const { apiError } = useAuth();
@@ -78,6 +135,7 @@ const GroupsWrapper: React.FC = () => {
 function AppContent() {
   const location = useLocation();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const { user } = useAuth();
   const isLandingPage = location.pathname === '/';
 
   const navigation = [
@@ -86,6 +144,11 @@ function AppContent() {
     { name: 'Groups', href: '/groups', icon: Users },
     { name: 'Tournament Setup', href: '/tournamentsetup', icon: Settings },
   ];
+
+  // Add admin link if user is admin
+  if (user?.is_admin) {
+    navigation.push({ name: 'Admin', href: '/admin', icon: Shield });
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -188,6 +251,14 @@ function AppContent() {
               <ProtectedRoute>
                 <TournamentSetup />
               </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin" 
+            element={
+              <AdminRoute>
+                <AdminPortal />
+              </AdminRoute>
             } 
           />
         </Routes>

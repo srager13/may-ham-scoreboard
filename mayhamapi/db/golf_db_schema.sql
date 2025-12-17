@@ -64,10 +64,63 @@ CREATE TABLE IF NOT EXISTS team_members (
     UNIQUE(team_id, user_id)
 );
 
+-- Golf Courses
+CREATE TABLE IF NOT EXISTS golf_courses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    external_id INT UNIQUE, -- ID from golfcourseapi.com
+    club_name VARCHAR(255) NOT NULL,
+    course_name VARCHAR(255) NOT NULL,
+    address TEXT,
+    city VARCHAR(255),
+    state VARCHAR(100),
+    country VARCHAR(100),
+    latitude DECIMAL(10, 7),
+    longitude DECIMAL(10, 7),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Golf Course Tees (different tee boxes for a course)
+CREATE TABLE IF NOT EXISTS golf_course_tees (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id UUID REFERENCES golf_courses(id) ON DELETE CASCADE,
+    tee_name VARCHAR(100) NOT NULL,
+    gender VARCHAR(20), -- male, female
+    course_rating DECIMAL(4, 1),
+    slope_rating INT,
+    bogey_rating DECIMAL(4, 1),
+    total_yards INT,
+    total_meters INT,
+    number_of_holes INT,
+    par_total INT,
+    front_course_rating DECIMAL(4, 1),
+    front_slope_rating INT,
+    front_bogey_rating DECIMAL(4, 1),
+    back_course_rating DECIMAL(4, 1),
+    back_slope_rating INT,
+    back_bogey_rating DECIMAL(4, 1),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(course_id, tee_name, gender)
+);
+
+-- Golf Course Holes (hole details for each tee)
+CREATE TABLE IF NOT EXISTS golf_course_holes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tee_id UUID REFERENCES golf_course_tees(id) ON DELETE CASCADE,
+    hole_number INT NOT NULL,
+    par INT NOT NULL,
+    yards INT,
+    meters INT,
+    handicap INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(tee_id, hole_number)
+);
+
 -- Rounds within a tournament (e.g., "Friday Morning", "Saturday Afternoon")
 CREATE TABLE IF NOT EXISTS rounds (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE,
+    golf_course_id UUID REFERENCES golf_courses(id),
     name VARCHAR(255) NOT NULL,
     round_number INT NOT NULL,
     round_date DATE NOT NULL,
@@ -163,6 +216,9 @@ CREATE TABLE IF NOT EXISTS player_stats (
 CREATE INDEX IF NOT EXISTS idx_tournaments_status ON tournaments(status);
 CREATE INDEX IF NOT EXISTS idx_tournaments_group ON tournaments(group_id);
 CREATE INDEX IF NOT EXISTS idx_rounds_tournament ON rounds(tournament_id, round_number);
+CREATE INDEX IF NOT EXISTS idx_rounds_course ON rounds(golf_course_id);
+CREATE INDEX IF NOT EXISTS idx_golf_course_tees_course ON golf_course_tees(course_id);
+CREATE INDEX IF NOT EXISTS idx_golf_course_holes_tee ON golf_course_holes(tee_id);
 CREATE INDEX IF NOT EXISTS idx_matches_round ON matches(round_id);
 CREATE INDEX IF NOT EXISTS idx_match_players_match ON match_players(match_id);
 CREATE INDEX IF NOT EXISTS idx_hole_scores_match ON hole_scores(match_id, hole_number);

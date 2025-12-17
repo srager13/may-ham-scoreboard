@@ -1295,3 +1295,144 @@ func (r *Repository) GetMatchPlayers(matchID string) ([]models.MatchPlayer, erro
 
 	return players, nil
 }
+
+// ============================================
+// Golf Course Methods
+// ============================================
+
+func (r *Repository) CreateGolfCourse(course *models.GolfCourse) error {
+	query := `
+INSERT INTO golf_courses (external_id, club_name, course_name, address, city, state, country, latitude, longitude)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, created_at, updated_at
+`
+	err := r.db.QueryRow(query,
+		course.ExternalID, course.ClubName, course.CourseName, course.Address,
+		course.City, course.State, course.Country, course.Latitude, course.Longitude,
+	).Scan(&course.ID, &course.CreatedAt, &course.UpdatedAt)
+
+	return err
+}
+
+func (r *Repository) CreateGolfCourseTee(tee *models.GolfCourseTee) error {
+	query := `
+INSERT INTO golf_course_tees (
+course_id, tee_name, gender, course_rating, slope_rating, bogey_rating,
+total_yards, total_meters, number_of_holes, par_total,
+front_course_rating, front_slope_rating, front_bogey_rating,
+back_course_rating, back_slope_rating, back_bogey_rating
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		ON CONFLICT (course_id, tee_name, gender) DO UPDATE SET
+			course_rating = EXCLUDED.course_rating,
+			slope_rating = EXCLUDED.slope_rating,
+			bogey_rating = EXCLUDED.bogey_rating,
+			total_yards = EXCLUDED.total_yards,
+			total_meters = EXCLUDED.total_meters,
+			number_of_holes = EXCLUDED.number_of_holes,
+			par_total = EXCLUDED.par_total,
+			front_course_rating = EXCLUDED.front_course_rating,
+			front_slope_rating = EXCLUDED.front_slope_rating,
+			front_bogey_rating = EXCLUDED.front_bogey_rating,
+			back_course_rating = EXCLUDED.back_course_rating,
+			back_slope_rating = EXCLUDED.back_slope_rating,
+			back_bogey_rating = EXCLUDED.back_bogey_rating
+		RETURNING id, created_at
+	`
+	err := r.db.QueryRow(query,
+		tee.CourseID, tee.TeeName, tee.Gender, tee.CourseRating, tee.SlopeRating, tee.BogeyRating,
+		tee.TotalYards, tee.TotalMeters, tee.NumberOfHoles, tee.ParTotal,
+		tee.FrontCourseRating, tee.FrontSlopeRating, tee.FrontBogeyRating,
+		tee.BackCourseRating, tee.BackSlopeRating, tee.BackBogeyRating,
+	).Scan(&tee.ID, &tee.CreatedAt)
+
+	return err
+}
+
+func (r *Repository) CreateGolfCourseHole(hole *models.GolfCourseHole) error {
+	query := `
+		INSERT INTO golf_course_holes (tee_id, hole_number, par, yards, meters, handicap)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (tee_id, hole_number) DO UPDATE SET
+			par = EXCLUDED.par,
+			yards = EXCLUDED.yards,
+			meters = EXCLUDED.meters,
+			handicap = EXCLUDED.handicap
+		RETURNING id, created_at
+	`
+	err := r.db.QueryRow(query,
+		hole.TeeID, hole.HoleNumber, hole.Par, hole.Yards, hole.Meters, hole.Handicap,
+	).Scan(&hole.ID, &hole.CreatedAt)
+
+	return err
+}
+
+func (r *Repository) GetGolfCourses() ([]*models.GolfCourse, error) {
+	query := `
+SELECT id, external_id, club_name, course_name, address, city, state, country, latitude, longitude, created_at, updated_at
+FROM golf_courses
+ORDER BY club_name, course_name
+`
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get golf courses: %w", err)
+	}
+	defer rows.Close()
+
+	var courses []*models.GolfCourse
+	for rows.Next() {
+		var course models.GolfCourse
+		err := rows.Scan(
+			&course.ID, &course.ExternalID, &course.ClubName, &course.CourseName,
+			&course.Address, &course.City, &course.State, &course.Country,
+			&course.Latitude, &course.Longitude, &course.CreatedAt, &course.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan golf course: %w", err)
+		}
+		courses = append(courses, &course)
+	}
+
+	return courses, nil
+}
+
+func (r *Repository) GetGolfCourseByID(courseID string) (*models.GolfCourse, error) {
+	query := `
+SELECT id, external_id, club_name, course_name, address, city, state, country, latitude, longitude, created_at, updated_at
+FROM golf_courses
+WHERE id = $1
+`
+	var course models.GolfCourse
+	err := r.db.QueryRow(query, courseID).Scan(
+		&course.ID, &course.ExternalID, &course.ClubName, &course.CourseName,
+		&course.Address, &course.City, &course.State, &course.Country,
+		&course.Latitude, &course.Longitude, &course.CreatedAt, &course.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get golf course: %w", err)
+	}
+
+	return &course, nil
+}
+
+func (r *Repository) GetGolfCourseByExternalID(externalID int) (*models.GolfCourse, error) {
+	query := `
+SELECT id, external_id, club_name, course_name, address, city, state, country, latitude, longitude, created_at, updated_at
+FROM golf_courses
+WHERE external_id = $1
+`
+	var course models.GolfCourse
+	err := r.db.QueryRow(query, externalID).Scan(
+		&course.ID, &course.ExternalID, &course.ClubName, &course.CourseName,
+		&course.Address, &course.City, &course.State, &course.Country,
+		&course.Latitude, &course.Longitude, &course.CreatedAt, &course.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get golf course by external ID: %w", err)
+	}
+
+	return &course, nil
+}

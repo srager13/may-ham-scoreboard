@@ -119,6 +119,33 @@ export interface GroupMember {
   user?: User;
 }
 
+export interface GolfCourse {
+  id: string;
+  external_id?: number;
+  club_name: string;
+  course_name: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GolfCourseSearchResult {
+  id: number;
+  club_name: string;
+  course_name: string;
+  location: {
+    city: string;
+    state: string;
+    country: string;
+  };
+}
+
+
 export interface TeamStanding {
   team: Team;
   points_won: number;
@@ -493,6 +520,31 @@ class ApiClient {
   async getMatchPlayers(matchId: string): Promise<MatchPlayer[]> {
     const response = await this.request<{ players: MatchPlayer[] }>(`/matches/${matchId}/players`);
     return response.players || [];
+  }
+
+  // Golf Course methods
+  async searchGolfCourses(query: string): Promise<GolfCourseSearchResult[]> {
+    const response = await this.request<{ courses: GolfCourseSearchResult[] }>(`/admin/golf-courses/search?q=${encodeURIComponent(query)}`);
+    return response.courses || [];
+  }
+
+  async getGolfCourseDetails(externalId: number): Promise<any> {
+    return this.request<any>(`/admin/golf-courses/external/${externalId}`);
+  }
+
+  async saveGolfCourse(externalId: number): Promise<GolfCourse> {
+    return this.request<GolfCourse>(`/admin/golf-courses`, {
+      method: 'POST',
+      body: JSON.stringify({ external_id: externalId }),
+    });
+  }
+
+  async getStoredGolfCourses(): Promise<GolfCourse[]> {
+    return this.request<GolfCourse[]>(`/golf-courses`);
+  }
+
+  async getStoredGolfCourse(id: string): Promise<GolfCourse> {
+    return this.request<GolfCourse>(`/golf-courses/${id}`);
   }
 }
 
