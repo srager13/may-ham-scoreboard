@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Users, Trophy, Plus, Trash2, Edit2, Save, X, Search } from 'lucide-react';
-import { apiClient, ApiError, User, MatchFormat, Tournament, Team, Round, CreateTournamentRequest, Group, GolfCourse } from '../services/api';
+import { apiClient, ApiError, User, MatchFormat, Tournament, Team, Round, CreateTournamentRequest, Group, GolfCourse, GolfCourseTee, Pairing, CreatePairingRequest, PairingPlayerRequest, PairingMatchRequest } from '../services/api';
 
 interface TeamData {
   id?: string;
@@ -9,13 +9,28 @@ interface TeamData {
   players: User[];
 }
 
+interface PairingData {
+  id?: string;
+  pairing_number: number;
+  tee_time?: string;
+  golf_course_tee_id?: string;
+  players: PairingPlayerData[];
+  matches: MatchData[];
+}
+
+interface PairingPlayerData {
+  user_id: string;
+  team_id: string;
+  player_order: number;
+}
+
 interface RoundData {
   id?: string;
   name: string;
   round_number: number;
   date: string;
   golf_course_id?: string;
-  matches: MatchData[];
+  pairings: PairingData[];
 }
 
 interface MatchData {
@@ -23,6 +38,7 @@ interface MatchData {
   match_number: number;
   format_id: string;
   holes: number;
+  points_available?: number;
   team1_players: number[];
   team2_players: number[];
 }
@@ -57,6 +73,8 @@ const TournamentSetup = () => {
   const [selectedGroupUsers, setSelectedGroupUsers] = useState<User[]>([]);
   const [createdTournament, setCreatedTournament] = useState<Tournament | null>(null);
   const [golfCourses, setGolfCourses] = useState<GolfCourse[]>([]);
+  const [availableTees, setAvailableTees] = useState<{ [courseId: string]: GolfCourseTee[] }>({});
+
 
   useEffect(() => {
     loadInitialData();
@@ -259,40 +277,54 @@ const TournamentSetup = () => {
       }
       setTeams(loadedTeams);
 
-      // Load rounds and matches
+      // Load rounds and pairings
       const roundsData = await apiClient.getTournamentRounds(tournamentId);
       const loadedRounds: RoundData[] = [];
+      const teesCache: { [courseId: string]: GolfCourseTee[] } = {};
 
       for (const round of roundsData) {
-        const matchesData = await apiClient.getRoundMatches(round.id);
-        const loadedMatches: MatchData[] = [];
+        // Load tees for this course if not already loaded
+        if (round.golf_course_id && !teesCache[round.golf_course_id]) {
+          try {
+            const tees = await apiClient.getGolfCourseTees(round.golf_course_id);
+            teesCache[round.golf_course_id] = tees;
+          } catch (err) {
+            console.error('Failed to load tees for course:', err);
+            teesCache[round.golf_course_id] = [];
+          }
+        }
 
-        for (const match of matchesData) {
-          const playersData = await apiClient.getMatchPlayers(match.id);
-          
-          // Organize players by team
-          const team1Players = playersData
-            .filter(p => p.team_id === match.team1_id)
-            .sort((a, b) => (a.position || 0) - (b.position || 0));
-          const team2Players = playersData
-            .filter(p => p.team_id === match.team2_id)
-            .sort((a, b) => (a.position || 0) - (b.position || 0));
+        const pairingsData = await apiClient.getRoundPairings(round.id);
+        const loadedPairings: PairingData[] = [];
 
-          // Convert player IDs to indices in the teams array
-          const team1PlayerIndices = team1Players
-            .map(p => loadedTeams[0].players.findIndex(player => player.id === p.user_id))
-            .filter(idx => idx >= 0);
-          const team2PlayerIndices = team2Players
-            .map(p => loadedTeams[1].players.findIndex(player => player.id === p.user_id))
-            .filter(idx => idx >= 0);
+        for (const pairing of pairingsData) {
+          const playersData = await apiClient.getPairingPlayers(pairing.id);
+          const matchesData = await apiClient.getPairingMatches(pairing.id);
 
-          loadedMatches.push({
+          const loadedPairingPlayers: PairingPlayerData[] = playersData.map(p => ({
+            user_id: p.user_id,
+            team_id: p.team_id,
+            player_order: p.player_order,
+            user: p.user,
+            team: p.team
+          }));
+
+          const loadedMatches: MatchData[] = matchesData.map(match => ({
             id: match.id,
             match_number: match.match_number,
             format_id: match.match_format_id,
             holes: match.holes,
-            team1_players: team1PlayerIndices,
-            team2_players: team2PlayerIndices
+            team1_players: [],
+            team2_players: []
+          }));
+
+          loadedPairings.push({
+            id: pairing.id,
+            pairing_number: pairing.pairing_number,
+            tee_time: pairing.tee_time || '',
+            golf_course_tee_id: pairing.golf_course_tee_id,
+            players: loadedPairingPlayers,
+            matches: loadedMatches
           });
         }
 
@@ -302,10 +334,11 @@ const TournamentSetup = () => {
           round_number: round.round_number,
           date: round.round_date.split('T')[0],
           golf_course_id: round.golf_course_id,
-          matches: loadedMatches
+          pairings: loadedPairings
         });
       }
       setRounds(loadedRounds);
+      setAvailableTees(teesCache);
 
       setEditMode(true);
       setSelectedTournamentId(tournamentId);
@@ -392,7 +425,7 @@ const TournamentSetup = () => {
           }
         }
 
-        // Step 4: Recreate rounds and matches
+        // Step 4: Recreate rounds and pairings
         for (const round of rounds) {
           const newRound = await apiClient.createRound(selectedTournamentId, {
             name: round.name,
@@ -401,27 +434,28 @@ const TournamentSetup = () => {
             golf_course_id: round.golf_course_id,
           });
 
-          // Create matches for this round
-          for (const match of round.matches) {
-            const team1PlayerIds = match.team1_players
-              .filter(playerIdx => playerIdx !== undefined && teams[0].players[playerIdx])
-              .map(playerIdx => teams[0].players[playerIdx]?.id)
-              .filter(id => id !== undefined);
-            
-            const team2PlayerIds = match.team2_players
-              .filter(playerIdx => playerIdx !== undefined && teams[1].players[playerIdx])
-              .map(playerIdx => teams[1].players[playerIdx]?.id)
-              .filter(id => id !== undefined);
+          // Create pairings for this round
+          for (const pairing of round.pairings || []) {
+            const pairingPlayers: PairingPlayerRequest[] = (pairing.players || []).map(p => ({
+              user_id: p.user_id,
+              team_id: p.team_id,
+              player_order: p.player_order
+            }));
 
-            await apiClient.createMatch(newRound.id, {
+            const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => ({
               team1_id: createdTeams[0].id,
               team2_id: createdTeams[1].id,
               match_format_id: match.format_id,
               holes: match.holes,
-              player_assignments: {
-                team1_players: team1PlayerIds,
-                team2_players: team2PlayerIds,
-              },
+              points_available: match.points_available
+            }));
+
+            await apiClient.createPairing(newRound.id, {
+              pairing_number: pairing.pairing_number,
+              tee_time: pairing.tee_time,
+              golf_course_tee_id: pairing.golf_course_tee_id,
+              players: pairingPlayers,
+              matches: pairingMatches
             });
           }
         }
@@ -465,7 +499,7 @@ const TournamentSetup = () => {
           }
         }
 
-        // Step 3: Create rounds
+        // Step 3: Create rounds and pairings
         for (const round of rounds) {
           const newRound = await apiClient.createRound(newTournament.id, {
             name: round.name,
@@ -474,27 +508,28 @@ const TournamentSetup = () => {
             golf_course_id: round.golf_course_id,
           });
 
-          // Create matches for this round
-          for (const match of round.matches) {
-            const team1PlayerIds = match.team1_players
-              .filter(playerIdx => playerIdx !== undefined && teams[0].players[playerIdx])
-              .map(playerIdx => teams[0].players[playerIdx]?.id)
-              .filter(id => id !== undefined);
-            
-            const team2PlayerIds = match.team2_players
-              .filter(playerIdx => playerIdx !== undefined && teams[1].players[playerIdx])
-              .map(playerIdx => teams[1].players[playerIdx]?.id)
-              .filter(id => id !== undefined);
+          // Create pairings for this round
+          for (const pairing of round.pairings || []) {
+            const pairingPlayers: PairingPlayerRequest[] = (pairing.players || []).map(p => ({
+              user_id: p.user_id,
+              team_id: p.team_id,
+              player_order: p.player_order
+            }));
 
-            await apiClient.createMatch(newRound.id, {
+            const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => ({
               team1_id: createdTeams[0].id,
               team2_id: createdTeams[1].id,
               match_format_id: match.format_id,
               holes: match.holes,
-              player_assignments: {
-                team1_players: team1PlayerIds,
-                team2_players: team2PlayerIds,
-              },
+              points_available: match.points_available
+            }));
+
+            await apiClient.createPairing(newRound.id, {
+              pairing_number: pairing.pairing_number,
+              tee_time: pairing.tee_time,
+              golf_course_tee_id: pairing.golf_course_tee_id,
+              players: pairingPlayers,
+              matches: pairingMatches
             });
           }
         }
@@ -724,6 +759,8 @@ const TournamentSetup = () => {
             teams={teams}
             matchFormats={matchFormats}
             golfCourses={golfCourses}
+            availableTees={availableTees}
+            setAvailableTees={setAvailableTees}
             loading={loading}
           />
         )}
@@ -956,7 +993,7 @@ const TeamsStep = ({ teams, setTeams, availableUsers }) => {
 };
 
 // Step 3: Rounds & Matches
-const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, loading }) => {
+const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, availableTees, setAvailableTees, loading }) => {
   // Show loading message if data is still being fetched
   if (loading) {
     return (
@@ -995,17 +1032,28 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, loadi
     setRounds([
       ...rounds,
       {
-      name: `Round ${rounds.length + 1}`,
-      round_number: rounds.length + 1,
-      date: lastDate,
-      matches: []
+        name: `Round ${rounds.length + 1}`,
+        round_number: rounds.length + 1,
+        date: lastDate,
+        pairings: []
       }
     ]);
   };
 
-  const updateRound = (idx, field, value) => {
+  const updateRound = async (idx, field, value) => {
     const newRounds = [...rounds];
     newRounds[idx][field] = value;
+    
+    // If golf course changed, load tees for that course
+    if (field === 'golf_course_id' && value) {
+      try {
+        const tees = await apiClient.getGolfCourseTees(value);
+        setAvailableTees(prev => ({ ...prev, [value]: tees }));
+      } catch (err) {
+        console.error('Failed to load tees:', err);
+      }
+    }
+    
     setRounds(newRounds);
   };
 
@@ -1013,7 +1061,36 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, loadi
     setRounds(rounds.filter((_, i) => i !== idx));
   };
 
-  const addMatch = (roundIdx) => {
+  const addPairing = (roundIdx) => {
+    const newRounds = [...rounds];
+    const round = newRounds[roundIdx];
+    
+    // Get default tee from previous pairing in this round
+    const previousPairing = round.pairings.length > 0 ? round.pairings[round.pairings.length - 1] : null;
+    const defaultTeeId = previousPairing?.golf_course_tee_id;
+    
+    round.pairings.push({
+      pairing_number: round.pairings.length + 1,
+      golf_course_tee_id: defaultTeeId,
+      players: [],
+      matches: []
+    });
+    setRounds(newRounds);
+  };
+
+  const updatePairing = (roundIdx, pairingIdx, field, value) => {
+    const newRounds = [...rounds];
+    newRounds[roundIdx].pairings[pairingIdx][field] = value;
+    setRounds(newRounds);
+  };
+
+  const deletePairing = (roundIdx, pairingIdx) => {
+    const newRounds = [...rounds];
+    newRounds[roundIdx].pairings = newRounds[roundIdx].pairings.filter((_, i) => i !== pairingIdx);
+    setRounds(newRounds);
+  };
+
+  const addMatch = (roundIdx, pairingIdx) => {
     const newRounds = [...rounds];
     const safeMatchFormats = Array.isArray(matchFormats) ? matchFormats : [];
     
@@ -1073,8 +1150,12 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, loadi
               teams={teams}
               matchFormats={matchFormats}
               golfCourses={golfCourses}
+              availableTees={availableTees}
               updateRound={updateRound}
               deleteRound={deleteRound}
+              addPairing={addPairing}
+              updatePairing={updatePairing}
+              deletePairing={deletePairing}
               addMatch={addMatch}
               updateMatch={updateMatch}
               deleteMatch={deleteMatch}
@@ -1092,8 +1173,12 @@ const RoundConfig = ({
   teams,
   matchFormats,
   golfCourses,
+  availableTees,
   updateRound,
   deleteRound,
+  addPairing,
+  updatePairing,
+  deletePairing,
   addMatch,
   updateMatch,
   deleteMatch
@@ -1147,11 +1232,11 @@ const RoundConfig = ({
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => addMatch(roundIdx)}
+            onClick={() => addPairing(roundIdx)}
             className="flex items-center px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
             <Plus size={16} className="mr-1" />
-            Add Match
+            Add Pairing
           </button>
           <button
             onClick={() => deleteRound(roundIdx)}
@@ -1239,18 +1324,192 @@ const RoundConfig = ({
       </div>
 
       <div className="space-y-3 ml-4">
-        {round.matches.map((match, matchIdx) => (
-          <MatchConfig
-            key={matchIdx}
-            match={match}
-            matchIdx={matchIdx}
-            roundIdx={roundIdx}
-            teams={teams}
-            matchFormats={matchFormats}
-            updateMatch={updateMatch}
-            deleteMatch={deleteMatch}
+        {(round.pairings || []).length === 0 ? (
+          <div className="text-center py-6 text-gray-500 text-sm">
+            No pairings yet. Click "Add Pairing" to create a group of players.
+          </div>
+        ) : (
+          (round.pairings || []).map((pairing, pairingIdx) => (
+            <PairingConfig
+              key={pairingIdx}
+              pairing={pairing}
+              pairingIdx={pairingIdx}
+              roundIdx={roundIdx}
+              round={round}
+              teams={teams}
+              matchFormats={matchFormats}
+              availableTees={round.golf_course_id ? (availableTees[round.golf_course_id] || []) : []}
+              updatePairing={updatePairing}
+              deletePairing={deletePairing}
+              addMatch={addMatch}
+              updateMatch={updateMatch}
+              deleteMatch={deleteMatch}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+const PairingConfig = ({
+  pairing,
+  pairingIdx,
+  roundIdx,
+  round,
+  teams,
+  matchFormats,
+  availableTees,
+  updatePairing,
+  deletePairing,
+  addMatch,
+  updateMatch,
+  deleteMatch
+}) => {
+  const addPlayerToPairing = (userId, teamId) => {
+    const newPlayers = [...(pairing.players || [])];
+    if (newPlayers.length >= 4) {
+      alert('Maximum 4 players per pairing');
+      return;
+    }
+    if (!newPlayers.find(p => p.user_id === userId)) {
+      newPlayers.push({
+        user_id: userId,
+        team_id: teamId,
+        player_order: newPlayers.length + 1
+      });
+      updatePairing(roundIdx, pairingIdx, 'players', newPlayers);
+    }
+  };
+
+  const removePlayerFromPairing = (userId) => {
+    const newPlayers = (pairing.players || []).filter(p => p.user_id !== userId);
+    // Reorder remaining players
+    newPlayers.forEach((p, idx) => p.player_order = idx + 1);
+    updatePairing(roundIdx, pairingIdx, 'players', newPlayers);
+  };
+
+  const allTeamPlayers = teams.flatMap(team => 
+    team.players.map(player => ({ ...player, team_id: team.id, team_name: team.name, team_color: team.color }))
+  );
+
+  const pairingPlayerIds = (pairing.players || []).map(p => p.user_id);
+  const availablePlayers = allTeamPlayers.filter(p => !pairingPlayerIds.includes(p.id));
+
+  return (
+    <div className="bg-gray-50 border-2 border-blue-200 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3 flex-1">
+          <span className="font-bold text-blue-700">Pairing {pairing.pairing_number}</span>
+          <input
+            type="time"
+            value={pairing.tee_time || ''}
+            onChange={(e) => updatePairing(roundIdx, pairingIdx, 'tee_time', e.target.value)}
+            className="border rounded px-2 py-1 text-sm"
+            placeholder="Tee time"
           />
-        ))}
+          {availableTees.length > 0 && (
+            <select
+              value={pairing.golf_course_tee_id || ''}
+              onChange={(e) => updatePairing(roundIdx, pairingIdx, 'golf_course_tee_id', e.target.value)}
+              className="border rounded px-2 py-1 text-sm"
+            >
+              <option value="">Select Tee...</option>
+              {availableTees.map(tee => (
+                <option key={tee.id} value={tee.id}>
+                  {tee.tee_name} {tee.total_yards ? `(${tee.total_yards} yds)` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        <button
+          onClick={() => deletePairing(roundIdx, pairingIdx)}
+          className="text-red-600 hover:text-red-800"
+        >
+          <Trash2 size={18} />
+        </button>
+      </div>
+
+      {/* Players in Pairing */}
+      <div className="mb-3">
+        <label className="block text-sm font-medium mb-2">Players ({(pairing.players || []).length}/4)</label>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          {(pairing.players || []).map((player) => {
+            const user = allTeamPlayers.find(p => p.id === player.user_id);
+            if (!user) return null;
+            return (
+              <div key={player.user_id} className="flex items-center justify-between bg-white rounded p-2 border">
+                <div>
+                  <span className="font-medium text-sm">{user.name}</span>
+                  <span className="text-xs ml-2" style={{ color: user.team_color }}>({user.team_name})</span>
+                </div>
+                <button
+                  onClick={() => removePlayerFromPairing(player.user_id)}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        
+        {availablePlayers.length > 0 && (pairing.players || []).length < 4 && (
+          <select
+            value=""
+            onChange={(e) => {
+              const selectedPlayer = allTeamPlayers.find(p => p.id === e.target.value);
+              if (selectedPlayer) {
+                addPlayerToPairing(selectedPlayer.id, selectedPlayer.team_id);
+              }
+            }}
+            className="w-full p-2 border rounded text-sm"
+          >
+            <option value="">+ Add player to pairing...</option>
+            {availablePlayers.map(player => (
+              <option key={player.id} value={player.id}>
+                {player.name} ({player.team_name})
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* Matches within Pairing */}
+      <div className="border-t pt-3">
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-sm font-medium">Matches in this Pairing</label>
+          <button
+            onClick={() => addMatch(roundIdx, pairingIdx)}
+            className="flex items-center px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-xs"
+          >
+            <Plus size={14} className="mr-1" />
+            Add Match
+          </button>
+        </div>
+        
+        <div className="space-y-2">
+          {(pairing.matches || []).length === 0 ? (
+            <div className="text-center py-3 text-gray-500 text-xs">
+              No matches configured. Add a match format for this pairing.
+            </div>
+          ) : (
+            (pairing.matches || []).map((match, matchIdx) => (
+              <MatchConfig
+                key={matchIdx}
+                match={match}
+                matchIdx={matchIdx}
+                pairingIdx={pairingIdx}
+                roundIdx={roundIdx}
+                teams={teams}
+                matchFormats={matchFormats}
+                updateMatch={updateMatch}
+                deleteMatch={deleteMatch}
+              />
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1259,6 +1518,7 @@ const RoundConfig = ({
 const MatchConfig = ({
   match,
   matchIdx,
+  pairingIdx,
   roundIdx,
   teams,
   matchFormats,
@@ -1271,24 +1531,24 @@ const MatchConfig = ({
   const playersNeeded = selectedFormat?.players_per_side || 1;
 
   return (
-    <div className="bg-gray-50 rounded p-4">
-      <div className="flex items-center justify-between mb-3">
-        <span className="font-medium">Match {matchIdx + 1}</span>
+    <div className="bg-white rounded p-3 border">
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-medium text-sm">Match {matchIdx + 1}</span>
         <button
-          onClick={() => deleteMatch(roundIdx, matchIdx)}
+          onClick={() => deleteMatch(roundIdx, pairingIdx, matchIdx)}
           className="text-red-600 hover:text-red-800"
         >
-          <X size={18} />
+          <X size={16} />
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-3">
         <div>
-          <label className="block text-sm font-medium mb-1">Format</label>
+          <label className="block text-xs font-medium mb-1">Format</label>
           <select
             value={match.format_id}
-            onChange={(e) => updateMatch(roundIdx, matchIdx, 'format_id', e.target.value)}
-            className="w-full p-2 border rounded"
+            onChange={(e) => updateMatch(roundIdx, pairingIdx, matchIdx, 'format_id', e.target.value)}
+            className="w-full p-2 border rounded text-sm"
             disabled={safeMatchFormats.length === 0}
           >
             <option value="">
@@ -1301,26 +1561,38 @@ const MatchConfig = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Holes</label>
+          <label className="block text-xs font-medium mb-1">Holes</label>
           <select
             value={match.holes}
-            onChange={(e) => updateMatch(roundIdx, matchIdx, 'holes', parseInt(e.target.value))}
-            className="w-full p-2 border rounded"
+            onChange={(e) => updateMatch(roundIdx, pairingIdx, matchIdx, 'holes', parseInt(e.target.value))}
+            className="w-full p-2 border rounded text-sm"
           >
             <option value={6}>6 holes</option>
             <option value={9}>9 holes</option>
             <option value={18}>18 holes</option>
           </select>
         </div>
+
+        <div>
+          <label className="block text-xs font-medium mb-1">Points</label>
+          <input
+            type="number"
+            step="0.5"
+            min="0"
+            value={match.points_available || 1}
+            onChange={(e) => updateMatch(roundIdx, pairingIdx, matchIdx, 'points_available', parseFloat(e.target.value) || 1)}
+            className="w-full p-2 border rounded text-sm"
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mt-3">
+      <div className="grid grid-cols-2 gap-3 mt-2">
         {teams.map((team, teamIdx) => (
           <div key={teamIdx}>
-            <label className="block text-sm font-medium mb-1" style={{ color: team.color }}>
+            <label className="block text-xs font-medium mb-1" style={{ color: team.color }}>
               {team.name} Players
             </label>
-            <div className="space-y-2">
+            <div className="space-y-1">
               {Array.from({ length: playersNeeded }).map((_, playerSlot) => (
                 <select
                   key={playerSlot}
@@ -1332,14 +1604,14 @@ const MatchConfig = ({
                     } else {
                       newPlayers[playerSlot] = parseInt(e.target.value);
                     }
-                    updateMatch(roundIdx, matchIdx, teamIdx === 0 ? 'team1_players' : 'team2_players', newPlayers);
+                    updateMatch(roundIdx, pairingIdx, matchIdx, teamIdx === 0 ? 'team1_players' : 'team2_players', newPlayers);
                   }}
-                  className="w-full p-2 border rounded text-sm"
+                  className="w-full p-1 border rounded text-xs"
                 >
-                  <option value="">Select player...</option>
+                  <option value="">Select...</option>
                   {team.players.map((player, pIdx) => (
                     <option key={player.id} value={pIdx.toString()}>
-                      {player.name} (HCP: {player.handicap})
+                      {player.name}
                     </option>
                   ))}
                 </select>
@@ -1410,7 +1682,7 @@ const ReviewStep = ({ tournament, teams, rounds, golfCourses }) => {
 
         {/* Rounds Summary */}
         <div>
-          <h3 className="text-lg font-bold mb-3">Rounds & Matches</h3>
+          <h3 className="text-lg font-bold mb-3">Rounds & Pairings</h3>
           <div className="space-y-3">
             {rounds.map((round, idx) => (
               <div key={idx} className="border rounded p-3">
@@ -1424,8 +1696,23 @@ const ReviewStep = ({ tournament, teams, rounds, golfCourses }) => {
                   </div>
                 )}
                 <div className="text-sm text-gray-700">
-                  {round.matches.length} match{round.matches.length !== 1 ? 'es' : ''} configured
+                  {round.pairings?.length || 0} pairing{(round.pairings?.length || 0) !== 1 ? 's' : ''} configured
                 </div>
+                {round.pairings && round.pairings.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    {round.pairings.map(pairing => (
+                      <div key={pairing.pairing_number} className="bg-gray-50 rounded p-2 text-sm">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="font-medium">Pairing {pairing.pairing_number}</span>
+                          {pairing.tee_time && <span className="text-gray-600">Tee Time: {pairing.tee_time}</span>}
+                        </div>
+                        <div className="text-gray-600">
+                          {pairing.players?.length || 0} player{(pairing.players?.length || 0) !== 1 ? 's' : ''}, {pairing.matches?.length || 0} match{(pairing.matches?.length || 0) !== 1 ? 'es' : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

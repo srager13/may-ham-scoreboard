@@ -321,3 +321,17 @@ func (h *GolfCourseHandler) GetStoredGolfCourse(c *gin.Context) {
 
 	c.JSON(http.StatusOK, course)
 }
+
+// GetGolfCourseTees returns all tees for a specific golf course
+// GET /api/v1/golf-courses/:id/tees
+func (h *GolfCourseHandler) GetGolfCourseTees(c *gin.Context) {
+	courseID := c.Param("id")
+
+	tees, err := h.repo.GetGolfCourseTees(courseID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get golf course tees"})
+		return
+	}
+
+	c.JSON(http.StatusOK, tees)
+}

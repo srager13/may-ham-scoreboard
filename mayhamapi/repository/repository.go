@@ -1697,3 +1697,39 @@ WHERE external_id = $1
 
 	return &course, nil
 }
+
+func (r *Repository) GetGolfCourseTees(courseID string) ([]*models.GolfCourseTee, error) {
+	query := `
+SELECT id, course_id, tee_name, gender, course_rating, slope_rating, bogey_rating,
+       total_yards, total_meters, number_of_holes, par_total,
+       front_course_rating, front_slope_rating, front_bogey_rating,
+       back_course_rating, back_slope_rating, back_bogey_rating, created_at
+FROM golf_course_tees
+WHERE course_id = $1
+ORDER BY total_yards DESC
+`
+	rows, err := r.db.Query(query, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get golf course tees: %w", err)
+	}
+	defer rows.Close()
+
+	var tees []*models.GolfCourseTee
+	for rows.Next() {
+		var tee models.GolfCourseTee
+		err := rows.Scan(
+			&tee.ID, &tee.CourseID, &tee.TeeName, &tee.Gender,
+			&tee.CourseRating, &tee.SlopeRating, &tee.BogeyRating,
+			&tee.TotalYards, &tee.TotalMeters, &tee.NumberOfHoles, &tee.ParTotal,
+			&tee.FrontCourseRating, &tee.FrontSlopeRating, &tee.FrontBogeyRating,
+			&tee.BackCourseRating, &tee.BackSlopeRating, &tee.BackBogeyRating,
+			&tee.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan golf course tee: %w", err)
+		}
+		tees = append(tees, &tee)
+	}
+
+	return tees, nil
+}

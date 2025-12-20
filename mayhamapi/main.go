@@ -170,6 +170,7 @@ func setupRouter(
 			// Golf courses
 			protected.GET("/golf-courses", golfCourseHandler.GetStoredGolfCourses)
 			protected.GET("/golf-courses/:id", golfCourseHandler.GetStoredGolfCourse)
+			protected.GET("/golf-courses/:id/tees", golfCourseHandler.GetGolfCourseTees)
 		}
 
 		// Admin-only routes

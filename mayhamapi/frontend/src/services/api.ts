@@ -67,6 +67,7 @@ export interface MatchFormat {
 
 export interface Match {
   id: string;
+  pairing_id?: string;
   round_id: string;
   match_format_id: string;
   match_number: number;
@@ -80,7 +81,30 @@ export interface Match {
   team1?: Team;
   team2?: Team;
   format?: MatchFormat;
-  players?: MatchPlayer[];
+  pairing?: Pairing;
+  created_at: string;
+}
+
+export interface Pairing {
+  id: string;
+  round_id: string;
+  pairing_number: number;
+  tee_time?: string;
+  golf_course_tee_id?: string;
+  status: string;
+  players?: PairingPlayer[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PairingPlayer {
+  id: string;
+  pairing_id: string;
+  user_id: string;
+  team_id: string;
+  player_order: number;
+  user?: User;
+  team?: Team;
   created_at: string;
 }
 
@@ -134,6 +158,27 @@ export interface GolfCourse {
   longitude?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface GolfCourseTee {
+  id: string;
+  course_id: string;
+  tee_name: string;
+  gender?: string;
+  course_rating?: number;
+  slope_rating?: number;
+  bogey_rating?: number;
+  total_yards?: number;
+  total_meters?: number;
+  number_of_holes?: number;
+  par_total?: number;
+  front_course_rating?: number;
+  front_slope_rating?: number;
+  front_bogey_rating?: number;
+  back_course_rating?: number;
+  back_slope_rating?: number;
+  back_bogey_rating?: number;
+  created_at: string;
 }
 
 export interface GolfCourseSearchResult {
@@ -212,10 +257,33 @@ export interface CreateMatchRequest {
   team2_id: string;
   match_format_id: string;
   holes: number;
-  player_assignments: {
+  player_assignments?: {
     team1_players: string[];
     team2_players: string[];
   };
+  points_available?: number;
+}
+
+export interface CreatePairingRequest {
+  pairing_number: number;
+  tee_time?: string;
+  golf_course_tee_id?: string;
+  players: PairingPlayerRequest[];
+  matches: PairingMatchRequest[];
+}
+
+export interface PairingPlayerRequest {
+  user_id: string;
+  team_id: string;
+  player_order: number;
+}
+
+export interface PairingMatchRequest {
+  team1_id: string;
+  team2_id: string;
+  match_format_id: string;
+  holes: number;
+  points_available?: number;
 }
 
 export interface SubmitScoresRequest {
@@ -403,6 +471,33 @@ class ApiClient {
     });
   }
 
+  // Pairings
+  async getRoundPairings(roundId: string): Promise<Pairing[]> {
+    const response = await this.request<{pairings: Pairing[]}>(`/rounds/${roundId}/pairings`);
+    return response.pairings || [];
+  }
+
+  async getPairing(pairingId: string): Promise<Pairing> {
+    return this.request<Pairing>(`/pairings/${pairingId}`);
+  }
+
+  async createPairing(roundId: string, data: CreatePairingRequest): Promise<Pairing> {
+    return this.request<Pairing>(`/rounds/${roundId}/pairings`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getPairingPlayers(pairingId: string): Promise<PairingPlayer[]> {
+    const response = await this.request<{players: PairingPlayer[]}>(`/pairings/${pairingId}/players`);
+    return response.players || [];
+  }
+
+  async getPairingMatches(pairingId: string): Promise<Match[]> {
+    const response = await this.request<{matches: Match[]}>(`/pairings/${pairingId}/matches`);
+    return response.matches || [];
+  }
+
   // Matches
   async getRoundMatches(roundId: string): Promise<Match[]> {
     const response = await this.request<{matches: Match[]}>(`/rounds/${roundId}/matches`);
@@ -548,6 +643,10 @@ class ApiClient {
 
   async getStoredGolfCourse(id: string): Promise<GolfCourse> {
     return this.request<GolfCourse>(`/golf-courses/${id}`);
+  }
+
+  async getGolfCourseTees(courseId: string): Promise<GolfCourseTee[]> {
+    return this.request<GolfCourseTee[]>(`/golf-courses/${courseId}/tees`);
   }
 }
 
