@@ -131,6 +131,30 @@ CREATE TABLE IF NOT EXISTS rounds (
     UNIQUE(tournament_id, round_number)
 );
 
+-- Pairings (groupings of players playing together in a round)
+CREATE TABLE IF NOT EXISTS pairings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    round_id UUID REFERENCES rounds(id) ON DELETE CASCADE,
+    pairing_number INT NOT NULL, -- order within the round
+    tee_time TIMESTAMP, -- scheduled tee time for this group
+    golf_course_tee_id UUID REFERENCES golf_course_tees(id), -- which tee box they're playing from
+    status VARCHAR(50) DEFAULT 'not_started', -- not_started, in_progress, completed
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(round_id, pairing_number)
+);
+
+-- Players in a pairing (the physical group playing together)
+CREATE TABLE IF NOT EXISTS pairing_players (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pairing_id UUID REFERENCES pairings(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id),
+    team_id UUID REFERENCES teams(id),
+    player_order INT, -- order in the pairing
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(pairing_id, user_id)
+);
+
 -- Match formats/types
 CREATE TABLE IF NOT EXISTS match_formats (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -141,12 +165,13 @@ CREATE TABLE IF NOT EXISTS match_formats (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Matches within a round
+-- Matches within a pairing (multiple match results can be calculated from one pairing)
 CREATE TABLE IF NOT EXISTS matches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    round_id UUID REFERENCES rounds(id) ON DELETE CASCADE,
+    pairing_id UUID REFERENCES pairings(id) ON DELETE CASCADE,
+    round_id UUID REFERENCES rounds(id) ON DELETE CASCADE, -- kept for easier querying
     match_format_id UUID REFERENCES match_formats(id),
-    match_number INT NOT NULL, -- order within the round
+    match_number INT NOT NULL, -- order within the pairing
     holes INT NOT NULL, -- 6, 9, or 18
     status VARCHAR(50) DEFAULT 'not_started', -- not_started, in_progress, completed
     team1_id UUID REFERENCES teams(id),
@@ -156,29 +181,19 @@ CREATE TABLE IF NOT EXISTS matches (
     team2_points DECIMAL(3,1) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(round_id, match_number)
-);
-
--- Players participating in a specific match
-CREATE TABLE IF NOT EXISTS match_players (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    match_id UUID REFERENCES matches(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id),
-    team_id UUID REFERENCES teams(id),
-    player_order INT, -- for tracking which player in a pairing
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    UNIQUE(pairing_id, match_number)
 );
 
 -- Hole-by-hole scores
 CREATE TABLE IF NOT EXISTS hole_scores (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    match_id UUID REFERENCES matches(id) ON DELETE CASCADE,
+    pairing_id UUID REFERENCES pairings(id) ON DELETE CASCADE,
     hole_number INT NOT NULL,
     user_id UUID REFERENCES users(id),
     strokes INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(match_id, hole_number, user_id)
+    UNIQUE(pairing_id, hole_number, user_id)
 );
 
 -- Hole results (who won each hole)
@@ -217,11 +232,14 @@ CREATE INDEX IF NOT EXISTS idx_tournaments_status ON tournaments(status);
 CREATE INDEX IF NOT EXISTS idx_tournaments_group ON tournaments(group_id);
 CREATE INDEX IF NOT EXISTS idx_rounds_tournament ON rounds(tournament_id, round_number);
 CREATE INDEX IF NOT EXISTS idx_rounds_course ON rounds(golf_course_id);
+CREATE INDEX IF NOT EXISTS idx_pairings_round ON pairings(round_id);
+CREATE INDEX IF NOT EXISTS idx_pairing_players_pairing ON pairing_players(pairing_id);
+CREATE INDEX IF NOT EXISTS idx_pairing_players_user ON pairing_players(user_id);
 CREATE INDEX IF NOT EXISTS idx_golf_course_tees_course ON golf_course_tees(course_id);
 CREATE INDEX IF NOT EXISTS idx_golf_course_holes_tee ON golf_course_holes(tee_id);
+CREATE INDEX IF NOT EXISTS idx_matches_pairing ON matches(pairing_id);
 CREATE INDEX IF NOT EXISTS idx_matches_round ON matches(round_id);
-CREATE INDEX IF NOT EXISTS idx_match_players_match ON match_players(match_id);
-CREATE INDEX IF NOT EXISTS idx_hole_scores_match ON hole_scores(match_id, hole_number);
+CREATE INDEX IF NOT EXISTS idx_hole_scores_pairing ON hole_scores(pairing_id, hole_number);
 CREATE INDEX IF NOT EXISTS idx_hole_results_match ON hole_results(match_id);
 CREATE INDEX IF NOT EXISTS idx_player_stats_tournament ON player_stats(tournament_id);
 CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id);
