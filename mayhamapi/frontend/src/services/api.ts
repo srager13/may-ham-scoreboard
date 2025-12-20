@@ -45,6 +45,7 @@ export interface TeamMember {
 export interface Round {
   id: string;
   tournament_id: string;
+  golf_course_id?: string;
   name: string;
   round_number: number;
   round_date: string;
@@ -202,6 +203,7 @@ export interface CreateRoundRequest {
   round_number: number;
   round_date: string;
   start_time?: string;
+  golf_course_id?: string;
 }
 
 export interface CreateMatchRequest {

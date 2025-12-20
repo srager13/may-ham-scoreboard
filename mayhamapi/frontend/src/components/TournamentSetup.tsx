@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users, Trophy, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
-import { apiClient, ApiError, User, MatchFormat, Tournament, Team, Round, CreateTournamentRequest, Group } from '../services/api';
+import { Calendar, Users, Trophy, Plus, Trash2, Edit2, Save, X, Search } from 'lucide-react';
+import { apiClient, ApiError, User, MatchFormat, Tournament, Team, Round, CreateTournamentRequest, Group, GolfCourse } from '../services/api';
 
 interface TeamData {
   id?: string;
@@ -14,6 +14,7 @@ interface RoundData {
   name: string;
   round_number: number;
   date: string;
+  golf_course_id?: string;
   matches: MatchData[];
 }
 
@@ -55,6 +56,7 @@ const TournamentSetup = () => {
   const [userGroups, setUserGroups] = useState<Group[]>([]);
   const [selectedGroupUsers, setSelectedGroupUsers] = useState<User[]>([]);
   const [createdTournament, setCreatedTournament] = useState<Tournament | null>(null);
+  const [golfCourses, setGolfCourses] = useState<GolfCourse[]>([]);
 
   useEffect(() => {
     loadInitialData();
@@ -188,6 +190,16 @@ const TournamentSetup = () => {
         console.error('Error loading user tournaments:', err);
         setExistingTournaments([]);
       }
+
+      // Load golf courses
+      try {
+        const courses = await apiClient.getStoredGolfCourses();
+        console.log('Golf courses loaded:', courses);
+        setGolfCourses(Array.isArray(courses) ? courses : []);
+      } catch (err) {
+        console.error('Error loading golf courses:', err);
+        setGolfCourses([]);
+      }
       
     } catch (err) {
       console.error('Error loading initial data:', err);
@@ -289,6 +301,7 @@ const TournamentSetup = () => {
           name: round.name,
           round_number: round.round_number,
           date: round.round_date.split('T')[0],
+          golf_course_id: round.golf_course_id,
           matches: loadedMatches
         });
       }
@@ -385,6 +398,7 @@ const TournamentSetup = () => {
             name: round.name,
             round_number: round.round_number,
             round_date: round.date,
+            golf_course_id: round.golf_course_id,
           });
 
           // Create matches for this round
@@ -457,6 +471,7 @@ const TournamentSetup = () => {
             name: round.name,
             round_number: round.round_number,
             round_date: round.date,
+            golf_course_id: round.golf_course_id,
           });
 
           // Create matches for this round
@@ -708,11 +723,17 @@ const TournamentSetup = () => {
             setRounds={setRounds} 
             teams={teams}
             matchFormats={matchFormats}
+            golfCourses={golfCourses}
             loading={loading}
           />
         )}
         {step === 4 && (
-          <ReviewStep tournament={tournament} teams={teams} rounds={rounds} />
+          <ReviewStep 
+            tournament={tournament} 
+            teams={teams} 
+            rounds={rounds}
+            golfCourses={golfCourses}
+          />
         )}
 
         {/* Navigation Buttons */}
@@ -935,7 +956,7 @@ const TeamsStep = ({ teams, setTeams, availableUsers }) => {
 };
 
 // Step 3: Rounds & Matches
-const RoundsStep = ({ rounds, setRounds, teams, matchFormats, loading }) => {
+const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, loading }) => {
   // Show loading message if data is still being fetched
   if (loading) {
     return (
@@ -1051,6 +1072,7 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, loading }) => {
               roundIdx={roundIdx}
               teams={teams}
               matchFormats={matchFormats}
+              golfCourses={golfCourses}
               updateRound={updateRound}
               deleteRound={deleteRound}
               addMatch={addMatch}
@@ -1069,12 +1091,42 @@ const RoundConfig = ({
   roundIdx,
   teams,
   matchFormats,
+  golfCourses,
   updateRound,
   deleteRound,
   addMatch,
   updateMatch,
   deleteMatch
 }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  
+  // Filter golf courses based on search term
+  const filteredCourses = (golfCourses || []).filter(course => {
+    if (!searchTerm) return true;
+    const search = searchTerm.toLowerCase();
+    return (
+      course.club_name.toLowerCase().includes(search) ||
+      course.course_name.toLowerCase().includes(search) ||
+      (course.city && course.city.toLowerCase().includes(search)) ||
+      (course.state && course.state.toLowerCase().includes(search))
+    );
+  });
+
+  const selectedCourse = golfCourses?.find(c => c.id === round.golf_course_id);
+  
+  const formatCourseName = (course: GolfCourse) => {
+    const parts = [course.club_name];
+    if (course.course_name && course.course_name !== course.club_name) {
+      parts.push(`- ${course.course_name}`);
+    }
+    if (course.city || course.state) {
+      const location = [course.city, course.state].filter(Boolean).join(', ');
+      parts.push(`(${location})`);
+    }
+    return parts.join(' ');
+  };
+
   return (
     <div className="border-2 rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
@@ -1108,6 +1160,82 @@ const RoundConfig = ({
             <Trash2 size={18} />
           </button>
         </div>
+      </div>
+
+      {/* Golf Course Selector */}
+      <div className="mb-4 ml-4 relative">
+        <label className="block text-sm font-medium mb-1">Golf Course (optional)</label>
+        <div className="relative">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setShowDropdown(true);
+              }}
+              onFocus={() => setShowDropdown(true)}
+              placeholder={selectedCourse ? formatCourseName(selectedCourse) : "Search for a golf course..."}
+              className="w-full p-2 pr-8 border rounded"
+            />
+            <Search className="absolute right-2 top-2.5 text-gray-400" size={18} />
+          </div>
+          
+          {showDropdown && (
+            <>
+              <div 
+                className="fixed inset-0 z-10" 
+                onClick={() => setShowDropdown(false)}
+              />
+              <div className="absolute z-20 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                <div
+                  onClick={() => {
+                    updateRound(roundIdx, 'golf_course_id', undefined);
+                    setSearchTerm('');
+                    setShowDropdown(false);
+                  }}
+                  className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-gray-500 italic"
+                >
+                  No golf course
+                </div>
+                {filteredCourses.length === 0 ? (
+                  <div className="px-3 py-2 text-gray-500 text-sm">
+                    No courses found. {searchTerm && "Try a different search term."}
+                  </div>
+                ) : (
+                  filteredCourses.map(course => (
+                    <div
+                      key={course.id}
+                      onClick={() => {
+                        updateRound(roundIdx, 'golf_course_id', course.id);
+                        setSearchTerm('');
+                        setShowDropdown(false);
+                      }}
+                      className={`px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+                        course.id === round.golf_course_id ? 'bg-blue-50' : ''
+                      }`}
+                    >
+                      <div className="font-medium">{course.club_name}</div>
+                      {course.course_name && course.course_name !== course.club_name && (
+                        <div className="text-sm text-gray-600">{course.course_name}</div>
+                      )}
+                      {(course.city || course.state) && (
+                        <div className="text-xs text-gray-500">
+                          {[course.city, course.state].filter(Boolean).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </div>
+        {selectedCourse && !showDropdown && (
+          <div className="mt-1 text-sm text-gray-600">
+            Selected: {formatCourseName(selectedCourse)}
+          </div>
+        )}
       </div>
 
       <div className="space-y-3 ml-4">
@@ -1225,7 +1353,21 @@ const MatchConfig = ({
 };
 
 // Step 4: Review
-const ReviewStep = ({ tournament, teams, rounds }) => {
+const ReviewStep = ({ tournament, teams, rounds, golfCourses }) => {
+  const getCourseName = (courseId: string) => {
+    const course = golfCourses?.find(c => c.id === courseId);
+    if (!course) return 'Not specified';
+    const parts = [course.club_name];
+    if (course.course_name && course.course_name !== course.club_name) {
+      parts.push(`- ${course.course_name}`);
+    }
+    if (course.city || course.state) {
+      const location = [course.city, course.state].filter(Boolean).join(', ');
+      parts.push(`(${location})`);
+    }
+    return parts.join(' ');
+  };
+
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-2xl font-bold mb-6">Review Tournament Setup</h2>
@@ -1276,6 +1418,11 @@ const ReviewStep = ({ tournament, teams, rounds }) => {
                   <h4 className="font-bold">{round.name}</h4>
                   <span className="text-sm text-gray-600">{round.date}</span>
                 </div>
+                {round.golf_course_id && (
+                  <div className="text-sm text-gray-600 mb-1">
+                    <span className="font-medium">Course:</span> {getCourseName(round.golf_course_id)}
+                  </div>
+                )}
                 <div className="text-sm text-gray-700">
                   {round.matches.length} match{round.matches.length !== 1 ? 'es' : ''} configured
                 </div>
