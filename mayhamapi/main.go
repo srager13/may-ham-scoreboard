@@ -135,6 +135,7 @@ func setupRouter(
 			protected.GET("/pairings/:pairing_id/players", tournamentHandler.GetPairingPlayers)
 			protected.GET("/pairings/:pairing_id/matches", tournamentHandler.GetPairingMatches)
 			protected.GET("/pairings/:pairing_id/scores", scoringHandler.GetPairingScores)
+			protected.PATCH("/pairings/:pairing_id/status", tournamentHandler.UpdatePairingStatus)
 			protected.GET("/matches/:match_id", tournamentHandler.GetMatch)
 			protected.GET("/matches/:match_id/scores", scoringHandler.GetMatchScores)
 			protected.GET("/match-formats", tournamentHandler.GetMatchFormats)

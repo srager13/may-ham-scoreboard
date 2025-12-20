@@ -832,6 +832,18 @@ func (r *Repository) UpdateMatchStatus(matchID, status string) error {
 	return nil
 }
 
+func (r *Repository) UpdatePairingStatus(pairingID, status string) error {
+	query := `UPDATE pairings SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`
+	args := []interface{}{status, pairingID}
+
+	_, err := r.db.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update pairing status: %w", err)
+	}
+
+	return nil
+}
+
 // ============================================
 // Match Format Repository Methods
 // ============================================

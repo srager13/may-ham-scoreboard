@@ -279,6 +279,41 @@ func (h *TournamentHandler) GetPairingMatches(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"matches": matches})
 }
 
+// PATCH /api/v1/pairings/:pairing_id/status
+func (h *TournamentHandler) UpdatePairingStatus(c *gin.Context) {
+	pairingID := c.Param("pairing_id")
+
+	var req struct {
+		Status string `json:"status" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate status
+	validStatuses := []string{"not_started", "in_progress", "completed"}
+	isValid := false
+	for _, status := range validStatuses {
+		if req.Status == status {
+			isValid = true
+			break
+		}
+	}
+	if !isValid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status. Must be one of: not_started, in_progress, completed"})
+		return
+	}
+
+	err := h.repo.UpdatePairingStatus(pairingID, req.Status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Pairing status updated successfully"})
+}
+
 // POST /api/v1/rounds/:round_id/matches
 func (h *TournamentHandler) CreateMatch(c *gin.Context) {
 	roundID := c.Param("round_id")

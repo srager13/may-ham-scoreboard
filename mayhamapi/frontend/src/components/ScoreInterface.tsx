@@ -1,36 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Target, Award, RefreshCw, Save, AlertCircle } from 'lucide-react';
-import { apiClient, ApiError, Match as ApiMatch, Tournament, Team, Round, Score } from '../services/api';
+import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock } from 'lucide-react';
+import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee } from '../services/api';
 
-interface MatchStatus {
-  team1_hole_points: number;
-  team2_hole_points: number;
-  team1_match_points: number;
-  team2_match_points: number;
-  holes_completed: number;
-  holes_remaining: number;
-  match_complete: boolean;
-  winner_team_id?: string;
-}
-
-interface MatchWithScores extends ApiMatch {
-  current_hole: number;
-  scores: Record<number, Record<string, number>>;
+interface PairingWithScores extends Pairing {
   round?: Round;
-  match_status?: MatchStatus;
+  scores: Record<number, Record<string, number>>; // { holeNumber: { userId: strokes } }
+  tee?: GolfCourseTee;
 }
 
 const ScoreInterface: React.FC = () => {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
-  const [matches, setMatches] = useState<MatchWithScores[]>([]);
-  const [selectedMatch, setSelectedMatch] = useState<MatchWithScores | null>(null);
+  const [pairings, setPairings] = useState<PairingWithScores[]>([]);
+  const [selectedPairing, setSelectedPairing] = useState<PairingWithScores | null>(null);
   const [currentHole, setCurrentHole] = useState(1);
   const [holeScores, setHoleScores] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showMyMatchesOnly, setShowMyMatchesOnly] = useState(true);
+  const [showMyPairingsOnly, setShowMyPairingsOnly] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,7 +28,7 @@ const ScoreInterface: React.FC = () => {
 
   useEffect(() => {
     if (selectedTournamentId) {
-      loadMatches();
+      loadPairings();
     }
   }, [selectedTournamentId]);
 
@@ -59,11 +47,9 @@ const ScoreInterface: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Get tournaments where the current user is a team member
       const tournamentList = await apiClient.getUserTournaments();
       setTournaments(tournamentList);
       
-      // If we have tournaments, select the first one
       if (tournamentList.length > 0) {
         setSelectedTournamentId(tournamentList[0].id);
       } else {
@@ -77,72 +63,72 @@ const ScoreInterface: React.FC = () => {
     }
   };
 
-  const loadMatches = async () => {
+  const loadPairings = async () => {
     if (!selectedTournamentId) return;
     
     try {
       setLoading(true);
       setError(null);
       
-      // Get rounds for the selected tournament
       const roundsResponse = await apiClient.getTournamentRounds(selectedTournamentId);
       const rounds = Array.isArray(roundsResponse) ? roundsResponse : [];
       
-      const allMatches: MatchWithScores[] = [];
+      const allPairings: PairingWithScores[] = [];
       
       for (const round of rounds) {
         try {
-          const matchesResponse = await apiClient.getRoundMatches(round.id);
-          const matches = Array.isArray(matchesResponse) ? matchesResponse : [];
+          const pairingsResponse = await apiClient.getRoundPairings(round.id);
+          const pairings = Array.isArray(pairingsResponse) ? pairingsResponse : [];
           
-          // Show scheduled, not_started, and in_progress matches
-          const matchesWithScores: MatchWithScores[] = matches
-            .map(match => ({
-              ...match,
-              current_hole: 1,
-              scores: {},
-              players: match.players || [], // Ensure players array exists
-              round: round // Add round info to match
-            }));
-          
-          // Load match status for completed matches
-          for (const match of matchesWithScores) {
-            if (match.status === 'completed') {
+          for (const pairing of pairings) {
+            // Load players for this pairing
+            const players = await apiClient.getPairingPlayers(pairing.id);
+            
+            // Load tee information if available
+            let tee: GolfCourseTee | undefined;
+            if (pairing.golf_course_tee_id && round.golf_course_id) {
               try {
-                const response = await apiClient.getMatchScores(match.id);
-                match.match_status = response.match_status;
+                const tees = await apiClient.getGolfCourseTees(round.golf_course_id);
+                tee = tees.find(t => t.id === pairing.golf_course_tee_id);
               } catch (err) {
-                console.warn('Error loading match status for match:', match.id, err);
+                console.warn('Failed to load tee info:', err);
               }
             }
+            
+            const pairingWithScores: PairingWithScores = {
+              ...pairing,
+              players,
+              scores: {},
+              round,
+              tee
+            };
+            
+            allPairings.push(pairingWithScores);
           }
-          
-          allMatches.push(...matchesWithScores);
-        } catch (matchErr) {
-          console.warn('Error loading matches for round:', round.id, matchErr);
+        } catch (pairingErr) {
+          console.warn('Error loading pairings for round:', round.id, pairingErr);
         }
       }
       
-      setMatches(allMatches);
-      if (allMatches.length > 0) {
-        const firstMatch = allMatches[0];
-        await loadExistingScores(firstMatch);
+      setPairings(allPairings);
+      if (allPairings.length > 0) {
+        const firstPairing = allPairings[0];
+        await loadExistingScores(firstPairing);
       } else {
-        setSelectedMatch(null);
+        setSelectedPairing(null);
       }
     } catch (err) {
-      console.error('Error loading matches:', err);
-      setError(err instanceof ApiError ? err.message : 'Failed to load matches');
+      console.error('Error loading pairings:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to load pairings');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadExistingScores = async (match: MatchWithScores) => {
+  const loadExistingScores = async (pairing: PairingWithScores) => {
     try {
-      const response = await apiClient.getMatchScores(match.id);
+      const response = await apiClient.getPairingScores(pairing.id);
       const scores = response.scores || [];
-      const matchStatus = response.match_status;
       
       // Convert scores array to the format expected by the UI
       const scoresMap: Record<number, Record<string, number>> = {};
@@ -154,14 +140,17 @@ const ScoreInterface: React.FC = () => {
         scoresMap[score.hole_number][score.user_id] = score.strokes;
       });
       
-      // Update the match with existing scores and status
-      const updatedMatch = {
-        ...match,
-        scores: scoresMap,
-        match_status: matchStatus
+      // Update the pairing with existing scores
+      const updatedPairing = {
+        ...pairing,
+        scores: scoresMap
       };
       
-      setSelectedMatch(updatedMatch);
+      setSelectedPairing(updatedPairing);
+      
+      // Determine the number of holes from the first match in the pairing
+      const matches = await apiClient.getPairingMatches(pairing.id);
+      const holes = matches.length > 0 ? matches[0].holes : 18;
       
       // If there are existing scores, set the current hole to the first incomplete hole
       const completedHoles = Object.keys(scoresMap).map(h => parseInt(h));
@@ -169,21 +158,31 @@ const ScoreInterface: React.FC = () => {
         ? Math.max(...completedHoles) + 1 
         : 1;
       
-      if (nextHole <= match.holes) {
+      if (nextHole <= holes) {
         setCurrentHole(nextHole);
-        setHoleScores(scoresMap[nextHole] || {});
+        // Pre-populate with zeros for all players in the pairing
+        const nextHoleScores: Record<string, number> = {};
+        pairing.players?.forEach(player => {
+          nextHoleScores[player.user_id] = scoresMap[nextHole]?.[player.user_id] || 0;
+        });
+        setHoleScores(nextHoleScores);
       } else {
         // All holes completed, show the last hole
-        setCurrentHole(match.holes);
-        setHoleScores(scoresMap[match.holes] || {});
+        setCurrentHole(holes);
+        setHoleScores(scoresMap[holes] || {});
       }
       
     } catch (err) {
       console.warn('Error loading existing scores:', err);
       // Don't show error to user, just proceed without existing scores
-      setSelectedMatch(match);
+      setSelectedPairing(pairing);
       setCurrentHole(1);
-      setHoleScores({});
+      // Pre-populate with zeros for all players
+      const initialScores: Record<string, number> = {};
+      pairing.players?.forEach(player => {
+        initialScores[player.user_id] = 0;
+      });
+      setHoleScores(initialScores);
     }
   };
 
@@ -194,62 +193,56 @@ const ScoreInterface: React.FC = () => {
     }));
   };
 
-  const startMatch = async (matchId: string) => {
+  const startPairing = async (pairingId: string) => {
     try {
       setError(null);
-      // Update match status to in_progress
-      await apiClient.updateMatchStatus(matchId, 'in_progress');
+      // Update pairing status to in_progress
+      await apiClient.updatePairingStatus(pairingId, 'in_progress');
       
       // Update local state
-      setMatches(prev => prev.map(match => 
-        match.id === matchId 
-          ? { ...match, status: 'in_progress' }
-          : match
+      setPairings(prev => prev.map(pairing => 
+        pairing.id === pairingId 
+          ? { ...pairing, status: 'in_progress' }
+          : pairing
       ));
       
-      // If this is the selected match, update it too
-      if (selectedMatch?.id === matchId) {
-        setSelectedMatch(prev => prev ? { ...prev, status: 'in_progress' } : null);
+      // If this is the selected pairing, update it too
+      if (selectedPairing?.id === pairingId) {
+        setSelectedPairing(prev => prev ? { ...prev, status: 'in_progress' } : null);
       }
     } catch (err) {
-      console.error('Error starting match:', err);
-      setError(err instanceof ApiError ? err.message : 'Failed to start match');
+      console.error('Error starting pairing:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to start pairing');
     }
   };
 
-  const completeMatch = async (matchId: string) => {
+  const completePairing = async (pairingId: string) => {
     try {
       setError(null);
-      // Update match status to completed
-      await apiClient.updateMatchStatus(matchId, 'completed');
+      // Update pairing status to completed
+      await apiClient.updatePairingStatus(pairingId, 'completed');
       
-      // Get updated match data including the latest match results
-      const response = await apiClient.getMatchScores(matchId);
-      const updatedMatchStatus = response.match_status;
-      
-      // Update local state for matches list
-      setMatches(prev => prev.map(match => 
-        match.id === matchId 
-          ? { ...match, status: 'completed', match_status: updatedMatchStatus }
-          : match
+      // Update local state
+      setPairings(prev => prev.map(pairing => 
+        pairing.id === pairingId 
+          ? { ...pairing, status: 'completed' }
+          : pairing
       ));
       
-      // If this is the selected match, update it too
-      if (selectedMatch?.id === matchId) {
-        setSelectedMatch(prev => prev ? { 
-          ...prev, 
-          status: 'completed',
-          match_status: updatedMatchStatus
-        } : null);
+      // If this is the selected pairing, update it too
+      if (selectedPairing?.id === pairingId) {
+        setSelectedPairing(prev => prev ? { ...prev, status: 'completed' } : null);
       }
+      
+      alert('Pairing completed! Match results have been calculated.');
     } catch (err) {
-      console.error('Error completing match:', err);
-      setError(err instanceof ApiError ? err.message : 'Failed to complete match');
+      console.error('Error completing pairing:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to complete pairing');
     }
   };
 
   const submitHoleScores = async () => {
-    if (!selectedMatch) return;
+    if (!selectedPairing) return;
 
     setIsSubmitting(true);
     try {
@@ -259,36 +252,36 @@ const ScoreInterface: React.FC = () => {
         strokes: strokes
       }));
 
-      await apiClient.submitScores(selectedMatch.id, {
+      await apiClient.submitPairingScores(selectedPairing.id, {
         hole_number: currentHole,
         scores: scoresArray
       });
       
       // Update local state
-      setSelectedMatch(prev => ({
+      setSelectedPairing(prev => ({
         ...prev!,
         scores: {
           ...prev!.scores,
           [currentHole]: holeScores
-        },
-        current_hole: currentHole < selectedMatch.holes ? currentHole + 1 : currentHole
+        }
       }));
 
+      // Determine the number of holes
+      const matches = await apiClient.getPairingMatches(selectedPairing.id);
+      const holes = matches.length > 0 ? matches[0].holes : 18;
+
       // Move to next hole or stay on current
-      if (currentHole < selectedMatch.holes) {
+      if (currentHole < holes) {
         const nextHole = currentHole + 1;
         setCurrentHole(nextHole);
         
-        // Populate existing scores for the next hole, or set to 0 for missing players
+        // Populate existing scores for the next hole, or set to 0 for all players
         const nextHoleScores: Record<string, number> = {};
-        const existingNextHoleScores = selectedMatch.scores[nextHole] || {};
+        const existingNextHoleScores = selectedPairing.scores[nextHole] || {};
         
-        // Get all player IDs from the match
-        if (selectedMatch.players) {
-          selectedMatch.players.forEach(player => {
-            nextHoleScores[player.user_id] = existingNextHoleScores[player.user_id] || 0;
-          });
-        }
+        selectedPairing.players?.forEach(player => {
+          nextHoleScores[player.user_id] = existingNextHoleScores[player.user_id] || 0;
+        });
         
         setHoleScores(nextHoleScores);
       }
@@ -300,86 +293,35 @@ const ScoreInterface: React.FC = () => {
     }
   };
 
-  const getTeamPlayers = (teamId: string) => {
-    if (!selectedMatch?.players) {
-      return [];
-    }
-    return selectedMatch.players.filter(p => p.team_id === teamId) || [];
-  };
-
-  // Helper function to check if we have player data
-  const hasPlayerData = () => {
-    return selectedMatch?.players && selectedMatch.players.length > 0;
-  };
-
-  // Helper function to check if current user is in a match
-  const isUserInMatch = (match: MatchWithScores) => {
-    if (!currentUserId || !match.players) {
-      console.log('[ScoreInterface] isUserInMatch early return:', { 
-        matchId: match.id, 
-        hasCurrentUserId: !!currentUserId, 
-        hasPlayers: !!match.players,
-        currentUserId 
-      });
+  // Helper function to check if current user is in a pairing
+  const isUserInPairing = (pairing: PairingWithScores) => {
+    if (!currentUserId || !pairing.players) {
       return false;
     }
     
-    // Check both user_id and nested user.id for compatibility
-    const isInMatch = match.players.some(player => {
-      const matchesUserId = player.user_id === currentUserId;
-      const matchesNestedId = player.user?.id === currentUserId;
-      console.log('[ScoreInterface] Checking player:', {
-        matchId: match.id,
-        playerId: player.id,
-        playerUserId: player.user_id,
-        playerNestedUserId: player.user?.id,
-        currentUserId,
-        matchesUserId,
-        matchesNestedId,
-        result: matchesUserId || matchesNestedId
-      });
-      return matchesUserId || matchesNestedId;
-    });
-    
-    console.log('[ScoreInterface] isUserInMatch result:', { 
-      matchId: match.id, 
-      matchNumber: match.match_number,
-      isInMatch,
-      playerCount: match.players.length 
-    });
-    
-    return isInMatch;
+    return pairing.players.some(player => player.user_id === currentUserId);
   };
 
-  // Filter matches based on the checkbox
-  const filteredMatches = showMyMatchesOnly
-    ? matches.filter(match => isUserInMatch(match))
-    : matches;
-  
-  console.log('[ScoreInterface] Filter state:', {
-    showMyMatchesOnly,
-    currentUserId,
-    totalMatches: matches.length,
-    filteredMatches: filteredMatches.length,
-    matchIds: matches.map(m => m.id),
-    filteredMatchIds: filteredMatches.map(m => m.id)
-  });
+  // Filter pairings based on the checkbox
+  const filteredPairings = showMyPairingsOnly
+    ? pairings.filter(pairing => isUserInPairing(pairing))
+    : pairings;
 
-  // Group matches by round
-  const matchesByRound = filteredMatches.reduce((acc, match) => {
-    const roundId = match.round?.id || 'unknown';
+  // Group pairings by round
+  const pairingsByRound = filteredPairings.reduce((acc, pairing) => {
+    const roundId = pairing.round?.id || 'unknown';
     if (!acc[roundId]) {
       acc[roundId] = {
-        round: match.round,
-        matches: []
+        round: pairing.round,
+        pairings: []
       };
     }
-    acc[roundId].matches.push(match);
+    acc[roundId].pairings.push(pairing);
     return acc;
-  }, {} as Record<string, { round?: Round; matches: MatchWithScores[] }>);
+  }, {} as Record<string, { round?: Round; pairings: PairingWithScores[] }>);
 
   // Sort rounds by round number
-  const sortedRounds = Object.values(matchesByRound).sort((a, b) => {
+  const sortedRounds = Object.values(pairingsByRound).sort((a, b) => {
     const roundA = a.round?.round_number || 0;
     const roundB = b.round?.round_number || 0;
     return roundA - roundB;
@@ -390,7 +332,7 @@ const ScoreInterface: React.FC = () => {
       <div className="flex items-center justify-center h-64">
         <RefreshCw className="h-8 w-8 animate-spin text-gray-500" />
         <span className="ml-2 text-gray-500">
-          {tournaments.length === 0 ? 'Loading tournaments...' : 'Loading matches...'}
+          {tournaments.length === 0 ? 'Loading tournaments...' : 'Loading pairings...'}
         </span>
       </div>
     );
@@ -414,7 +356,7 @@ const ScoreInterface: React.FC = () => {
     );
   }
 
-  if (matches.length === 0 && selectedTournamentId) {
+  if (pairings.length === 0 && selectedTournamentId) {
     return (
       <div className="space-y-6">
         {/* Tournament Selector */}
@@ -434,7 +376,7 @@ const ScoreInterface: React.FC = () => {
                 ))}
               </select>
               <button
-                onClick={loadMatches}
+                onClick={loadPairings}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
@@ -446,8 +388,8 @@ const ScoreInterface: React.FC = () => {
         
         <div className="text-center py-12">
           <Target className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Matches</h3>
-          <p className="text-gray-500">There are no matches currently available for scoring in this tournament.</p>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Pairings</h3>
+          <p className="text-gray-500">There are no pairings currently available for scoring in this tournament.</p>
         </div>
       </div>
     );
@@ -479,7 +421,7 @@ const ScoreInterface: React.FC = () => {
               ))}
             </select>
             <button
-              onClick={loadMatches}
+              onClick={loadPairings}
               className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
@@ -493,133 +435,101 @@ const ScoreInterface: React.FC = () => {
       <div className="bg-white shadow-sm rounded-lg p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Score Entry</h1>
-            <p className="text-gray-500">Record scores for active matches</p>
+            <h1 className="text-2xl font-bold text-gray-900">Scorecard Entry</h1>
+            <p className="text-gray-500">Enter scores for your pairing like a traditional golf scorecard</p>
           </div>
         </div>
       </div>
 
-      {/* Match Selection */}
-      {matches.length > 0 && (
+      {/* Pairing Selection */}
+      {pairings.length > 0 && (
         <div className="bg-white shadow-sm rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Select Match</h3>
+            <h3 className="text-lg font-medium text-gray-900">Select Pairing</h3>
             <label className="flex items-center cursor-pointer">
               <input
                 type="checkbox"
-                checked={showMyMatchesOnly}
-                onChange={(e) => setShowMyMatchesOnly(e.target.checked)}
+                checked={showMyPairingsOnly}
+                onChange={(e) => setShowMyPairingsOnly(e.target.checked)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700">Show only my matches</span>
+              <span className="ml-2 text-sm text-gray-700">Show only my pairings</span>
             </label>
           </div>
-          {filteredMatches.length === 0 ? (
+          {filteredPairings.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              <p>No matches found. {showMyMatchesOnly && 'Try unchecking "Show only my matches".'}</p>
+              <p>No pairings found. {showMyPairingsOnly && 'Try unchecking "Show only my pairings".'}</p>
             </div>
           ) : (
             <div className="space-y-6">
-              {sortedRounds.map(({ round, matches: roundMatches }) => (
+              {sortedRounds.map(({ round, pairings: roundPairings }) => (
                 <div key={round?.id || 'unknown'}>
                   <h4 className="text-md font-semibold text-gray-700 mb-3 pb-2 border-b border-gray-200">
                     Round {round?.round_number || '?'} {round?.name ? `- ${round.name}` : ''}
+                    {round?.golf_course && (
+                      <span className="ml-2 text-sm font-normal text-gray-500">
+                        @ {round.golf_course.course_name}
+                      </span>
+                    )}
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {roundMatches.map((match) => (
-              <button
-                key={match.id}
-                onClick={async () => {
-                  await loadExistingScores(match);
-                }}
-                className={`p-4 rounded-lg border-2 text-left transition-colors ${
-                  selectedMatch?.id === match.id
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div className="font-medium">
-                    Match {match.match_number}
-                  </div>
-                  <div className={`text-xs px-2 py-1 rounded-full ${
-                    match.status === 'not_started' || match.status === 'scheduled' ? 'bg-gray-200 text-gray-700' :
-                    match.status === 'in_progress' ? 'bg-green-200 text-green-700' :
-                    'bg-blue-200 text-blue-700'
-                  }`}>
-                    {match.status === 'scheduled' ? 'ready to start' : match.status.replace('_', ' ')}
-                  </div>
-                </div>
-                <div className="text-sm text-gray-500 mb-1">{match.format?.name}</div>
-                
-                {/* Golf Course Information */}
-                {match.round?.golf_course && (
-                  <div className="text-xs text-gray-600 mb-3 italic">
-                    📍 {match.round.golf_course.course_name}
-                    {match.round.golf_course.club_name !== match.round.golf_course.course_name && 
-                      ` at ${match.round.golf_course.club_name}`}
-                    {match.round.golf_course.city && match.round.golf_course.state && 
-                      ` • ${match.round.golf_course.city}, ${match.round.golf_course.state}`}
-                  </div>
-                )}
-                
-                {/* Team 1 Players */}
-                <div className="mb-2">
-                  <div className="text-xs font-medium mb-1" style={{ color: match.team1?.color }}>
-                    {match.team1?.name}
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    {(match.players?.filter(p => p.team_id === match.team1?.id) || []).map(p => p.user?.name || `Player ${p.user_id}`).join(', ') || 'No players assigned'}
-                  </div>
-                </div>
-                
-                {/* Team 2 Players */}
-                <div className="mb-2">
-                  <div className="text-xs font-medium mb-1" style={{ color: match.team2?.color }}>
-                    {match.team2?.name}
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    {(match.players?.filter(p => p.team_id === match.team2?.id) || []).map(p => p.user?.name || `Player ${p.user_id}`).join(', ') || 'No players assigned'}
-                  </div>
-                </div>
-                
-                {/* Match Results for Completed Matches */}
-                {match.status === 'completed' && match.match_status && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <div className="text-xs font-medium text-gray-700 mb-2">Match Result</div>
-                    {match.match_status.winner_team_id ? (
-                      <div className="flex justify-between items-center">
-                        <div className="text-xs">
-                          <span className="font-medium">
-                            Winner: {match.match_status.winner_team_id === match.team1?.id ? match.team1?.name : match.team2?.name}
-                          </span>
+                    {roundPairings.map((pairing) => (
+                      <button
+                        key={pairing.id}
+                        onClick={async () => {
+                          await loadExistingScores(pairing);
+                        }}
+                        className={`p-4 rounded-lg border-2 text-left transition-colors ${
+                          selectedPairing?.id === pairing.id
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="font-medium">
+                            Pairing {pairing.pairing_number}
+                          </div>
+                          <div className={`text-xs px-2 py-1 rounded-full ${
+                            pairing.status === 'not_started' ? 'bg-gray-200 text-gray-700' :
+                            pairing.status === 'in_progress' ? 'bg-green-200 text-green-700' :
+                            'bg-blue-200 text-blue-700'
+                          }`}>
+                            {pairing.status.replace('_', ' ')}
+                          </div>
                         </div>
-                        <div className="text-xs">
-                          <span className="font-medium">
-                            {match.match_status.winner_team_id === match.team1?.id ? match.match_status.team1_match_points : match.match_status.team2_match_points} points
-                          </span>
+                        
+                        {/* Tee Time and Tee Info */}
+                        <div className="text-xs text-gray-600 mb-2 space-y-1">
+                          {pairing.tee_time && (
+                            <div className="flex items-center">
+                              <Clock className="h-3 w-3 mr-1" />
+                              {new Date(pairing.tee_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          )}
+                          {pairing.tee && (
+                            <div className="italic">
+                              {pairing.tee.tee_name} {pairing.tee.total_yards && `(${pairing.tee.total_yards} yds)`}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="flex justify-between items-center">
-                        <div className="text-xs">
-                          <span className="font-medium">Tie</span>
+                        
+                        {/* Players */}
+                        <div className="space-y-1 mt-2">
+                          {(pairing.players || []).map(player => (
+                            <div key={player.user_id} className="text-xs flex items-center">
+                              <div 
+                                className="w-2 h-2 rounded-full mr-2" 
+                                style={{ backgroundColor: player.team?.color || '#999' }}
+                              />
+                              <span className={player.user_id === currentUserId ? 'font-semibold' : ''}>
+                                {player.user?.name || `Player ${player.user_id}`}
+                              </span>
+                            </div>
+                          ))}
                         </div>
-                        <div className="text-xs">
-                          <span className="font-medium">
-                            {match.match_status.team1_match_points} points each
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                    <div className="text-xs text-gray-500 mt-1">
-                      Holes: {match.team1?.name} {match.match_status.team1_hole_points} - {match.match_status.team2_hole_points} {match.team2?.name}
-                    </div>
+                      </button>
+                    ))}
                   </div>
-                )}
-              </button>
-            ))}
-          </div>
                 </div>
               ))}
             </div>
@@ -628,186 +538,177 @@ const ScoreInterface: React.FC = () => {
       )}
 
       {/* Score Entry */}
-      {selectedMatch && (
+      {selectedPairing && (
         <div className="bg-white shadow-sm rounded-lg p-6">
-          {/* Start Match Section for scheduled and not_started matches */}
-          {(selectedMatch.status === 'not_started' || selectedMatch.status === 'scheduled') && (
+          {/* Start Pairing Section for not_started pairings */}
+          {selectedPairing.status === 'not_started' && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-medium text-blue-900 mb-2">
-                    Match {selectedMatch.match_number} - Ready to Start
+                    Pairing {selectedPairing.pairing_number} - Ready to Start
                   </h3>
                   <p className="text-blue-700">
-                    {selectedMatch.team1?.name} vs {selectedMatch.team2?.name}
+                    Players: {(selectedPairing.players || []).map(p => p.user?.name).join(', ')}
                   </p>
                   <p className="text-sm text-blue-600 mt-1">
-                    Click "Start Match" to begin entering scores for this {selectedMatch.format?.name} match.
+                    Click "Start Round" to begin entering scores for this pairing.
                   </p>
                 </div>
                 <button
-                  onClick={() => startMatch(selectedMatch.id)}
+                  onClick={() => startPairing(selectedPairing.id)}
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
                 >
-                  Start Match
+                  Start Round
                 </button>
               </div>
             </div>
           )}
 
-          {selectedMatch.status === 'in_progress' && (
+          {selectedPairing.status === 'in_progress' && (
             <>
-              {!hasPlayerData() && (
-                <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
-                  <p className="text-sm">
-                    <strong>Note:</strong> Player data not available for this match. 
-                    You may need to assign team members before entering scores.
-                  </p>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Pairing {selectedPairing.pairing_number} - Hole {currentHole}
+                  </h3>
+                  {selectedPairing.tee && (
+                    <p className="text-sm text-gray-500">
+                      {selectedPairing.tee.tee_name} {selectedPairing.tee.total_yards && `(${selectedPairing.tee.total_yards} yards)`}
+                    </p>
+                  )}
                 </div>
-              )}
-          
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900">
-                Match {selectedMatch.match_number} - Hole {currentHole}
-              </h3>
-              <p className="text-sm text-gray-500">{selectedMatch.format.name}</p>
-            </div>
-            <div className="flex space-x-2">
-              {Array.from({ length: selectedMatch.holes }, (_, i) => i + 1).map((hole) => (
-                <button
-                  key={hole}
-                  onClick={() => {
-                    setCurrentHole(hole);
-                    setHoleScores(selectedMatch.scores[hole] || {});
-                  }}
-                  className={`w-8 h-8 rounded-full text-xs font-medium ${
-                    hole === currentHole
-                      ? 'bg-blue-500 text-white'
-                      : selectedMatch.scores[hole]
-                      ? 'bg-green-500 text-white'
-                      : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  {hole}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Team 1 */}
-          <div className="mb-6">
-            <h4 className="text-md font-medium mb-3" style={{ color: selectedMatch.team1.color }}>
-              {selectedMatch.team1.name}
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {getTeamPlayers(selectedMatch.team1.id).map((player) => (
-                <div key={player.id} className="flex items-center space-x-3">
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">{player.user?.name || `Player ${player.user_id}`}</div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="number"
-                      min="1"
-                      max="12"
-                      value={holeScores[player.user_id] || ''}
-                      onChange={(e) => handleScoreChange(player.user_id, parseInt(e.target.value) || 0)}
-                      className="w-16 px-3 py-2 border border-gray-300 rounded-md text-center"
-                      placeholder="0"
-                    />
-                  </div>
+                <div className="flex space-x-2 flex-wrap justify-end">
+                  {Array.from({ length: 18 }, (_, i) => i + 1).map((hole) => (
+                    <button
+                      key={hole}
+                      onClick={() => {
+                        setCurrentHole(hole);
+                        const existingScores = selectedPairing.scores[hole] || {};
+                        const holeScoresMap: Record<string, number> = {};
+                        selectedPairing.players?.forEach(player => {
+                          holeScoresMap[player.user_id] = existingScores[player.user_id] || 0;
+                        });
+                        setHoleScores(holeScoresMap);
+                      }}
+                      className={`w-8 h-8 rounded-full text-xs font-medium ${
+                        hole === currentHole
+                          ? 'bg-blue-500 text-white'
+                          : selectedPairing.scores[hole]
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gray-200 text-gray-700'
+                      }`}
+                    >
+                      {hole}
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* Team 2 */}
-          <div className="mb-6">
-            <h4 className="text-md font-medium mb-3" style={{ color: selectedMatch.team2.color }}>
-              {selectedMatch.team2.name}
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {getTeamPlayers(selectedMatch.team2.id).map((player) => (
-                <div key={player.id} className="flex items-center space-x-3">
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">{player.user?.name || `Player ${player.user_id}`}</div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="number"
-                      min="1"
-                      max="12"
-                      value={holeScores[player.user_id] || ''}
-                      onChange={(e) => handleScoreChange(player.user_id, parseInt(e.target.value) || 0)}
-                      className="w-16 px-3 py-2 border border-gray-300 rounded-md text-center"
-                      placeholder="0"
-                    />
-                  </div>
+              {/* Players Scorecard */}
+              <div className="mb-6">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Player
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Team
+                        </th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Strokes
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {(selectedPairing.players || []).map((player) => (
+                        <tr key={player.user_id}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="font-medium text-gray-900">
+                              {player.user?.name || `Player ${player.user_id}`}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div 
+                                className="w-3 h-3 rounded-full mr-2" 
+                                style={{ backgroundColor: player.team?.color || '#999' }}
+                              />
+                              <span className="text-sm text-gray-700">
+                                {player.team?.name || 'Unknown'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <input
+                              type="number"
+                              min="1"
+                              max="12"
+                              value={holeScores[player.user_id] || ''}
+                              onChange={(e) => handleScoreChange(player.user_id, parseInt(e.target.value) || 0)}
+                              className="w-20 px-3 py-2 border border-gray-300 rounded-md text-center"
+                              placeholder="0"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* Submit Button */}
-          <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-            <div className="text-sm text-gray-500">
-              {hasPlayerData() && Object.keys(holeScores).length > 0 && (
-                <span className="flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-1" />
-                  {Object.keys(holeScores).length} of {selectedMatch.players.length} scores entered
-                </span>
-              )}
-              {!hasPlayerData() && (
-                <span className="flex items-center text-yellow-600">
-                  <AlertCircle className="h-4 w-4 mr-1" />
-                  No player data available
-                </span>
-              )}
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => completeMatch(selectedMatch.id)}
-                className="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-green-700"
-              >
-                Complete Match
-              </button>
-              <button
-                onClick={submitHoleScores}
-                disabled={isSubmitting || Object.keys(holeScores).length === 0 || !hasPlayerData()}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
-              >
-                {isSubmitting ? (
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4 mr-2" />
-                )}
-                {isSubmitting ? 'Submitting...' : 'Submit Hole'}
-              </button>
-            </div>
-          </div>
+              {/* Submit Button */}
+              <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+                <div className="text-sm text-gray-500">
+                  {Object.keys(holeScores).length > 0 && (
+                    <span className="flex items-center">
+                      <AlertCircle className="h-4 w-4 mr-1" />
+                      {Object.keys(holeScores).filter(k => holeScores[k] > 0).length} of {selectedPairing.players?.length || 0} scores entered
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => completePairing(selectedPairing.id)}
+                    className="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-green-700"
+                  >
+                    Complete Round
+                  </button>
+                  <button
+                    onClick={submitHoleScores}
+                    disabled={isSubmitting || Object.keys(holeScores).filter(k => holeScores[k] > 0).length === 0}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
+                  >
+                    {isSubmitting ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    {isSubmitting ? 'Submitting...' : 'Submit Hole'}
+                  </button>
+                </div>
+              </div>
             </>
           )}
           
-          {/* Show info for other statuses */}
-          {selectedMatch.status === 'completed' && (
+          {/* Show info for completed pairings */}
+          {selectedPairing.status === 'completed' && (
             <div className="text-center py-8">
+              <div className="text-green-600 mb-4">
+                <Award className="h-16 w-16 mx-auto mb-2" />
+                <p className="text-lg font-medium">Round Completed!</p>
+              </div>
               <p className="text-gray-500 mb-4">
-                This match is completed.
+                All scores have been submitted for this pairing.
               </p>
               <button
-                onClick={() => startMatch(selectedMatch.id)}
+                onClick={() => startPairing(selectedPairing.id)}
                 className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium transition-colors"
               >
                 Reopen for Editing
               </button>
-            </div>
-          )}
-          {selectedMatch.status !== 'not_started' && selectedMatch.status !== 'scheduled' && selectedMatch.status !== 'in_progress' && selectedMatch.status !== 'completed' && (
-            <div className="text-center py-8">
-              <p className="text-gray-500">
-                This match is {selectedMatch.status.replace('_', ' ')}.
-              </p>
             </div>
           )}
         </div>

@@ -498,6 +498,24 @@ class ApiClient {
     return response.matches || [];
   }
 
+  async updatePairingStatus(pairingId: string, status: string): Promise<void> {
+    return this.request<void>(`/pairings/${pairingId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async getPairingScores(pairingId: string): Promise<{scores: Score[]}> {
+    return this.request<{scores: Score[]}>(`/pairings/${pairingId}/scores`);
+  }
+
+  async submitPairingScores(pairingId: string, data: SubmitScoresRequest): Promise<void> {
+    return this.request<void>(`/pairings/${pairingId}/scores`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   // Matches
   async getRoundMatches(roundId: string): Promise<Match[]> {
     const response = await this.request<{matches: Match[]}>(`/rounds/${roundId}/matches`);
