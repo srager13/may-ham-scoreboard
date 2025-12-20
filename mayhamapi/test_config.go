@@ -237,17 +237,38 @@ func CreateTestData(t *testing.T, testDB *TestDB, repo *repository.Repository) *
 	}
 	formatID := formats[0]["id"].(string)
 
-	// Create test match
-	matchReq := &models.CreateMatchRequest{
-		Team1ID:       team1.ID,
-		Team2ID:       team2.ID,
-		MatchFormatID: formatID,
-		Holes:         9,
+	// Create test pairing
+	teeTime := time.Now()
+	pairingReq := &models.CreatePairingRequest{
+		PairingNumber: 1,
+		TeeTime:       &teeTime,
+		Players: []models.PairingPlayerRequest{
+			{UserID: userID, TeamID: team1.ID, PlayerOrder: 1},
+			{UserID: user2ID, TeamID: team1.ID, PlayerOrder: 2},
+			{UserID: user3ID, TeamID: team2.ID, PlayerOrder: 3},
+			{UserID: user4ID, TeamID: team2.ID, PlayerOrder: 4},
+		},
+		Matches: []models.PairingMatchRequest{
+			{
+				Team1ID:         team1.ID,
+				Team2ID:         team2.ID,
+				MatchFormatID:   formatID,
+				Holes:           9,
+				PointsAvailable: floatPtr(1.0),
+			},
+		},
 	}
-	match, err := repo.CreateMatch(round.ID, matchReq)
+	pairing, err := repo.CreatePairing(round.ID, pairingReq)
 	if err != nil {
-		t.Fatalf("Failed to create test match: %v", err)
+		t.Fatalf("Failed to create test pairing: %v", err)
 	}
+
+	// Get the created match from the pairing
+	matches, err := repo.GetMatchesByPairing(pairing.ID)
+	if err != nil || len(matches) == 0 {
+		t.Fatalf("Failed to get matches for pairing: %v", err)
+	}
+	matchID := matches[0].ID
 
 	return &TestDataSet{
 		UserIDs:      []string{userID, user2ID, user3ID, user4ID},
@@ -256,7 +277,8 @@ func CreateTestData(t *testing.T, testDB *TestDB, repo *repository.Repository) *
 		Team1ID:      team1.ID,
 		Team2ID:      team2.ID,
 		RoundID:      round.ID,
-		MatchID:      match.ID,
+		PairingID:    pairing.ID,
+		MatchID:      matchID,
 		FormatID:     formatID,
 	}
 }
@@ -268,12 +290,17 @@ type TestDataSet struct {
 	Team1ID      string
 	Team2ID      string
 	RoundID      string
+	PairingID    string
 	MatchID      string
 	FormatID     string
 }
 
 func stringPtr(s string) *string {
 	return &s
+}
+
+func floatPtr(f float64) *float64 {
+	return &f
 }
 
 func getEnvWithDefault(key, defaultValue string) string {
