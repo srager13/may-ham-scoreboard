@@ -68,16 +68,17 @@ type TeamMember struct {
 }
 
 type Round struct {
-	ID           string     `json:"id" db:"id"`
-	TournamentID string     `json:"tournament_id" db:"tournament_id"`
-	GolfCourseID *string    `json:"golf_course_id,omitempty" db:"golf_course_id"`
-	Name         string     `json:"name" db:"name"`
-	RoundNumber  int        `json:"round_number" db:"round_number"`
-	RoundDate    time.Time  `json:"round_date" db:"round_date"`
-	StartTime    *time.Time `json:"start_time,omitempty" db:"start_time"`
-	Status       string     `json:"status" db:"status"`
-	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
+	ID           string      `json:"id" db:"id"`
+	TournamentID string      `json:"tournament_id" db:"tournament_id"`
+	GolfCourseID *string     `json:"golf_course_id,omitempty" db:"golf_course_id"`
+	Name         string      `json:"name" db:"name"`
+	RoundNumber  int         `json:"round_number" db:"round_number"`
+	RoundDate    time.Time   `json:"round_date" db:"round_date"`
+	StartTime    *time.Time  `json:"start_time,omitempty" db:"start_time"`
+	Status       string      `json:"status" db:"status"`
+	GolfCourse   *GolfCourse `json:"golf_course,omitempty"`
+	CreatedAt    time.Time   `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at" db:"updated_at"`
 }
 
 type GolfCourse struct {

@@ -224,7 +224,7 @@ func (r *Repository) CreateRound(tournamentID string, req *models.CreateRoundReq
 }
 
 func (r *Repository) GetRoundsByTournament(tournamentID string) ([]models.Round, error) {
-	query := `SELECT id, tournament_id, name, round_number, round_date, start_time, status, created_at, updated_at FROM rounds WHERE tournament_id = $1 ORDER BY round_number`
+	query := `SELECT id, tournament_id, golf_course_id, name, round_number, round_date, start_time, status, created_at, updated_at FROM rounds WHERE tournament_id = $1 ORDER BY round_number`
 
 	rows, err := r.db.Query(query, tournamentID)
 	if err != nil {
@@ -236,12 +236,25 @@ func (r *Repository) GetRoundsByTournament(tournamentID string) ([]models.Round,
 	for rows.Next() {
 		var round models.Round
 		err := rows.Scan(
-			&round.ID, &round.TournamentID, &round.Name, &round.RoundNumber,
+			&round.ID, &round.TournamentID, &round.GolfCourseID, &round.Name, &round.RoundNumber,
 			&round.RoundDate, &round.StartTime, &round.Status, &round.CreatedAt, &round.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan round: %w", err)
 		}
+
+		// Fetch golf course information if golf_course_id is set
+		if round.GolfCourseID != nil {
+			course, err := r.GetGolfCourseByID(*round.GolfCourseID)
+			if err != nil {
+				// Log the error but don't fail the entire request
+				// The round will just not have golf course info
+				fmt.Printf("Warning: failed to fetch golf course for round %s: %v\n", round.ID, err)
+			} else {
+				round.GolfCourse = course
+			}
+		}
+
 		rounds = append(rounds, round)
 	}
 

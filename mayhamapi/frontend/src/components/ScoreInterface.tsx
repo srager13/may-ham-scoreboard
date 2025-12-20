@@ -550,7 +550,18 @@ const ScoreInterface: React.FC = () => {
                     {match.status === 'scheduled' ? 'ready to start' : match.status.replace('_', ' ')}
                   </div>
                 </div>
-                <div className="text-sm text-gray-500 mb-3">{match.format?.name}</div>
+                <div className="text-sm text-gray-500 mb-1">{match.format?.name}</div>
+                
+                {/* Golf Course Information */}
+                {match.round?.golf_course && (
+                  <div className="text-xs text-gray-600 mb-3 italic">
+                    📍 {match.round.golf_course.course_name}
+                    {match.round.golf_course.club_name !== match.round.golf_course.course_name && 
+                      ` at ${match.round.golf_course.club_name}`}
+                    {match.round.golf_course.city && match.round.golf_course.state && 
+                      ` • ${match.round.golf_course.city}, ${match.round.golf_course.state}`}
+                  </div>
+                )}
                 
                 {/* Team 1 Players */}
                 <div className="mb-2">

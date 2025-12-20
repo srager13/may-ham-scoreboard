@@ -51,6 +51,7 @@ export interface Round {
   round_date: string;
   start_time?: string;
   status: string;
+  golf_course?: GolfCourse;
   created_at: string;
   updated_at: string;
 }
