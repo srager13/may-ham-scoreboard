@@ -81,6 +81,32 @@ type Round struct {
 	UpdatedAt    time.Time   `json:"updated_at" db:"updated_at"`
 }
 
+type Pairing struct {
+	ID              string     `json:"id" db:"id"`
+	RoundID         string     `json:"round_id" db:"round_id"`
+	PairingNumber   int        `json:"pairing_number" db:"pairing_number"`
+	TeeTime         *time.Time `json:"tee_time,omitempty" db:"tee_time"`
+	GolfCourseTeeID *string    `json:"golf_course_tee_id,omitempty" db:"golf_course_tee_id"`
+	Status          string     `json:"status" db:"status"`
+	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at" db:"updated_at"`
+	// Related data (not in DB table)
+	Players       []PairingPlayer `json:"players,omitempty"`
+	GolfCourseTee *GolfCourseTee  `json:"golf_course_tee,omitempty"`
+}
+
+type PairingPlayer struct {
+	ID          string    `json:"id" db:"id"`
+	PairingID   string    `json:"pairing_id" db:"pairing_id"`
+	UserID      string    `json:"user_id" db:"user_id"`
+	TeamID      string    `json:"team_id" db:"team_id"`
+	PlayerOrder int       `json:"player_order" db:"player_order"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	// Related data (not in DB table)
+	User *User `json:"user,omitempty"`
+	Team *Team `json:"team,omitempty"`
+}
+
 type GolfCourse struct {
 	ID         string    `json:"id" db:"id"`
 	ExternalID *int      `json:"external_id,omitempty" db:"external_id"`
@@ -173,47 +199,37 @@ type MatchFormatEntity struct {
 }
 
 type Match struct {
-	ID              string     `json:"id" db:"id"`
-	RoundID         string     `json:"round_id" db:"round_id"`
-	Team1ID         string     `json:"team1_id" db:"team1_id"`
-	Team2ID         string     `json:"team2_id" db:"team2_id"`
-	MatchFormatID   string     `json:"match_format_id" db:"match_format_id"`
-	MatchNumber     int        `json:"match_number" db:"match_number"`
-	Holes           int        `json:"holes" db:"holes"`
-	Status          string     `json:"status" db:"status"`
-	PointsAvailable float64    `json:"points_available" db:"points_available"`
-	Team1Points     float64    `json:"team1_points" db:"team1_points"`
-	Team2Points     float64    `json:"team2_points" db:"team2_points"`
-	StartTime       *time.Time `json:"start_time,omitempty" db:"start_time"`
-	EndTime         *time.Time `json:"end_time,omitempty" db:"end_time"`
-	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at" db:"updated_at"`
+	ID              string    `json:"id" db:"id"`
+	PairingID       string    `json:"pairing_id" db:"pairing_id"`
+	RoundID         string    `json:"round_id" db:"round_id"`
+	Team1ID         string    `json:"team1_id" db:"team1_id"`
+	Team2ID         string    `json:"team2_id" db:"team2_id"`
+	MatchFormatID   string    `json:"match_format_id" db:"match_format_id"`
+	MatchNumber     int       `json:"match_number" db:"match_number"`
+	Holes           int       `json:"holes" db:"holes"`
+	Status          string    `json:"status" db:"status"`
+	PointsAvailable float64   `json:"points_available" db:"points_available"`
+	Team1Points     float64   `json:"team1_points" db:"team1_points"`
+	Team2Points     float64   `json:"team2_points" db:"team2_points"`
+	CreatedAt       time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
 	// Related data (not in DB table)
 	Team1   *Team              `json:"team1,omitempty"`
 	Team2   *Team              `json:"team2,omitempty"`
 	Format  *MatchFormatEntity `json:"format,omitempty"`
-	Players []MatchPlayer      `json:"players,omitempty"`
-}
-
-type MatchPlayer struct {
-	ID        string    `json:"id" db:"id"`
-	MatchID   string    `json:"match_id" db:"match_id"`
-	UserID    string    `json:"user_id" db:"user_id"`
-	TeamID    string    `json:"team_id" db:"team_id"`
-	Position  int       `json:"position" db:"position"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	// Related data (not in DB table)
-	User *User `json:"user,omitempty"`
+	Pairing *Pairing           `json:"pairing,omitempty"`
 }
 
 type Score struct {
 	ID         string    `json:"id" db:"id"`
-	MatchID    string    `json:"match_id" db:"match_id"`
+	PairingID  string    `json:"pairing_id" db:"pairing_id"`
 	UserID     string    `json:"user_id" db:"user_id"`
 	HoleNumber int       `json:"hole_number" db:"hole_number"`
 	Strokes    int       `json:"strokes" db:"strokes"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
+	// Related data (not in DB table)
+	User *User `json:"user,omitempty"`
 }
 
 type HoleResult struct {
@@ -263,17 +279,34 @@ type CreateRoundRequest struct {
 	StartTime   *time.Time `json:"start_time,omitempty"`
 }
 
-type CreateMatchRequest struct {
-	Team1ID           string             `json:"team1_id" binding:"required"`
-	Team2ID           string             `json:"team2_id" binding:"required"`
-	MatchFormatID     string             `json:"match_format_id" binding:"required"`
-	Holes             int                `json:"holes" binding:"required,min=6,max=18"`
-	PlayerAssignments *PlayerAssignments `json:"player_assignments,omitempty"`
+type CreatePairingRequest struct {
+	PairingNumber   int                    `json:"pairing_number" binding:"required"`
+	TeeTime         *time.Time             `json:"tee_time,omitempty"`
+	GolfCourseTeeID *string                `json:"golf_course_tee_id,omitempty"`
+	Players         []PairingPlayerRequest `json:"players" binding:"required,min=1"`
+	Matches         []PairingMatchRequest  `json:"matches,omitempty"`
 }
 
-type PlayerAssignments struct {
-	Team1Players []string `json:"team1_players"`
-	Team2Players []string `json:"team2_players"`
+type PairingPlayerRequest struct {
+	UserID      string `json:"user_id" binding:"required"`
+	TeamID      string `json:"team_id" binding:"required"`
+	PlayerOrder int    `json:"player_order"`
+}
+
+type PairingMatchRequest struct {
+	Team1ID         string   `json:"team1_id" binding:"required"`
+	Team2ID         string   `json:"team2_id" binding:"required"`
+	MatchFormatID   string   `json:"match_format_id" binding:"required"`
+	Holes           int      `json:"holes" binding:"required,min=6,max=18"`
+	PointsAvailable *float64 `json:"points_available,omitempty"`
+}
+
+type CreateMatchRequest struct {
+	Team1ID         string   `json:"team1_id" binding:"required"`
+	Team2ID         string   `json:"team2_id" binding:"required"`
+	MatchFormatID   string   `json:"match_format_id" binding:"required"`
+	Holes           int      `json:"holes" binding:"required,min=6,max=18"`
+	PointsAvailable *float64 `json:"points_available,omitempty"`
 }
 
 type AddTeamMemberRequest struct {

@@ -262,27 +262,194 @@ func (r *Repository) GetRoundsByTournament(tournamentID string) ([]models.Round,
 }
 
 // ============================================
+// Pairing Repository Methods
+// ============================================
+
+func (r *Repository) CreatePairing(roundID string, req *models.CreatePairingRequest) (*models.Pairing, error) {
+	query := `
+		INSERT INTO pairings (round_id, pairing_number, tee_time, golf_course_tee_id, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 'not_started', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, round_id, pairing_number, tee_time, golf_course_tee_id, status, created_at, updated_at
+	`
+
+	var pairing models.Pairing
+	err := r.db.QueryRow(query, roundID, req.PairingNumber, req.TeeTime, req.GolfCourseTeeID).Scan(
+		&pairing.ID, &pairing.RoundID, &pairing.PairingNumber, &pairing.TeeTime,
+		&pairing.GolfCourseTeeID, &pairing.Status, &pairing.CreatedAt, &pairing.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pairing: %w", err)
+	}
+
+	// Add players to the pairing
+	for _, playerReq := range req.Players {
+		pairingPlayer := &models.PairingPlayer{
+			PairingID:   pairing.ID,
+			UserID:      playerReq.UserID,
+			TeamID:      playerReq.TeamID,
+			PlayerOrder: playerReq.PlayerOrder,
+		}
+		if err := r.CreatePairingPlayer(pairingPlayer); err != nil {
+			return nil, fmt.Errorf("failed to add player to pairing: %w", err)
+		}
+	}
+
+	// Create matches for this pairing if provided
+	for i, matchReq := range req.Matches {
+		pointsAvailable := 1.0
+		if matchReq.PointsAvailable != nil {
+			pointsAvailable = *matchReq.PointsAvailable
+		}
+		matchCreateReq := &models.CreateMatchRequest{
+			Team1ID:         matchReq.Team1ID,
+			Team2ID:         matchReq.Team2ID,
+			MatchFormatID:   matchReq.MatchFormatID,
+			Holes:           matchReq.Holes,
+			PointsAvailable: &pointsAvailable,
+		}
+		if _, err := r.CreateMatchForPairing(pairing.ID, roundID, i+1, matchCreateReq); err != nil {
+			return nil, fmt.Errorf("failed to create match for pairing: %w", err)
+		}
+	}
+
+	return &pairing, nil
+}
+
+func (r *Repository) CreatePairingPlayer(player *models.PairingPlayer) error {
+	query := `
+		INSERT INTO pairing_players (pairing_id, user_id, team_id, player_order, created_at)
+		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+		RETURNING id, created_at
+	`
+
+	err := r.db.QueryRow(query, player.PairingID, player.UserID, player.TeamID, player.PlayerOrder).Scan(
+		&player.ID, &player.CreatedAt,
+	)
+	return err
+}
+
+func (r *Repository) GetPairing(id string) (*models.Pairing, error) {
+	query := `SELECT id, round_id, pairing_number, tee_time, golf_course_tee_id, status, created_at, updated_at FROM pairings WHERE id = $1`
+
+	var pairing models.Pairing
+	err := r.db.QueryRow(query, id).Scan(
+		&pairing.ID, &pairing.RoundID, &pairing.PairingNumber, &pairing.TeeTime,
+		&pairing.GolfCourseTeeID, &pairing.Status, &pairing.CreatedAt, &pairing.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("pairing not found")
+		}
+		return nil, fmt.Errorf("failed to get pairing: %w", err)
+	}
+
+	// Load players
+	players, err := r.GetPairingPlayers(id)
+	if err != nil {
+		fmt.Printf("Warning: failed to load players for pairing %s: %v\n", id, err)
+	} else {
+		pairing.Players = players
+	}
+
+	return &pairing, nil
+}
+
+func (r *Repository) GetPairingsByRound(roundID string) ([]models.Pairing, error) {
+	query := `SELECT id, round_id, pairing_number, tee_time, golf_course_tee_id, status, created_at, updated_at FROM pairings WHERE round_id = $1 ORDER BY pairing_number`
+
+	rows, err := r.db.Query(query, roundID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pairings: %w", err)
+	}
+	defer rows.Close()
+
+	var pairings []models.Pairing
+	for rows.Next() {
+		var pairing models.Pairing
+		err := rows.Scan(
+			&pairing.ID, &pairing.RoundID, &pairing.PairingNumber, &pairing.TeeTime,
+			&pairing.GolfCourseTeeID, &pairing.Status, &pairing.CreatedAt, &pairing.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan pairing: %w", err)
+		}
+
+		// Load players
+		players, err := r.GetPairingPlayers(pairing.ID)
+		if err != nil {
+			fmt.Printf("Warning: failed to load players for pairing %s: %v\n", pairing.ID, err)
+		} else {
+			pairing.Players = players
+		}
+
+		pairings = append(pairings, pairing)
+	}
+
+	return pairings, nil
+}
+
+func (r *Repository) GetPairingPlayers(pairingID string) ([]models.PairingPlayer, error) {
+	query := `
+		SELECT pp.id, pp.pairing_id, pp.user_id, pp.team_id, pp.player_order, pp.created_at,
+		       u.id, u.email, u.name, u.handicap, u.is_admin, u.created_at, u.updated_at,
+		       t.id, t.tournament_id, t.name, t.color, t.created_at, t.updated_at
+		FROM pairing_players pp
+		JOIN users u ON pp.user_id = u.id
+		LEFT JOIN teams t ON pp.team_id = t.id
+		WHERE pp.pairing_id = $1
+		ORDER BY pp.player_order
+	`
+
+	rows, err := r.db.Query(query, pairingID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pairing players: %w", err)
+	}
+	defer rows.Close()
+
+	var players []models.PairingPlayer
+	for rows.Next() {
+		var player models.PairingPlayer
+		var user models.User
+		var team models.Team
+
+		err := rows.Scan(
+			&player.ID, &player.PairingID, &player.UserID, &player.TeamID, &player.PlayerOrder, &player.CreatedAt,
+			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+			&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.CreatedAt, &team.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan pairing player: %w", err)
+		}
+
+		player.User = &user
+		player.Team = &team
+		players = append(players, player)
+	}
+
+	return players, nil
+}
+
+// ============================================
 // Match Repository Methods
 // ============================================
 
-func (r *Repository) CreateMatch(roundID string, req *models.CreateMatchRequest) (*models.Match, error) {
-	// First, get the next match number for this round
-	var nextMatchNumber int
-	countQuery := `SELECT COALESCE(MAX(match_number), 0) + 1 FROM matches WHERE round_id = $1`
-	err := r.db.QueryRow(countQuery, roundID).Scan(&nextMatchNumber)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get next match number: %w", err)
+func (r *Repository) CreateMatchForPairing(pairingID, roundID string, matchNumber int, req *models.CreateMatchRequest) (*models.Match, error) {
+	pointsAvailable := 1.0
+	if req.PointsAvailable != nil {
+		pointsAvailable = *req.PointsAvailable
 	}
 
 	query := `
-		INSERT INTO matches (round_id, team1_id, team2_id, match_format_id, match_number, holes, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at
+		INSERT INTO matches (pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'not_started', $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at
 	`
 
 	var match models.Match
-	err = r.db.QueryRow(query, roundID, req.Team1ID, req.Team2ID, req.MatchFormatID, nextMatchNumber, req.Holes).Scan(
-		&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
+	err := r.db.QueryRow(query, pairingID, roundID, req.Team1ID, req.Team2ID, req.MatchFormatID, matchNumber, req.Holes, pointsAvailable).Scan(
+		&match.ID, &match.PairingID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
 		&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
 		&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
 	)
@@ -291,50 +458,50 @@ func (r *Repository) CreateMatch(roundID string, req *models.CreateMatchRequest)
 		return nil, fmt.Errorf("failed to create match: %w", err)
 	}
 
-	// If player assignments are provided, create match players
-	if req.PlayerAssignments != nil {
-		// Add team1 players
-		for i, userID := range req.PlayerAssignments.Team1Players {
-			matchPlayer := &models.MatchPlayer{
-				MatchID:  match.ID,
-				UserID:   userID,
-				TeamID:   req.Team1ID,
-				Position: i + 1,
-			}
-			if err := r.CreateMatchPlayer(matchPlayer); err != nil {
-				return nil, fmt.Errorf("failed to create team1 player assignment: %w", err)
-			}
-		}
+	return &match, nil
+}
 
-		// Add team2 players
-		for i, userID := range req.PlayerAssignments.Team2Players {
-			matchPlayer := &models.MatchPlayer{
-				MatchID:  match.ID,
-				UserID:   userID,
-				TeamID:   req.Team2ID,
-				Position: i + 1,
-			}
-			if err := r.CreateMatchPlayer(matchPlayer); err != nil {
-				return nil, fmt.Errorf("failed to create team2 player assignment: %w", err)
-			}
-		}
-	} else {
-		// Auto-assign all team members if no specific assignments provided
-		if err := r.AutoAssignTeamMembers(match.ID, req.Team1ID, req.Team2ID); err != nil {
-			// Don't fail the match creation if auto-assignment fails, just log it
-			fmt.Printf("Warning: failed to auto-assign players for match %s: %v\n", match.ID, err)
-		}
+func (r *Repository) CreateMatch(roundID string, req *models.CreateMatchRequest) (*models.Match, error) {
+	// Legacy method - creates a match without a pairing
+	// First, get the next match number for this round
+	var nextMatchNumber int
+	countQuery := `SELECT COALESCE(MAX(match_number), 0) + 1 FROM matches WHERE round_id = $1 AND pairing_id IS NULL`
+	err := r.db.QueryRow(countQuery, roundID).Scan(&nextMatchNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get next match number: %w", err)
+	}
+
+	pointsAvailable := 1.0
+	if req.PointsAvailable != nil {
+		pointsAvailable = *req.PointsAvailable
+	}
+
+	query := `
+		INSERT INTO matches (round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'not_started', $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at
+	`
+
+	var match models.Match
+	err = r.db.QueryRow(query, roundID, req.Team1ID, req.Team2ID, req.MatchFormatID, nextMatchNumber, req.Holes, pointsAvailable).Scan(
+		&match.ID, &match.PairingID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
+		&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
+		&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create match: %w", err)
 	}
 
 	return &match, nil
 }
 
 func (r *Repository) GetMatch(id string) (*models.Match, error) {
-	query := `SELECT id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE id = $1`
+	query := `SELECT id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE id = $1`
 
 	var match models.Match
 	err := r.db.QueryRow(query, id).Scan(
-		&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
+		&match.ID, &match.PairingID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
 		&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
 		&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
 	)
@@ -346,11 +513,18 @@ func (r *Repository) GetMatch(id string) (*models.Match, error) {
 		return nil, fmt.Errorf("failed to get match: %w", err)
 	}
 
+	// Load pairing if it exists
+	if match.PairingID != "" {
+		if pairing, err := r.GetPairing(match.PairingID); err == nil {
+			match.Pairing = pairing
+		}
+	}
+
 	return &match, nil
 }
 
 func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
-	query := `SELECT id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE round_id = $1 ORDER BY match_number`
+	query := `SELECT id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE round_id = $1 ORDER BY pairing_id NULLS FIRST, match_number`
 
 	rows, err := r.db.Query(query, roundID)
 	if err != nil {
@@ -362,7 +536,7 @@ func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 	for rows.Next() {
 		var match models.Match
 		err := rows.Scan(
-			&match.ID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
+			&match.ID, &match.PairingID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
 			&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
 			&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
 		)
@@ -391,14 +565,51 @@ func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 			fmt.Printf("Warning: failed to load format for match %s: %v\n", match.ID, err)
 		}
 
-		// Load match players
-		players, err := r.GetMatchPlayersByMatch(match.ID)
+		// Load pairing if it exists
+		if match.PairingID != "" {
+			if pairing, err := r.GetPairing(match.PairingID); err == nil {
+				match.Pairing = pairing
+			}
+		}
+
+		matches = append(matches, match)
+	}
+
+	return matches, nil
+}
+
+func (r *Repository) GetMatchesByPairing(pairingID string) ([]models.Match, error) {
+	query := `SELECT id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE pairing_id = $1 ORDER BY match_number`
+
+	rows, err := r.db.Query(query, pairingID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get matches: %w", err)
+	}
+	defer rows.Close()
+
+	var matches []models.Match
+	for rows.Next() {
+		var match models.Match
+		err := rows.Scan(
+			&match.ID, &match.PairingID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
+			&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
+			&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
+		)
 		if err != nil {
-			// Log warning but don't fail the whole request
-			// In production you might want to use a proper logger here
-			fmt.Printf("Warning: failed to load players for match %s: %v\n", match.ID, err)
-		} else {
-			match.Players = players
+			return nil, fmt.Errorf("failed to scan match: %w", err)
+		}
+
+		// Load teams
+		if team1, err := r.GetTeam(match.Team1ID); err == nil {
+			match.Team1 = team1
+		}
+		if team2, err := r.GetTeam(match.Team2ID); err == nil {
+			match.Team2 = team2
+		}
+
+		// Load match format
+		if format, err := r.GetMatchFormat(match.MatchFormatID); err == nil {
+			match.Format = format
 		}
 
 		matches = append(matches, match)
@@ -411,18 +622,18 @@ func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 // Score Repository Methods
 // ============================================
 
-func (r *Repository) SubmitScore(matchID, userID string, holeNumber, strokes int) (*models.Score, error) {
+func (r *Repository) SubmitScore(pairingID, userID string, holeNumber, strokes int) (*models.Score, error) {
 	query := `
-		INSERT INTO hole_scores (match_id, user_id, hole_number, strokes, created_at, updated_at)
+		INSERT INTO hole_scores (pairing_id, user_id, hole_number, strokes, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		ON CONFLICT (match_id, user_id, hole_number) 
+		ON CONFLICT (pairing_id, user_id, hole_number) 
 		DO UPDATE SET strokes = EXCLUDED.strokes, updated_at = CURRENT_TIMESTAMP
-		RETURNING id, match_id, user_id, hole_number, strokes, created_at, updated_at
+		RETURNING id, pairing_id, user_id, hole_number, strokes, created_at, updated_at
 	`
 
 	var score models.Score
-	err := r.db.QueryRow(query, matchID, userID, holeNumber, strokes).Scan(
-		&score.ID, &score.MatchID, &score.UserID, &score.HoleNumber,
+	err := r.db.QueryRow(query, pairingID, userID, holeNumber, strokes).Scan(
+		&score.ID, &score.PairingID, &score.UserID, &score.HoleNumber,
 		&score.Strokes, &score.CreatedAt, &score.UpdatedAt,
 	)
 
@@ -433,12 +644,27 @@ func (r *Repository) SubmitScore(matchID, userID string, holeNumber, strokes int
 	return &score, nil
 }
 
-func (r *Repository) GetMatchScores(matchID string) ([]models.Score, error) {
-	query := `SELECT id, match_id, user_id, hole_number, strokes, created_at, updated_at FROM hole_scores WHERE match_id = $1 ORDER BY hole_number, user_id`
-
-	rows, err := r.db.Query(query, matchID)
+// Legacy method - submit score by matchID (will find pairing from match)
+func (r *Repository) SubmitScoreByMatch(matchID, userID string, holeNumber, strokes int) (*models.Score, error) {
+	// Get the match to find its pairing
+	match, err := r.GetMatch(matchID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get match scores: %w", err)
+		return nil, fmt.Errorf("failed to get match: %w", err)
+	}
+
+	if match.PairingID == "" {
+		return nil, fmt.Errorf("match has no associated pairing")
+	}
+
+	return r.SubmitScore(match.PairingID, userID, holeNumber, strokes)
+}
+
+func (r *Repository) GetPairingScores(pairingID string) ([]models.Score, error) {
+	query := `SELECT id, pairing_id, user_id, hole_number, strokes, created_at, updated_at FROM hole_scores WHERE pairing_id = $1 ORDER BY hole_number, user_id`
+
+	rows, err := r.db.Query(query, pairingID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pairing scores: %w", err)
 	}
 	defer rows.Close()
 
@@ -446,7 +672,7 @@ func (r *Repository) GetMatchScores(matchID string) ([]models.Score, error) {
 	for rows.Next() {
 		var score models.Score
 		err := rows.Scan(
-			&score.ID, &score.MatchID, &score.UserID, &score.HoleNumber,
+			&score.ID, &score.PairingID, &score.UserID, &score.HoleNumber,
 			&score.Strokes, &score.CreatedAt, &score.UpdatedAt,
 		)
 		if err != nil {
@@ -456,6 +682,21 @@ func (r *Repository) GetMatchScores(matchID string) ([]models.Score, error) {
 	}
 
 	return scores, nil
+}
+
+// Legacy method - get scores by match (deprecated, use GetPairingScores)
+func (r *Repository) GetMatchScores(matchID string) ([]models.Score, error) {
+	// Get the match to find its pairing
+	match, err := r.GetMatch(matchID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get match: %w", err)
+	}
+
+	if match.PairingID == "" {
+		return nil, fmt.Errorf("match has no associated pairing")
+	}
+
+	return r.GetPairingScores(match.PairingID)
 }
 
 // ============================================
@@ -774,7 +1015,9 @@ func (r *Repository) IsGroupAdmin(groupID, userID string) (bool, error) {
 	return count > 0, nil
 }
 
-// Match Players
+// Match Players - DEPRECATED: Use PairingPlayers instead
+// These methods are kept for backward compatibility but should not be used in new code
+/*
 func (r *Repository) CreateMatchPlayer(matchPlayer *models.MatchPlayer) error {
 	query := `
 		INSERT INTO match_players (match_id, user_id, team_id, player_order, created_at)
@@ -824,7 +1067,8 @@ func (r *Repository) GetMatchPlayersByMatch(matchID string) ([]models.MatchPlaye
 	return players, nil
 }
 
-// Auto-assign team members to a match
+// Auto-assign team members to a match - DEPRECATED
+/*
 func (r *Repository) AutoAssignTeamMembers(matchID, team1ID, team2ID string) error {
 	// Get team1 members
 	team1Members, err := r.GetTeamMembersByTeam(team1ID)
@@ -866,6 +1110,7 @@ func (r *Repository) AutoAssignTeamMembers(matchID, team1ID, team2ID string) err
 
 	return nil
 }
+*/
 
 func (r *Repository) GetTeamMembersByTeam(teamID string) ([]models.TeamMember, error) {
 	query := `SELECT id, team_id, user_id, created_at FROM team_members WHERE team_id = $1`
@@ -1273,6 +1518,8 @@ func (r *Repository) GetTeamMembers(teamID string) ([]models.TeamMember, error) 
 	return members, nil
 }
 
+// DEPRECATED: Use GetPairingPlayers instead
+/*
 func (r *Repository) GetMatchPlayers(matchID string) ([]models.MatchPlayer, error) {
 	query := `
 		SELECT mp.id, mp.match_id, mp.user_id, mp.team_id, mp.player_order,
@@ -1308,6 +1555,7 @@ func (r *Repository) GetMatchPlayers(matchID string) ([]models.MatchPlayer, erro
 
 	return players, nil
 }
+*/
 
 // ============================================
 // Golf Course Methods

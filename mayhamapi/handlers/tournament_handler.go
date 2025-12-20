@@ -217,6 +217,68 @@ func (h *TournamentHandler) GetRounds(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"rounds": rounds})
 }
 
+// POST /api/v1/rounds/:round_id/pairings
+func (h *TournamentHandler) CreatePairing(c *gin.Context) {
+	roundID := c.Param("round_id")
+
+	var req models.CreatePairingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	pairing, err := h.repo.CreatePairing(roundID, &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, pairing)
+}
+
+// GET /api/v1/rounds/:round_id/pairings
+func (h *TournamentHandler) GetPairings(c *gin.Context) {
+	roundID := c.Param("round_id")
+
+	pairings, err := h.repo.GetPairingsByRound(roundID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"pairings": pairings})
+}
+
+// GET /api/v1/pairings/:pairing_id
+func (h *TournamentHandler) GetPairing(c *gin.Context) {
+	pairingID := c.Param("pairing_id")
+
+	pairing, err := h.repo.GetPairing(pairingID)
+	if err != nil {
+		if err.Error() == "pairing not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Pairing not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, pairing)
+}
+
+// GET /api/v1/pairings/:pairing_id/matches
+func (h *TournamentHandler) GetPairingMatches(c *gin.Context) {
+	pairingID := c.Param("pairing_id")
+
+	matches, err := h.repo.GetMatchesByPairing(pairingID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"matches": matches})
+}
+
 // POST /api/v1/rounds/:round_id/matches
 func (h *TournamentHandler) CreateMatch(c *gin.Context) {
 	roundID := c.Param("round_id")
@@ -357,10 +419,36 @@ func (h *TournamentHandler) GetTeamMembers(c *gin.Context) {
 }
 
 // GET /api/v1/matches/:match_id/players
+// DEPRECATED: Use /api/v1/pairings/:pairing_id/players instead
 func (h *TournamentHandler) GetMatchPlayers(c *gin.Context) {
 	matchID := c.Param("match_id")
 
-	players, err := h.repo.GetMatchPlayers(matchID)
+	// Get match to find its pairing
+	match, err := h.repo.GetMatch(matchID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Match not found"})
+		return
+	}
+
+	if match.PairingID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Match has no associated pairing"})
+		return
+	}
+
+	players, err := h.repo.GetPairingPlayers(match.PairingID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"players": players})
+}
+
+// GET /api/v1/pairings/:pairing_id/players
+func (h *TournamentHandler) GetPairingPlayers(c *gin.Context) {
+	pairingID := c.Param("pairing_id")
+
+	players, err := h.repo.GetPairingPlayers(pairingID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

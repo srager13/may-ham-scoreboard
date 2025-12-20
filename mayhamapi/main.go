@@ -130,6 +130,11 @@ func setupRouter(
 			protected.GET("/tournaments/:tournament_id/rounds", tournamentHandler.GetRounds)
 			protected.GET("/tournaments/:tournament_id/leaderboard", leaderboardHandler.GetTournamentLeaderboard)
 			protected.GET("/rounds/:round_id/matches", tournamentHandler.GetMatches)
+			protected.GET("/rounds/:round_id/pairings", tournamentHandler.GetPairings)
+			protected.GET("/pairings/:pairing_id", tournamentHandler.GetPairing)
+			protected.GET("/pairings/:pairing_id/players", tournamentHandler.GetPairingPlayers)
+			protected.GET("/pairings/:pairing_id/matches", tournamentHandler.GetPairingMatches)
+			protected.GET("/pairings/:pairing_id/scores", scoringHandler.GetPairingScores)
 			protected.GET("/matches/:match_id", tournamentHandler.GetMatch)
 			protected.GET("/matches/:match_id/scores", scoringHandler.GetMatchScores)
 			protected.GET("/match-formats", tournamentHandler.GetMatchFormats)
@@ -151,6 +156,7 @@ func setupRouter(
 			protected.DELETE("/teams/:team_id/members/:user_id", tournamentHandler.DeleteTeamMember)
 			protected.POST("/tournaments/:tournament_id/rounds", tournamentHandler.CreateRound)
 			protected.DELETE("/rounds/:round_id", tournamentHandler.DeleteRound)
+			protected.POST("/rounds/:round_id/pairings", tournamentHandler.CreatePairing)
 			protected.POST("/rounds/:round_id/matches", tournamentHandler.CreateMatch)
 			protected.DELETE("/matches/:match_id", tournamentHandler.DeleteMatch)
 			protected.GET("/matches/:match_id/players", tournamentHandler.GetMatchPlayers)
@@ -158,6 +164,7 @@ func setupRouter(
 
 			// Scoring (players can submit their own scores)
 			protected.POST("/matches/:match_id/scores", scoringHandler.SubmitScores)
+			protected.POST("/pairings/:pairing_id/scores", scoringHandler.SubmitPairingScores)
 			protected.PATCH("/matches/:match_id/scores/:hole_number", scoringHandler.UpdateHoleScore)
 
 			// Golf courses

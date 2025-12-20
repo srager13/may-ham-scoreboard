@@ -152,3 +152,102 @@ func (h *ScoringHandler) UpdateHoleScore(c *gin.Context) {
 		"match_status":   matchStatus,
 	})
 }
+
+// POST /api/v1/pairings/:pairing_id/scores
+func (h *ScoringHandler) SubmitPairingScores(c *gin.Context) {
+	pairingID := c.Param("pairing_id")
+
+	var req models.SubmitScoreRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Submit each score to the database
+	var submittedScores []models.Score
+	for _, holeScore := range req.Scores {
+		score, err := h.repo.SubmitScore(pairingID, holeScore.UserID, req.HoleNumber, holeScore.Strokes)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		submittedScores = append(submittedScores, *score)
+	}
+
+	// Get all matches for this pairing and calculate their statuses
+	matches, err := h.repo.GetMatchesByPairing(pairingID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get all scores for the pairing
+	scores, err := h.repo.GetPairingScores(pairingID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Calculate match statuses for all matches in this pairing
+	var matchStatuses []interface{}
+	for _, match := range matches {
+		matchStatus, err := h.scoringService.CalculateAndStoreMatchResults(&match, scores)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		matchStatuses = append(matchStatuses, gin.H{
+			"match_id":     match.ID,
+			"match_status": matchStatus,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"scores":         submittedScores,
+		"match_statuses": matchStatuses,
+	})
+}
+
+// GET /api/v1/pairings/:pairing_id/scores
+func (h *ScoringHandler) GetPairingScores(c *gin.Context) {
+	pairingID := c.Param("pairing_id")
+
+	scores, err := h.repo.GetPairingScores(pairingID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get pairing details for context
+	pairing, err := h.repo.GetPairing(pairingID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get all matches for this pairing and their statuses
+	matches, err := h.repo.GetMatchesByPairing(pairingID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	var matchStatuses []interface{}
+	for _, match := range matches {
+		matchStatus, err := h.scoringService.CalculateMatchStatus(&match, scores)
+		if err != nil {
+			// Log error but don't fail the whole request
+			continue
+		}
+		matchStatuses = append(matchStatuses, gin.H{
+			"match_id":     match.ID,
+			"match_status": matchStatus,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"scores":         scores,
+		"pairing":        pairing,
+		"match_statuses": matchStatuses,
+	})
+}

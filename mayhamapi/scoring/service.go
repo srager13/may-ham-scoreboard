@@ -46,11 +46,10 @@ type HoleResult struct {
 }
 
 func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scores []models.Score) (*MatchStatus, error) {
-	// Get the number of players in this match to know when a hole is complete
-	expectedPlayersPerHole := len(match.Players)
-	if expectedPlayersPerHole == 0 {
-		// If no players assigned, assume 2 players minimum
-		expectedPlayersPerHole = 2
+	// Get the number of players from the pairing
+	expectedPlayersPerHole := 2 // Default minimum
+	if match.Pairing != nil && len(match.Pairing.Players) > 0 {
+		expectedPlayersPerHole = len(match.Pairing.Players)
 	}
 
 	// Group scores by hole
@@ -209,11 +208,10 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 }
 
 func (s *ScoringService) calculateMatchStatusFromScores(match *models.Match, scores []models.Score) (*MatchStatus, error) {
-	// Get the number of players in this match to know when a hole is complete
-	expectedPlayersPerHole := len(match.Players)
-	if expectedPlayersPerHole == 0 {
-		// If no players assigned, assume 2 players minimum
-		expectedPlayersPerHole = 2
+	// Get the number of players from the pairing
+	expectedPlayersPerHole := 2 // Default minimum
+	if match.Pairing != nil && len(match.Pairing.Players) > 0 {
+		expectedPlayersPerHole = len(match.Pairing.Players)
 	}
 
 	// Group scores by hole
