@@ -1093,12 +1093,13 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
   const addMatch = (roundIdx, pairingIdx) => {
     const newRounds = [...rounds];
     const safeMatchFormats = Array.isArray(matchFormats) ? matchFormats : [];
+    const pairing = newRounds[roundIdx].pairings[pairingIdx];
     
-    // Get the last match in this round to copy format and holes from
-    const lastMatch = newRounds[roundIdx].matches[newRounds[roundIdx].matches.length - 1];
+    // Get the last match in this pairing to copy format and holes from
+    const lastMatch = pairing.matches.length > 0 ? pairing.matches[pairing.matches.length - 1] : null;
     
-    newRounds[roundIdx].matches.push({
-      match_number: newRounds[roundIdx].matches.length + 1,
+    pairing.matches.push({
+      match_number: pairing.matches.length + 1,
       format_id: lastMatch ? lastMatch.format_id : (safeMatchFormats.length > 0 ? safeMatchFormats[0].id : ''),
       holes: lastMatch ? lastMatch.holes : 6,
       team1_players: [],
@@ -1107,15 +1108,15 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
     setRounds(newRounds);
   };
 
-  const updateMatch = (roundIdx, matchIdx, field, value) => {
+  const updateMatch = (roundIdx, pairingIdx, matchIdx, field, value) => {
     const newRounds = [...rounds];
-    newRounds[roundIdx].matches[matchIdx][field] = value;
+    newRounds[roundIdx].pairings[pairingIdx].matches[matchIdx][field] = value;
     setRounds(newRounds);
   };
 
-  const deleteMatch = (roundIdx, matchIdx) => {
+  const deleteMatch = (roundIdx, pairingIdx, matchIdx) => {
     const newRounds = [...rounds];
-    newRounds[roundIdx].matches = newRounds[roundIdx].matches.filter((_, i) => i !== matchIdx);
+    newRounds[roundIdx].pairings[pairingIdx].matches = newRounds[roundIdx].pairings[pairingIdx].matches.filter((_, i) => i !== matchIdx);
     setRounds(newRounds);
   };
 
