@@ -385,6 +385,24 @@ const TournamentSetup = () => {
       setLoading(true);
       setError(null);
 
+      // Validate that all pairings have players assigned
+      const invalidPairings: string[] = [];
+      rounds.forEach((round, rIdx) => {
+        round.pairings?.forEach((pairing, pIdx) => {
+          const validPlayers = (pairing.players || []).filter(p => p.user_id && p.team_id);
+          if (validPlayers.length === 0) {
+            invalidPairings.push(`${round.name} - Pairing ${pairing.pairing_number}`);
+          }
+        });
+      });
+
+      if (invalidPairings.length > 0) {
+        const message = `The following pairings have no players assigned:\n\n${invalidPairings.join('\n')}\n\nPlease assign players to all pairings or delete empty pairings before submitting.`;
+        setError(message);
+        setLoading(false);
+        return;
+      }
+
       if (editMode && selectedTournamentId) {
         // EDIT MODE: Update existing tournament
         // For simplicity, we'll delete all existing rounds/matches and recreate them
@@ -436,11 +454,13 @@ const TournamentSetup = () => {
 
           // Create pairings for this round
           for (const pairing of round.pairings || []) {
-            const pairingPlayers: PairingPlayerRequest[] = (pairing.players || []).map(p => ({
-              user_id: p.user_id,
-              team_id: p.team_id,
-              player_order: p.player_order
-            }));
+            const pairingPlayers: PairingPlayerRequest[] = (pairing.players || [])
+              .filter(p => p.user_id && p.team_id) // Filter out invalid players
+              .map(p => ({
+                user_id: p.user_id,
+                team_id: p.team_id,
+                player_order: p.player_order
+              }));
 
             const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => ({
               team1_id: createdTeams[0].id,
@@ -450,10 +470,16 @@ const TournamentSetup = () => {
               points_available: match.points_available
             }));
 
+            // Convert tee_time (HH:MM) to full RFC3339 timestamp
+            let fullTeeTime: string | undefined;
+            if (pairing.tee_time) {
+              fullTeeTime = `${round.date}T${pairing.tee_time}:00Z`;
+            }
+
             await apiClient.createPairing(newRound.id, {
               pairing_number: pairing.pairing_number,
-              tee_time: pairing.tee_time,
-              golf_course_tee_id: pairing.golf_course_tee_id,
+              tee_time: fullTeeTime,
+              golf_course_tee_id: pairing.golf_course_tee_id || undefined, // Convert empty string to undefined
               players: pairingPlayers,
               matches: pairingMatches
             });
@@ -510,11 +536,21 @@ const TournamentSetup = () => {
 
           // Create pairings for this round
           for (const pairing of round.pairings || []) {
-            const pairingPlayers: PairingPlayerRequest[] = (pairing.players || []).map(p => ({
-              user_id: p.user_id,
-              team_id: p.team_id,
-              player_order: p.player_order
-            }));
+            const pairingPlayers: PairingPlayerRequest[] = (pairing.players || [])
+              .filter(p => p.user_id && p.team_id) // Filter out invalid players
+              .map(p => {
+                // Map temp team IDs to actual created team IDs
+                let actualTeamId = p.team_id;
+                if (p.team_id.startsWith('team-')) {
+                  const teamIdx = parseInt(p.team_id.split('-')[1]);
+                  actualTeamId = createdTeams[teamIdx].id;
+                }
+                return {
+                  user_id: p.user_id,
+                  team_id: actualTeamId,
+                  player_order: p.player_order
+                };
+              });
 
             const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => ({
               team1_id: createdTeams[0].id,
@@ -524,10 +560,16 @@ const TournamentSetup = () => {
               points_available: match.points_available
             }));
 
+            // Convert tee_time (HH:MM) to full RFC3339 timestamp
+            let fullTeeTime: string | undefined;
+            if (pairing.tee_time) {
+              fullTeeTime = `${round.date}T${pairing.tee_time}:00Z`;
+            }
+
             await apiClient.createPairing(newRound.id, {
               pairing_number: pairing.pairing_number,
-              tee_time: pairing.tee_time,
-              golf_course_tee_id: pairing.golf_course_tee_id,
+              tee_time: fullTeeTime,
+              golf_course_tee_id: pairing.golf_course_tee_id || undefined, // Convert empty string to undefined
               players: pairingPlayers,
               matches: pairingMatches
             });
@@ -1080,7 +1122,9 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
 
   const updatePairing = (roundIdx, pairingIdx, field, value) => {
     const newRounds = [...rounds];
-    newRounds[roundIdx].pairings[pairingIdx][field] = value;
+    const newPairings = [...newRounds[roundIdx].pairings];
+    newPairings[pairingIdx] = { ...newPairings[pairingIdx], [field]: value };
+    newRounds[roundIdx] = { ...newRounds[roundIdx], pairings: newPairings };
     setRounds(newRounds);
   };
 
@@ -1110,7 +1154,11 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
 
   const updateMatch = (roundIdx, pairingIdx, matchIdx, field, value) => {
     const newRounds = [...rounds];
-    newRounds[roundIdx].pairings[pairingIdx].matches[matchIdx][field] = value;
+    const newPairings = [...newRounds[roundIdx].pairings];
+    const newMatches = [...newPairings[pairingIdx].matches];
+    newMatches[matchIdx] = { ...newMatches[matchIdx], [field]: value };
+    newPairings[pairingIdx] = { ...newPairings[pairingIdx], matches: newMatches };
+    newRounds[roundIdx] = { ...newRounds[roundIdx], pairings: newPairings };
     setRounds(newRounds);
   };
 
@@ -1390,8 +1438,13 @@ const PairingConfig = ({
     updatePairing(roundIdx, pairingIdx, 'players', newPlayers);
   };
 
-  const allTeamPlayers = teams.flatMap(team => 
-    team.players.map(player => ({ ...player, team_id: team.id, team_name: team.name, team_color: team.color }))
+  const allTeamPlayers = teams.flatMap((team, teamIdx) => 
+    team.players.map(player => ({ 
+      ...player, 
+      team_id: team.id || `team-${teamIdx}`, // Use temp ID for new teams
+      team_name: team.name, 
+      team_color: team.color 
+    }))
   );
 
   const pairingPlayerIds = (pairing.players || []).map(p => p.user_id);
