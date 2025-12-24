@@ -804,6 +804,8 @@ const TournamentSetup = () => {
             availableTees={availableTees}
             setAvailableTees={setAvailableTees}
             loading={loading}
+            tournamentStartDate={tournament.start_date}
+            tournamentEndDate={tournament.end_date}
           />
         )}
         {step === 4 && (
@@ -1035,7 +1037,7 @@ const TeamsStep = ({ teams, setTeams, availableUsers }) => {
 };
 
 // Step 3: Rounds & Matches
-const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, availableTees, setAvailableTees, loading }) => {
+const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, availableTees, setAvailableTees, loading, tournamentStartDate, tournamentEndDate }) => {
   // Show loading message if data is still being fetched
   if (loading) {
     return (
@@ -1200,6 +1202,8 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
               matchFormats={matchFormats}
               golfCourses={golfCourses}
               availableTees={availableTees}
+              tournamentStartDate={tournamentStartDate}
+              tournamentEndDate={tournamentEndDate}
               updateRound={updateRound}
               deleteRound={deleteRound}
               addPairing={addPairing}
@@ -1223,6 +1227,8 @@ const RoundConfig = ({
   matchFormats,
   golfCourses,
   availableTees,
+  tournamentStartDate,
+  tournamentEndDate,
   updateRound,
   deleteRound,
   addPairing,
@@ -1234,6 +1240,25 @@ const RoundConfig = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  
+  // Generate date options between tournament start and end dates
+  const getDateOptions = () => {
+    if (!tournamentStartDate || !tournamentEndDate) return [];
+    
+    const dates = [];
+    const start = new Date(tournamentStartDate);
+    const end = new Date(tournamentEndDate);
+    
+    const current = new Date(start);
+    while (current <= end) {
+      dates.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return dates;
+  };
+  
+  const dateOptions = getDateOptions();
   
   // Filter golf courses based on search term
   const filteredCourses = (golfCourses || []).filter(course => {
@@ -1272,12 +1297,33 @@ const RoundConfig = ({
             className="text-lg font-bold border-b-2 px-2 py-1"
             placeholder="Round name"
           />
-          <input
-            type="date"
-            value={round.date}
-            onChange={(e) => updateRound(roundIdx, 'date', e.target.value)}
-            className="border rounded px-3 py-1"
-          />
+          {dateOptions.length > 0 ? (
+            <select
+              value={round.date}
+              onChange={(e) => updateRound(roundIdx, 'date', e.target.value)}
+              className="border rounded px-3 py-2"
+            >
+              <option value="">Select date...</option>
+              {dateOptions.map(date => (
+                <option key={date} value={date}>
+                  {new Date(date + 'T12:00:00').toLocaleDateString('en-US', { 
+                    weekday: 'short', 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric' 
+                  })}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="date"
+              value={round.date}
+              onChange={(e) => updateRound(roundIdx, 'date', e.target.value)}
+              className="border rounded px-3 py-1"
+              placeholder="Set tournament dates first"
+            />
+          )}
         </div>
         <div className="flex gap-2">
           <button
@@ -1488,22 +1534,33 @@ const PairingConfig = ({
       {/* Players in Pairing */}
       <div className="mb-3">
         <label className="block text-sm font-medium mb-2">Players ({(pairing.players || []).length}/4)</label>
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          {(pairing.players || []).map((player) => {
-            const user = allTeamPlayers.find(p => p.id === player.user_id);
-            if (!user) return null;
+        <div className="grid grid-cols-2 gap-3 mb-2">
+          {teams.map((team, teamIdx) => {
+            const teamPlayers = (pairing.players || [])
+              .map(p => {
+                const user = allTeamPlayers.find(u => u.id === p.user_id);
+                return user && user.team_id === (team.id || `team-${teamIdx}`) ? { ...p, user } : null;
+              })
+              .filter(p => p !== null);
+            
             return (
-              <div key={player.user_id} className="flex items-center justify-between bg-white rounded p-2 border">
-                <div>
-                  <span className="font-medium text-sm">{user.name}</span>
-                  <span className="text-xs ml-2" style={{ color: user.team_color }}>({user.team_name})</span>
+              <div key={teamIdx}>
+                <div className="text-xs font-medium mb-1" style={{ color: team.color }}>
+                  {team.name}
                 </div>
-                <button
-                  onClick={() => removePlayerFromPairing(player.user_id)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  <X size={14} />
-                </button>
+                <div className="space-y-1">
+                  {teamPlayers.map((player) => (
+                    <div key={player.user_id} className="flex items-center justify-between bg-white rounded p-2 border">
+                      <span className="font-medium text-sm">{player.user.name}</span>
+                      <button
+                        onClick={() => removePlayerFromPairing(player.user_id)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             );
           })}
