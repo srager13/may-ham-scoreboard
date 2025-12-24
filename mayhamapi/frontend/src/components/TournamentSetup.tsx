@@ -1614,6 +1614,8 @@ const PairingConfig = ({
                 pairingIdx={pairingIdx}
                 roundIdx={roundIdx}
                 teams={teams}
+                pairing={pairing}
+                allTeamPlayers={allTeamPlayers}
                 matchFormats={matchFormats}
                 updateMatch={updateMatch}
                 deleteMatch={deleteMatch}
@@ -1632,6 +1634,8 @@ const MatchConfig = ({
   pairingIdx,
   roundIdx,
   teams,
+  pairing,
+  allTeamPlayers,
   matchFormats,
   updateMatch,
   deleteMatch
@@ -1640,6 +1644,9 @@ const MatchConfig = ({
   const safeMatchFormats = Array.isArray(matchFormats) ? matchFormats : [];
   const selectedFormat = safeMatchFormats.find(f => f.id === match.format_id);
   const playersNeeded = selectedFormat?.players_per_side || 1;
+  
+  // Get the player IDs that are in this pairing
+  const pairingPlayerIds = (pairing.players || []).map(p => p.user_id);
 
   return (
     <div className="bg-white rounded p-3 border">
@@ -1698,38 +1705,49 @@ const MatchConfig = ({
       </div>
 
       <div className="grid grid-cols-2 gap-3 mt-2">
-        {teams.map((team, teamIdx) => (
-          <div key={teamIdx}>
-            <label className="block text-xs font-medium mb-1" style={{ color: team.color }}>
-              {team.name} Players
-            </label>
-            <div className="space-y-1">
-              {Array.from({ length: playersNeeded }).map((_, playerSlot) => (
-                <select
-                  key={playerSlot}
-                  value={teamIdx === 0 ? (match.team1_players[playerSlot] !== undefined ? match.team1_players[playerSlot].toString() : '') : (match.team2_players[playerSlot] !== undefined ? match.team2_players[playerSlot].toString() : '')}
-                  onChange={(e) => {
-                    const newPlayers = [...(teamIdx === 0 ? match.team1_players : match.team2_players)];
-                    if (e.target.value === '') {
-                      newPlayers[playerSlot] = undefined;
-                    } else {
-                      newPlayers[playerSlot] = parseInt(e.target.value);
-                    }
-                    updateMatch(roundIdx, pairingIdx, matchIdx, teamIdx === 0 ? 'team1_players' : 'team2_players', newPlayers);
-                  }}
-                  className="w-full p-1 border rounded text-xs"
-                >
-                  <option value="">Select...</option>
-                  {team.players.map((player, pIdx) => (
-                    <option key={player.id} value={pIdx.toString()}>
-                      {player.name}
-                    </option>
-                  ))}
-                </select>
-              ))}
+        {teams.map((team, teamIdx) => {
+          // Filter team players to only those in this pairing
+          const teamPlayersInPairing = team.players.filter(player => 
+            pairingPlayerIds.includes(player.id)
+          );
+          
+          return (
+            <div key={teamIdx}>
+              <label className="block text-xs font-medium mb-1" style={{ color: team.color }}>
+                {team.name} Players
+              </label>
+              <div className="space-y-1">
+                {Array.from({ length: playersNeeded }).map((_, playerSlot) => (
+                  <select
+                    key={playerSlot}
+                    value={teamIdx === 0 ? (match.team1_players[playerSlot] !== undefined ? match.team1_players[playerSlot].toString() : '') : (match.team2_players[playerSlot] !== undefined ? match.team2_players[playerSlot].toString() : '')}
+                    onChange={(e) => {
+                      const newPlayers = [...(teamIdx === 0 ? match.team1_players : match.team2_players)];
+                      if (e.target.value === '') {
+                        newPlayers[playerSlot] = undefined;
+                      } else {
+                        newPlayers[playerSlot] = parseInt(e.target.value);
+                      }
+                      updateMatch(roundIdx, pairingIdx, matchIdx, teamIdx === 0 ? 'team1_players' : 'team2_players', newPlayers);
+                    }}
+                    className="w-full p-1 border rounded text-xs"
+                  >
+                    <option value="">Select...</option>
+                    {teamPlayersInPairing.map((player, pIdx) => {
+                      // Find the original index of this player in team.players
+                      const originalIdx = team.players.findIndex(p => p.id === player.id);
+                      return (
+                        <option key={player.id} value={originalIdx.toString()}>
+                          {player.name}
+                        </option>
+                      );
+                    })}
+                  </select>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
