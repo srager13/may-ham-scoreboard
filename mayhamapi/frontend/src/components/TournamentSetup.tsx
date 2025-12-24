@@ -16,6 +16,7 @@ interface PairingData {
   golf_course_tee_id?: string;
   players: PairingPlayerData[];
   matches: MatchData[];
+  collapsed?: boolean;
 }
 
 interface PairingPlayerData {
@@ -31,6 +32,7 @@ interface RoundData {
   date: string;
   golf_course_id?: string;
   pairings: PairingData[];
+  collapsed?: boolean;
 }
 
 interface MatchData {
@@ -41,6 +43,7 @@ interface MatchData {
   points_available?: number;
   team1_players: number[];
   team2_players: number[];
+  collapsed?: boolean;
 }
 
 const TournamentSetup = () => {
@@ -1170,6 +1173,24 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
     setRounds(newRounds);
   };
 
+  const toggleRoundCollapse = (roundIdx) => {
+    const newRounds = [...rounds];
+    newRounds[roundIdx].collapsed = !newRounds[roundIdx].collapsed;
+    setRounds(newRounds);
+  };
+
+  const togglePairingCollapse = (roundIdx, pairingIdx) => {
+    const newRounds = [...rounds];
+    newRounds[roundIdx].pairings[pairingIdx].collapsed = !newRounds[roundIdx].pairings[pairingIdx].collapsed;
+    setRounds(newRounds);
+  };
+
+  const toggleMatchCollapse = (roundIdx, pairingIdx, matchIdx) => {
+    const newRounds = [...rounds];
+    newRounds[roundIdx].pairings[pairingIdx].matches[matchIdx].collapsed = !newRounds[roundIdx].pairings[pairingIdx].matches[matchIdx].collapsed;
+    setRounds(newRounds);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <div className="flex items-center justify-between mb-6">
@@ -1212,6 +1233,9 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
               addMatch={addMatch}
               updateMatch={updateMatch}
               deleteMatch={deleteMatch}
+              toggleRoundCollapse={toggleRoundCollapse}
+              togglePairingCollapse={togglePairingCollapse}
+              toggleMatchCollapse={toggleMatchCollapse}
             />
           ))
         )}
@@ -1236,7 +1260,10 @@ const RoundConfig = ({
   deletePairing,
   addMatch,
   updateMatch,
-  deleteMatch
+  deleteMatch,
+  toggleRoundCollapse,
+  togglePairingCollapse,
+  toggleMatchCollapse
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -1286,6 +1313,38 @@ const RoundConfig = ({
     return parts.join(' ');
   };
 
+  // Collapsed view
+  if (round.collapsed) {
+    const selectedCourse = golfCourses?.find(c => c.id === round.golf_course_id);
+    const courseName = selectedCourse ? formatCourseName(selectedCourse) : 'No course selected';
+    return (
+      <div className="border-2 rounded-lg p-3 bg-gray-100">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4 flex-1">
+            <span className="font-bold text-lg">{round.name}</span>
+            <span className="text-sm text-gray-600">{round.date ? new Date(round.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}</span>
+            <span className="text-xs text-gray-500">{courseName}</span>
+            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">{round.pairings?.length || 0} pairing{(round.pairings?.length || 0) !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => toggleRoundCollapse(roundIdx)}
+              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+            >
+              ✏️ Edit
+            </button>
+            <button
+              onClick={() => deleteRound(roundIdx)}
+              className="p-2 text-red-600 hover:bg-red-50 rounded"
+            >
+              <Trash2 size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="border-2 rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
@@ -1332,6 +1391,12 @@ const RoundConfig = ({
           >
             <Plus size={16} className="mr-1" />
             Add Pairing
+          </button>
+          <button
+            onClick={() => toggleRoundCollapse(roundIdx)}
+            className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+          >
+            ✓ Done
           </button>
           <button
             onClick={() => deleteRound(roundIdx)}
@@ -1439,6 +1504,8 @@ const RoundConfig = ({
               addMatch={addMatch}
               updateMatch={updateMatch}
               deleteMatch={deleteMatch}
+              togglePairingCollapse={togglePairingCollapse}
+              toggleMatchCollapse={toggleMatchCollapse}
             />
           ))
         )}
@@ -1459,7 +1526,9 @@ const PairingConfig = ({
   deletePairing,
   addMatch,
   updateMatch,
-  deleteMatch
+  deleteMatch,
+  togglePairingCollapse,
+  toggleMatchCollapse
 }) => {
   const addPlayerToPairing = (userId, teamId) => {
     const newPlayers = [...(pairing.players || [])];
@@ -1496,6 +1565,42 @@ const PairingConfig = ({
   const pairingPlayerIds = (pairing.players || []).map(p => p.user_id);
   const availablePlayers = allTeamPlayers.filter(p => !pairingPlayerIds.includes(p.id));
 
+  // Collapsed view
+  if (pairing.collapsed) {
+    const playerNames = (pairing.players || [])
+      .map(p => {
+        const user = allTeamPlayers.find(u => u.id === p.user_id);
+        return user ? user.name : 'Unknown';
+      })
+      .join(', ');
+    return (
+      <div className="bg-gray-100 border-2 border-gray-300 rounded-lg p-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 flex-1">
+            <span className="font-bold text-blue-700">Pairing {pairing.pairing_number}</span>
+            {pairing.tee_time && <span className="text-sm text-gray-600">⏰ {pairing.tee_time}</span>}
+            <span className="text-xs text-gray-500">{playerNames || 'No players'}</span>
+            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">{pairing.matches?.length || 0} match{(pairing.matches?.length || 0) !== 1 ? 'es' : ''}</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => togglePairingCollapse(roundIdx, pairingIdx)}
+              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+            >
+              ✏️ Edit
+            </button>
+            <button
+              onClick={() => deletePairing(roundIdx, pairingIdx)}
+              className="text-red-600 hover:text-red-800"
+            >
+              <Trash2 size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-gray-50 border-2 border-blue-200 rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
@@ -1523,12 +1628,20 @@ const PairingConfig = ({
             </select>
           )}
         </div>
-        <button
-          onClick={() => deletePairing(roundIdx, pairingIdx)}
-          className="text-red-600 hover:text-red-800"
-        >
-          <Trash2 size={18} />
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => togglePairingCollapse(roundIdx, pairingIdx)}
+            className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
+          >
+            ✓ Done
+          </button>
+          <button
+            onClick={() => deletePairing(roundIdx, pairingIdx)}
+            className="text-red-600 hover:text-red-800"
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Players in Pairing */}
@@ -1619,6 +1732,7 @@ const PairingConfig = ({
                 matchFormats={matchFormats}
                 updateMatch={updateMatch}
                 deleteMatch={deleteMatch}
+                toggleMatchCollapse={toggleMatchCollapse}
               />
             ))
           )}
@@ -1638,7 +1752,8 @@ const MatchConfig = ({
   allTeamPlayers,
   matchFormats,
   updateMatch,
-  deleteMatch
+  deleteMatch,
+  toggleMatchCollapse
 }) => {
   // Ensure matchFormats is always an array
   const safeMatchFormats = Array.isArray(matchFormats) ? matchFormats : [];
@@ -1648,16 +1763,55 @@ const MatchConfig = ({
   // Get the player IDs that are in this pairing
   const pairingPlayerIds = (pairing.players || []).map(p => p.user_id);
 
+  // Collapsed view
+  if (match.collapsed) {
+    const formatName = selectedFormat?.name || 'No format';
+    return (
+      <div className="bg-gray-100 rounded p-2 border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 flex-1">
+            <span className="font-medium text-sm">Match {matchIdx + 1}</span>
+            <span className="text-xs text-gray-600">{formatName}</span>
+            <span className="text-xs text-gray-600">{match.holes} holes</span>
+            <span className="text-xs text-gray-600">{match.points_available || 1} pt{(match.points_available || 1) !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => toggleMatchCollapse(roundIdx, pairingIdx, matchIdx)}
+              className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
+            >
+              ✏️ Edit
+            </button>
+            <button
+              onClick={() => deleteMatch(roundIdx, pairingIdx, matchIdx)}
+              className="text-red-600 hover:text-red-800"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded p-3 border">
       <div className="flex items-center justify-between mb-2">
         <span className="font-medium text-sm">Match {matchIdx + 1}</span>
-        <button
-          onClick={() => deleteMatch(roundIdx, pairingIdx, matchIdx)}
-          className="text-red-600 hover:text-red-800"
-        >
-          <X size={16} />
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => toggleMatchCollapse(roundIdx, pairingIdx, matchIdx)}
+            className="px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-xs"
+          >
+            ✓ Done
+          </button>
+          <button
+            onClick={() => deleteMatch(roundIdx, pairingIdx, matchIdx)}
+            className="text-red-600 hover:text-red-800"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
