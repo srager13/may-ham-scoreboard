@@ -1562,8 +1562,11 @@ const PairingConfig = ({
     }))
   );
 
-  const pairingPlayerIds = (pairing.players || []).map(p => p.user_id);
-  const availablePlayers = allTeamPlayers.filter(p => !pairingPlayerIds.includes(p.id));
+  // Get all player IDs from ALL pairings in this round (not just current pairing)
+  const allRoundPairingPlayerIds = (round.pairings || []).flatMap(p => 
+    (p.players || []).map(player => player.user_id)
+  );
+  const availablePlayers = allTeamPlayers.filter(p => !allRoundPairingPlayerIds.includes(p.id));
 
   // Collapsed view
   if (pairing.collapsed) {
