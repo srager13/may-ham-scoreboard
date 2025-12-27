@@ -258,6 +258,16 @@ const TournamentSetup = () => {
         await loadGroupUsers(tournamentData.group_id);
       }
 
+      // Ensure golf courses are loaded
+      if (golfCourses.length === 0) {
+        try {
+          const courses = await apiClient.getStoredGolfCourses();
+          setGolfCourses(Array.isArray(courses) ? courses : []);
+        } catch (err) {
+          console.error('Error loading golf courses:', err);
+        }
+      }
+
       // Load teams
       const teamsData = await apiClient.getTournamentTeams(tournamentId);
       const loadedTeams: TeamData[] = [];
@@ -351,7 +361,7 @@ const TournamentSetup = () => {
           name: round.name,
           round_number: round.round_number,
           date: round.round_date.split('T')[0],
-          golf_course_id: round.golf_course_id,
+          golf_course_id: round.golf_course_id || undefined, // Convert null to undefined
           pairings: loadedPairings
         });
       }
