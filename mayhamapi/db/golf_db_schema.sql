@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
     group_id UUID REFERENCES groups(id),
     created_by UUID REFERENCES users(id),
     status VARCHAR(50) DEFAULT 'draft', -- draft, active, completed
+    scoring_method VARCHAR(20) DEFAULT 'gross' CHECK (scoring_method IN ('gross', 'stableford')), -- gross: stroke play, stableford: points-based
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -162,6 +163,7 @@ CREATE TABLE IF NOT EXISTS match_formats (
     description TEXT,
     players_per_side INT NOT NULL, -- 1 for singles, 2 for pairs
     scoring_type VARCHAR(50) NOT NULL, -- match_play, stroke_play, scramble, shamble, high_low
+    score_input_type VARCHAR(20) DEFAULT 'individual' CHECK (score_input_type IN ('individual', 'team')), -- individual: each player scores, team: one score per team
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -173,6 +175,8 @@ CREATE TABLE IF NOT EXISTS matches (
     match_format_id UUID REFERENCES match_formats(id),
     match_number INT NOT NULL, -- order within the pairing
     holes INT NOT NULL, -- 6, 9, or 18
+    start_hole INT, -- first hole of match (1-18), NULL for 18-hole or legacy
+    end_hole INT, -- last hole of match (1-18), NULL for 18-hole or legacy
     status VARCHAR(50) DEFAULT 'not_started', -- not_started, in_progress, completed
     team1_id UUID REFERENCES teams(id),
     team2_id UUID REFERENCES teams(id),
@@ -181,7 +185,8 @@ CREATE TABLE IF NOT EXISTS matches (
     team2_points DECIMAL(3,1) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(pairing_id, match_number)
+    UNIQUE(pairing_id, match_number),
+    CHECK ((start_hole IS NULL AND end_hole IS NULL) OR (start_hole >= 1 AND end_hole <= 18 AND start_hole <= end_hole))
 );
 
 -- Hole-by-hole scores
@@ -191,6 +196,7 @@ CREATE TABLE IF NOT EXISTS hole_scores (
     hole_number INT NOT NULL,
     user_id UUID REFERENCES users(id),
     strokes INT NOT NULL,
+    stableford_points INT, -- Stableford points (calculated from strokes vs par/handicap), NULL if using gross scoring
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(pairing_id, hole_number, user_id)
@@ -239,7 +245,9 @@ CREATE INDEX IF NOT EXISTS idx_golf_course_tees_course ON golf_course_tees(cours
 CREATE INDEX IF NOT EXISTS idx_golf_course_holes_tee ON golf_course_holes(tee_id);
 CREATE INDEX IF NOT EXISTS idx_matches_pairing ON matches(pairing_id);
 CREATE INDEX IF NOT EXISTS idx_matches_round ON matches(round_id);
+CREATE INDEX IF NOT EXISTS idx_matches_hole_range ON matches(start_hole, end_hole) WHERE start_hole IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_hole_scores_pairing ON hole_scores(pairing_id, hole_number);
+CREATE INDEX IF NOT EXISTS idx_hole_scores_stableford ON hole_scores(stableford_points) WHERE stableford_points IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_hole_results_match ON hole_results(match_id);
 CREATE INDEX IF NOT EXISTS idx_player_stats_tournament ON player_stats(tournament_id);
 CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id);
@@ -247,11 +255,11 @@ CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id);
 CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
 
 -- Sample match formats data
-INSERT INTO match_formats (name, description, players_per_side, scoring_type) VALUES
-    ('Singles Match Play', 'One-on-one match play', 1, 'match_play'),
-    ('2v2 Scramble', 'Two-person team scramble format', 2, 'scramble'),
-    ('2v2 Best Ball', 'Two-person team best ball', 2, 'best_ball'),
-    ('2v2 Alternate Shot', 'Two-person alternate shot', 2, 'alternate_shot'),
-    ('High-Low', 'Best and worst score combination', 2, 'high_low'),
-    ('Shamble', 'Drive scramble, then individual play', 2, 'shamble')
+INSERT INTO match_formats (name, description, players_per_side, scoring_type, score_input_type) VALUES
+    ('Singles Match Play', 'One-on-one match play', 1, 'match_play', 'individual'),
+    ('2v2 Scramble', 'Two-person team scramble format', 2, 'scramble', 'team'),
+    ('2v2 Best Ball', 'Two-person team best ball', 2, 'best_ball', 'individual'),
+    ('2v2 Alternate Shot', 'Two-person alternate shot', 2, 'alternate_shot', 'team'),
+    ('High-Low', 'Best and worst score combination', 2, 'high_low', 'individual'),
+    ('Shamble', 'Drive scramble, then individual play', 2, 'shamble', 'team')
 ON CONFLICT (name) DO NOTHING;
