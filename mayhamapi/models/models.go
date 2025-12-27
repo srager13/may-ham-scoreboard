@@ -225,14 +225,14 @@ type Match struct {
 }
 
 type Score struct {
-	ID              string    `json:"id" db:"id"`
-	PairingID       string    `json:"pairing_id" db:"pairing_id"`
-	UserID          string    `json:"user_id" db:"user_id"`
-	HoleNumber      int       `json:"hole_number" db:"hole_number"`
-	Strokes         int       `json:"strokes" db:"strokes"`
+	ID               string    `json:"id" db:"id"`
+	PairingID        string    `json:"pairing_id" db:"pairing_id"`
+	UserID           string    `json:"user_id" db:"user_id"`
+	HoleNumber       int       `json:"hole_number" db:"hole_number"`
+	Strokes          int       `json:"strokes" db:"strokes"`
 	StablefordPoints *int      `json:"stableford_points,omitempty" db:"stableford_points"` // nil if gross scoring
-	CreatedAt       time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
+	CreatedAt        time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
 	// Related data (not in DB table)
 	User *User `json:"user,omitempty"`
 }
