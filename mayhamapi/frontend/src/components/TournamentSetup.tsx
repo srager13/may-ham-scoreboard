@@ -42,6 +42,8 @@ interface MatchData {
   match_number: number;
   format_id: string;
   holes: number;
+  start_hole?: number;  // First hole of match (1-18)
+  end_hole?: number;    // Last hole of match (1-18)
   points_available?: number;
   team1_players: number[];
   team2_players: number[];
@@ -64,6 +66,7 @@ const TournamentSetup = () => {
     start_date: '',
     end_date: '',
     group_id: '',
+    scoring_method: 'gross', // Default to gross scoring
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // Default to browser timezone
   });
   
@@ -251,6 +254,7 @@ const TournamentSetup = () => {
         start_date: tournamentData.start_date.split('T')[0],
         end_date: tournamentData.end_date.split('T')[0],
         group_id: tournamentData.group_id || '',
+        scoring_method: tournamentData.scoring_method || 'gross',
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
       });
 
@@ -389,6 +393,7 @@ const TournamentSetup = () => {
       start_date: '', 
       end_date: '', 
       group_id: '',
+      scoring_method: 'gross',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone 
     });
     setTeams([
@@ -508,6 +513,8 @@ const TournamentSetup = () => {
               team2_id: createdTeams[1].id,
               match_format_id: match.format_id,
               holes: match.holes,
+              start_hole: match.start_hole,
+              end_hole: match.end_hole,
               points_available: match.points_available
             }));
 
@@ -540,6 +547,7 @@ const TournamentSetup = () => {
           start_date: tournament.start_date + 'T00:00:00Z',
           end_date: tournament.end_date + 'T23:59:59Z',
           group_id: tournament.group_id || undefined,
+          scoring_method: tournament.scoring_method || 'gross',
         };
 
         const newTournament = await apiClient.createTournament(tournamentData);
@@ -600,6 +608,8 @@ const TournamentSetup = () => {
               team2_id: createdTeams[1].id,
               match_format_id: match.format_id,
               holes: match.holes,
+              start_hole: match.start_hole,
+              end_hole: match.end_hole,
               points_available: match.points_available
             }));
 
@@ -633,6 +643,7 @@ const TournamentSetup = () => {
         start_date: '', 
         end_date: '', 
         group_id: '',
+        scoring_method: 'gross',
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone 
       });
       setTeams([
@@ -704,7 +715,7 @@ const TournamentSetup = () => {
               onClick={() => {
                 if (confirm('Are you sure you want to clear all data and start over?')) {
                   clearDraft();
-                  setTournament({ name: '', description: '', start_date: '', end_date: '', group_id: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+                  setTournament({ name: '', description: '', start_date: '', end_date: '', group_id: '', scoring_method: 'gross', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
                   setTeams([
                     { name: 'Team USA', color: '#DC2626', players: [] },
                     { name: 'Team Europe', color: '#2563EB', players: [] }
@@ -954,6 +965,26 @@ const TournamentInfoStep = ({ tournament, setTournament, userGroups, onGroupSele
               </option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Scoring Method *
+            <span className="text-xs text-gray-500 ml-2">How scores will be calculated</span>
+          </label>
+          <select
+            value={tournament.scoring_method}
+            onChange={(e) => setTournament({ ...tournament, scoring_method: e.target.value })}
+            className="w-full p-3 border rounded-lg"
+          >
+            <option value="gross">Gross (Stroke Play)</option>
+            <option value="stableford">Stableford (Points-Based)</option>
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            {tournament.scoring_method === 'gross' 
+              ? 'Lower score wins. Scores are compared as-is.'
+              : 'Points awarded based on score vs par. Higher points win.'}
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -1821,13 +1852,16 @@ const MatchConfig = ({
   // Collapsed view
   if (match.collapsed) {
     const formatName = selectedFormat?.name || 'No format';
+    const holeRangeText = match.start_hole && match.end_hole 
+      ? `holes ${match.start_hole}-${match.end_hole}`
+      : `${match.holes} holes`;
     return (
       <div className="bg-gray-100 rounded p-2 border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 flex-1">
             <span className="font-medium text-sm">Match {matchIdx + 1}</span>
             <span className="text-xs text-gray-600">{formatName}</span>
-            <span className="text-xs text-gray-600">{match.holes} holes</span>
+            <span className="text-xs text-gray-600">{holeRangeText}</span>
             <span className="text-xs text-gray-600">{match.points_available || 1} pt{(match.points_available || 1) !== 1 ? 's' : ''}</span>
           </div>
           <div className="flex gap-2">
@@ -1882,9 +1916,19 @@ const MatchConfig = ({
               {safeMatchFormats.length === 0 ? 'No formats available' : 'Select format...'}
             </option>
             {safeMatchFormats.map(format => (
-              <option key={format.id} value={format.id}>{format.name}</option>
+              <option key={format.id} value={format.id}>
+                {format.name}
+                {format.score_input_type && ` (${format.score_input_type === 'team' ? 'Team Score' : 'Individual Scores'})`}
+              </option>
             ))}
           </select>
+          {selectedFormat && (
+            <p className="text-xs text-gray-500 mt-1">
+              {selectedFormat.score_input_type === 'team' 
+                ? '📝 Team submits one combined score per hole'
+                : '📝 Each player submits their own score'}
+            </p>
+          )}
         </div>
 
         <div>
@@ -1898,6 +1942,34 @@ const MatchConfig = ({
             <option value={9}>9 holes</option>
             <option value={18}>18 holes</option>
           </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium mb-1">
+            Hole Range (optional)
+            <span className="text-xs text-gray-400 ml-1">e.g., 1-6</span>
+          </label>
+          <div className="flex gap-1 items-center">
+            <input
+              type="number"
+              min="1"
+              max="18"
+              value={match.start_hole || ''}
+              onChange={(e) => updateMatch(roundIdx, pairingIdx, matchIdx, 'start_hole', e.target.value ? parseInt(e.target.value) : undefined)}
+              placeholder="1"
+              className="w-full p-2 border rounded text-sm"
+            />
+            <span className="text-xs text-gray-500">to</span>
+            <input
+              type="number"
+              min="1"
+              max="18"
+              value={match.end_hole || ''}
+              onChange={(e) => updateMatch(roundIdx, pairingIdx, matchIdx, 'end_hole', e.target.value ? parseInt(e.target.value) : undefined)}
+              placeholder={match.holes.toString()}
+              className="w-full p-2 border rounded text-sm"
+            />
+          </div>
         </div>
 
         <div>
