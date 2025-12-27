@@ -141,6 +141,20 @@ When refactoring large files:
 2. Import from [App.tsx](../mayhamapi/frontend/src/App.tsx) or route in React Router
 3. Use Tailwind CSS for styling (config in [tailwind.config.js](../mayhamapi/frontend/tailwind.config.js))
 4. Call API via functions from [services/api.ts](../mayhamapi/frontend/src/services/api.ts)
+5. **Always check for TypeScript errors** after making changes using `get_errors` tool
+6. Fix all TypeScript compilation errors before considering the task complete
+
+### TypeScript Error Handling
+**CRITICAL**: After editing any frontend component, always:
+1. Use `get_errors` tool to check for TypeScript compilation errors
+2. Fix ALL errors found - do not leave any unresolved
+3. Common error patterns to watch for:
+   - Missing properties in interface implementations (e.g., forgetting `timezone` when resetting state)
+   - Type mismatches between component props and interfaces
+   - Optional vs required fields in API response types
+   - Ensure all state updates include all required fields from the interface
+4. When adding new fields to state objects, update ALL locations where that state is initialized/reset
+5. TypeScript errors must be resolved before the implementation is complete
 
 ## Key Files for Reference
 
