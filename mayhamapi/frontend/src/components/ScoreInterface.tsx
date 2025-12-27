@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock } from 'lucide-react';
-import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee } from '../services/api';
+import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee, Match, MatchFormat } from '../services/api';
 
 interface PairingWithScores extends Pairing {
   round?: Round;
   scores: Record<number, Record<string, number>>; // { holeNumber: { userId: strokes } }
+  stablefordPoints?: Record<number, Record<string, number>>; // { holeNumber: { userId: points } } for Stableford scoring
   tee?: GolfCourseTee;
+  matches?: Match[]; // Matches associated with this pairing
 }
 
 const ScoreInterface: React.FC = () => {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
+  const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [pairings, setPairings] = useState<PairingWithScores[]>([]);
   const [selectedPairing, setSelectedPairing] = useState<PairingWithScores | null>(null);
   const [currentHole, setCurrentHole] = useState(1);
@@ -29,8 +32,19 @@ const ScoreInterface: React.FC = () => {
   useEffect(() => {
     if (selectedTournamentId) {
       loadPairings();
+      loadSelectedTournament();
     }
   }, [selectedTournamentId]);
+
+  const loadSelectedTournament = async () => {
+    if (!selectedTournamentId) return;
+    try {
+      const tournament = await apiClient.getTournament(selectedTournamentId);
+      setSelectedTournament(tournament);
+    } catch (err) {
+      console.error('Error loading tournament:', err);
+    }
+  };
 
   const loadCurrentUser = async () => {
     try {
@@ -84,6 +98,9 @@ const ScoreInterface: React.FC = () => {
             // Load players for this pairing
             const players = await apiClient.getPairingPlayers(pairing.id);
             
+            // Load matches for this pairing
+            const matches = await apiClient.getPairingMatches(pairing.id);
+            
             // Load tee information if available
             let tee: GolfCourseTee | undefined;
             if (pairing.golf_course_tee_id && round.golf_course_id) {
@@ -98,7 +115,9 @@ const ScoreInterface: React.FC = () => {
             const pairingWithScores: PairingWithScores = {
               ...pairing,
               players,
+              matches,
               scores: {},
+              stablefordPoints: {},
               round,
               tee
             };
@@ -132,24 +151,30 @@ const ScoreInterface: React.FC = () => {
       
       // Convert scores array to the format expected by the UI
       const scoresMap: Record<number, Record<string, number>> = {};
+      const stablefordMap: Record<number, Record<string, number>> = {};
       
       scores.forEach(score => {
         if (!scoresMap[score.hole_number]) {
           scoresMap[score.hole_number] = {};
+          stablefordMap[score.hole_number] = {};
         }
         scoresMap[score.hole_number][score.user_id] = score.strokes;
+        if (score.stableford_points !== undefined && score.stableford_points !== null) {
+          stablefordMap[score.hole_number][score.user_id] = score.stableford_points;
+        }
       });
       
       // Update the pairing with existing scores
       const updatedPairing = {
         ...pairing,
-        scores: scoresMap
+        scores: scoresMap,
+        stablefordPoints: stablefordMap
       };
       
       setSelectedPairing(updatedPairing);
       
       // Determine the number of holes from the first match in the pairing
-      const matches = await apiClient.getPairingMatches(pairing.id);
+      const matches = pairing.matches || await apiClient.getPairingMatches(pairing.id);
       const holes = matches.length > 0 ? matches[0].holes : 18;
       
       // If there are existing scores, set the current hole to the first incomplete hole
@@ -191,6 +216,42 @@ const ScoreInterface: React.FC = () => {
       ...prev,
       [playerId]: score
     }));
+  };
+
+  // Helper function to get the list of holes to display based on match configuration
+  const getHolesForMatch = (match?: Match): number[] => {
+    if (!match) return Array.from({ length: 18 }, (_, i) => i + 1);
+    
+    if (match.start_hole !== undefined && match.end_hole !== undefined) {
+      // Match has specific hole range (e.g., holes 1-6, 7-12, 13-18)
+      const holes: number[] = [];
+      for (let i = match.start_hole; i <= match.end_hole; i++) {
+        holes.push(i);
+      }
+      return holes;
+    }
+    
+    // Default to number of holes specified in match
+    return Array.from({ length: match.holes }, (_, i) => i + 1);
+  };
+
+  // Helper function to determine if we need team or individual score inputs
+  const needsTeamScores = (match?: Match): boolean => {
+    if (!match?.format) return false;
+    // Team score formats: scramble, alternate_shot
+    return match.format.score_input_type === 'team';
+  };
+
+  // Get unique teams from pairing players
+  const getTeamsFromPairing = (pairing: PairingWithScores | null) => {
+    if (!pairing?.players) return [];
+    const teamMap = new Map<string, { id: string; name: string; color?: string }>();
+    pairing.players.forEach(player => {
+      if (player.team) {
+        teamMap.set(player.team.id, player.team);
+      }
+    });
+    return Array.from(teamMap.values());
   };
 
   const startPairing = async (pairingId: string) => {
@@ -577,86 +638,195 @@ const ScoreInterface: React.FC = () => {
                       {selectedPairing.tee.tee_name} {selectedPairing.tee.total_yards && `(${selectedPairing.tee.total_yards} yards)`}
                     </p>
                   )}
+                  {selectedPairing.matches && selectedPairing.matches.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {selectedPairing.matches.map((m, idx) => {
+                        const holeRange = m.start_hole && m.end_hole 
+                          ? `Holes ${m.start_hole}-${m.end_hole}`
+                          : `${m.holes} holes`;
+                        return (
+                          <span key={idx} className="mr-3">
+                            {m.format?.name || 'Match'}: {holeRange}
+                          </span>
+                        );
+                      })}
+                    </p>
+                  )}
                 </div>
                 <div className="flex space-x-2 flex-wrap justify-end">
-                  {Array.from({ length: 18 }, (_, i) => i + 1).map((hole) => (
-                    <button
-                      key={hole}
-                      onClick={() => {
-                        setCurrentHole(hole);
-                        const existingScores = selectedPairing.scores[hole] || {};
-                        const holeScoresMap: Record<string, number> = {};
-                        selectedPairing.players?.forEach(player => {
-                          holeScoresMap[player.user_id] = existingScores[player.user_id] || 0;
-                        });
-                        setHoleScores(holeScoresMap);
-                      }}
-                      className={`w-8 h-8 rounded-full text-xs font-medium ${
-                        hole === currentHole
-                          ? 'bg-blue-500 text-white'
-                          : selectedPairing.scores[hole]
-                          ? 'bg-green-500 text-white'
-                          : 'bg-gray-200 text-gray-700'
-                      }`}
-                    >
-                      {hole}
-                    </button>
-                  ))}
+                  {(() => {
+                    // Determine which holes to show based on the first match
+                    const firstMatch = selectedPairing.matches?.[0];
+                    const holesToShow = getHolesForMatch(firstMatch);
+                    
+                    return holesToShow.map((hole) => (
+                      <button
+                        key={hole}
+                        onClick={() => {
+                          setCurrentHole(hole);
+                          const existingScores = selectedPairing.scores[hole] || {};
+                          const holeScoresMap: Record<string, number> = {};
+                          
+                          if (needsTeamScores(firstMatch)) {
+                            // For team scores, initialize with team IDs
+                            getTeamsFromPairing(selectedPairing).forEach(team => {
+                              holeScoresMap[team.id] = existingScores[team.id] || 0;
+                            });
+                          } else {
+                            // For individual scores, initialize with player IDs
+                            selectedPairing.players?.forEach(player => {
+                              holeScoresMap[player.user_id] = existingScores[player.user_id] || 0;
+                            });
+                          }
+                          
+                          setHoleScores(holeScoresMap);
+                        }}
+                        className={`w-8 h-8 rounded-full text-xs font-medium ${
+                          hole === currentHole
+                            ? 'bg-blue-500 text-white'
+                            : selectedPairing.scores[hole]
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 text-gray-700'
+                        }`}
+                      >
+                        {hole}
+                      </button>
+                    ));
+                  })()}
                 </div>
               </div>
 
-              {/* Players Scorecard */}
+              {/* Score Entry - Team or Individual based on match format */}
               <div className="mb-6">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Player
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Team
-                        </th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Strokes
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {(selectedPairing.players || []).map((player) => (
-                        <tr key={player.user_id}>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="font-medium text-gray-900">
-                              {player.user?.name || `Player ${player.user_id}`}
+                {(() => {
+                  const firstMatch = selectedPairing.matches?.[0];
+                  const isTeamScoring = needsTeamScores(firstMatch);
+                  const isStableford = selectedTournament?.scoring_method === 'stableford';
+                  
+                  if (isTeamScoring) {
+                    // Team score entry - one score per team
+                    const teams = getTeamsFromPairing(selectedPairing);
+                    
+                    return (
+                      <div className="space-y-4">
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                          <p className="text-sm text-blue-800">
+                            <strong>Team Scoring:</strong> Enter one combined score per team for {firstMatch?.format?.name || 'this match'}.
+                            {firstMatch?.format?.description && (
+                              <span className="block mt-1 text-xs">{firstMatch.format.description}</span>
+                            )}
+                          </p>
+                        </div>
+                        
+                        <div className="grid gap-4">
+                          {teams.map(team => (
+                            <div key={team.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                              <div className="flex items-center">
+                                <div 
+                                  className="w-4 h-4 rounded-full mr-3" 
+                                  style={{ backgroundColor: team.color || '#999' }}
+                                />
+                                <span className="font-medium text-gray-900">{team.name}</span>
+                              </div>
+                              <div className="flex items-center space-x-4">
+                                <div>
+                                  <label className="block text-xs text-gray-500 mb-1">Strokes</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="12"
+                                    value={holeScores[team.id] || ''}
+                                    onChange={(e) => handleScoreChange(team.id, parseInt(e.target.value) || 0)}
+                                    className="w-20 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-center"
+                                    placeholder="0"
+                                  />
+                                </div>
+                                {isStableford && selectedPairing.stablefordPoints?.[currentHole]?.[team.id] !== undefined && (
+                                  <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Points</label>
+                                    <div className="w-20 px-3 py-2 bg-green-50 border border-green-200 rounded-md text-center font-medium text-green-700">
+                                      {selectedPairing.stablefordPoints[currentHole][team.id]}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div 
-                                className="w-3 h-3 rounded-full mr-2" 
-                                style={{ backgroundColor: player.team?.color || '#999' }}
-                              />
-                              <span className="text-sm text-gray-700">
-                                {player.team?.name || 'Unknown'}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            <input
-                              type="number"
-                              min="1"
-                              max="12"
-                              value={holeScores[player.user_id] || ''}
-                              onChange={(e) => handleScoreChange(player.user_id, parseInt(e.target.value) || 0)}
-                              className="w-20 px-3 py-2 border border-gray-300 rounded-md text-center"
-                              placeholder="0"
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    // Individual score entry - one score per player
+                    return (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Player
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Team
+                              </th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Strokes
+                              </th>
+                              {isStableford && (
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Points
+                                </th>
+                              )}
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {(selectedPairing.players || []).map((player) => (
+                              <tr key={player.user_id}>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="font-medium text-gray-900">
+                                    {player.user?.name || `Player ${player.user_id}`}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center">
+                                    <div 
+                                      className="w-3 h-3 rounded-full mr-2" 
+                                      style={{ backgroundColor: player.team?.color || '#999' }}
+                                    />
+                                    <span className="text-sm text-gray-700">
+                                      {player.team?.name || 'Unknown'}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="12"
+                                    value={holeScores[player.user_id] || ''}
+                                    onChange={(e) => handleScoreChange(player.user_id, parseInt(e.target.value) || 0)}
+                                    className="w-16 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-center"
+                                    placeholder="0"
+                                  />
+                                </td>
+                                {isStableford && (
+                                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                                    {selectedPairing.stablefordPoints?.[currentHole]?.[player.user_id] !== undefined ? (
+                                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                                        {selectedPairing.stablefordPoints[currentHole][player.user_id]} pts
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400 text-sm">-</span>
+                                    )}
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  }
+                })()}
               </div>
 
               {/* Submit Button */}
@@ -665,7 +835,7 @@ const ScoreInterface: React.FC = () => {
                   {Object.keys(holeScores).length > 0 && (
                     <span className="flex items-center">
                       <AlertCircle className="h-4 w-4 mr-1" />
-                      {Object.keys(holeScores).filter(k => holeScores[k] > 0).length} of {selectedPairing.players?.length || 0} scores entered
+                      {Object.keys(holeScores).filter(k => holeScores[k] > 0).length} of {selectedPairing.players?.length || getTeamsFromPairing(selectedPairing).length} scores entered
                     </span>
                   )}
                 </div>
