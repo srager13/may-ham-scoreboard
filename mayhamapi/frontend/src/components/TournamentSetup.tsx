@@ -445,7 +445,8 @@ const TournamentSetup = () => {
           await apiClient.deleteTeam(team.id);
         }
 
-        // Step 3: Recreate teams with new data
+        // Step 3: Recreate teams with new data and create mapping from old to new team IDs
+        const teamIdMapping: { [oldTeamId: string]: string } = {}; // Map old team ID to new team ID
         const createdTeams = [];
         for (const team of teams) {
           const newTeam = await apiClient.createTeam(selectedTournamentId, {
@@ -453,6 +454,11 @@ const TournamentSetup = () => {
             color: team.color,
           });
           createdTeams.push(newTeam);
+
+          // Map old team ID to new team ID for pairing player updates
+          if (team.id) {
+            teamIdMapping[team.id] = newTeam.id;
+          }
 
           // Add team members
           for (const player of team.players) {
@@ -483,7 +489,7 @@ const TournamentSetup = () => {
               .filter(p => p.user_id && p.team_id) // Filter out invalid players
               .map(p => ({
                 user_id: p.user_id,
-                team_id: p.team_id,
+                team_id: teamIdMapping[p.team_id] || p.team_id, // Use mapped new team ID or fall back to original
                 player_order: p.player_order
               }));
 
