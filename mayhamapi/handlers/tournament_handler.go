@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"mayhamapi/models"
@@ -23,6 +24,14 @@ func (h *TournamentHandler) CreateTournament(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Validate scoring_method if provided
+	if req.ScoringMethod != nil && *req.ScoringMethod != "" {
+		if *req.ScoringMethod != "gross" && *req.ScoringMethod != "stableford" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid scoring_method. Must be 'gross' or 'stableford'"})
+			return
+		}
 	}
 
 	// Get user ID from JWT token
@@ -227,6 +236,27 @@ func (h *TournamentHandler) CreatePairing(c *gin.Context) {
 		return
 	}
 
+	// Validate hole ranges for each match in the pairing
+	for i, match := range req.Matches {
+		if match.StartHole != nil && match.EndHole != nil {
+			if *match.StartHole < 1 || *match.StartHole > 18 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Match " + fmt.Sprint(i+1) + ": start_hole must be between 1 and 18"})
+				return
+			}
+			if *match.EndHole < 1 || *match.EndHole > 18 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Match " + fmt.Sprint(i+1) + ": end_hole must be between 1 and 18"})
+				return
+			}
+			if *match.StartHole > *match.EndHole {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Match " + fmt.Sprint(i+1) + ": start_hole must be less than or equal to end_hole"})
+				return
+			}
+		} else if (match.StartHole != nil && match.EndHole == nil) || (match.StartHole == nil && match.EndHole != nil) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Match " + fmt.Sprint(i+1) + ": Both start_hole and end_hole must be provided together, or neither"})
+			return
+		}
+	}
+
 	pairing, err := h.repo.CreatePairing(roundID, &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -321,6 +351,25 @@ func (h *TournamentHandler) CreateMatch(c *gin.Context) {
 	var req models.CreateMatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate hole range if provided
+	if req.StartHole != nil && req.EndHole != nil {
+		if *req.StartHole < 1 || *req.StartHole > 18 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "start_hole must be between 1 and 18"})
+			return
+		}
+		if *req.EndHole < 1 || *req.EndHole > 18 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "end_hole must be between 1 and 18"})
+			return
+		}
+		if *req.StartHole > *req.EndHole {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "start_hole must be less than or equal to end_hole"})
+			return
+		}
+	} else if (req.StartHole != nil && req.EndHole == nil) || (req.StartHole == nil && req.EndHole != nil) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Both start_hole and end_hole must be provided together, or neither"})
 		return
 	}
 
