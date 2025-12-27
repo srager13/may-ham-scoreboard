@@ -179,6 +179,14 @@ func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scor
 		return nil, fmt.Errorf("failed to update match points: %w", err)
 	}
 
+	// If match is complete, update its status
+	if matchComplete && match.Status != "completed" {
+		err = s.repo.UpdateMatchStatus(match.ID, "completed")
+		if err != nil {
+			return nil, fmt.Errorf("failed to update match status: %w", err)
+		}
+	}
+
 	return &MatchStatus{
 		Team1HolePoints:  team1TotalPoints,
 		Team2HolePoints:  team2TotalPoints,
