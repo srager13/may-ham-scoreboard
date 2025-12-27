@@ -1699,7 +1699,7 @@ const PairingConfig = ({
       {/* Players in Pairing */}
       <div className="mb-3">
         <label className="block text-sm font-medium mb-2">Players ({(pairing.players || []).length}/4)</label>
-        <div className="grid grid-cols-2 gap-3 mb-2">
+        <div className="grid grid-cols-2 gap-3">
           {teams.map((team, teamIdx) => {
             const teamPlayers = (pairing.players || [])
               .map(p => {
@@ -1708,12 +1708,15 @@ const PairingConfig = ({
               })
               .filter(p => p !== null);
             
+            // Get available players for this specific team
+            const availableTeamPlayers = availablePlayers.filter(p => p.team_id === (team.id || `team-${teamIdx}`));
+            
             return (
               <div key={teamIdx}>
                 <div className="text-xs font-medium mb-1" style={{ color: team.color }}>
                   {team.name}
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 mb-2">
                   {teamPlayers.map((player) => (
                     <div key={player.user_id} className="flex items-center justify-between bg-white rounded p-2 border">
                       <span className="font-medium text-sm">{player.user.name}</span>
@@ -1726,30 +1729,30 @@ const PairingConfig = ({
                     </div>
                   ))}
                 </div>
+                
+                {/* Add player dropdown for this team */}
+                {availableTeamPlayers.length > 0 && (pairing.players || []).length < 4 && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        addPlayerToPairing(e.target.value, team.id || `team-${teamIdx}`);
+                      }
+                    }}
+                    className="w-full p-2 border rounded text-sm"
+                  >
+                    <option value="">+ Add player...</option>
+                    {availableTeamPlayers.map(player => (
+                      <option key={player.id} value={player.id}>
+                        {player.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             );
           })}
         </div>
-        
-        {availablePlayers.length > 0 && (pairing.players || []).length < 4 && (
-          <select
-            value=""
-            onChange={(e) => {
-              const selectedPlayer = allTeamPlayers.find(p => p.id === e.target.value);
-              if (selectedPlayer) {
-                addPlayerToPairing(selectedPlayer.id, selectedPlayer.team_id);
-              }
-            }}
-            className="w-full p-2 border rounded text-sm"
-          >
-            <option value="">+ Add player to pairing...</option>
-            {availablePlayers.map(player => (
-              <option key={player.id} value={player.id}>
-                {player.name} ({player.team_name})
-              </option>
-            ))}
-          </select>
-        )}
       </div>
 
       {/* Matches within Pairing */}
