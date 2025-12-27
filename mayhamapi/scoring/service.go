@@ -22,6 +22,40 @@ func NewScoringService(repo *repository.Repository) *ScoringService {
 	return &ScoringService{repo: repo}
 }
 
+// CalculateStablefordPoints calculates Stableford points for a hole
+// par: the par for the hole
+// strokes: gross strokes taken
+// handicapStrokes: number of strokes received on this hole (based on player handicap and hole difficulty)
+// Returns: Stableford points (0-5, where 2 = par)
+func CalculateStablefordPoints(par, strokes, handicapStrokes int) int {
+	// Net score = gross strokes - handicap strokes
+	netScore := strokes - handicapStrokes
+	
+	// Stableford points based on net score vs par:
+	// Albatross or better (-3 or more): 5 points
+	// Eagle (-2): 4 points
+	// Birdie (-1): 3 points
+	// Par (0): 2 points
+	// Bogey (+1): 1 point
+	// Double bogey or worse (+2 or more): 0 points
+	scoreToPar := netScore - par
+	
+	switch {
+	case scoreToPar <= -3:
+		return 5 // Albatross or better
+	case scoreToPar == -2:
+		return 4 // Eagle
+	case scoreToPar == -1:
+		return 3 // Birdie
+	case scoreToPar == 0:
+		return 2 // Par
+	case scoreToPar == 1:
+		return 1 // Bogey
+	default:
+		return 0 // Double bogey or worse
+	}
+}
+
 // MatchStatus represents the current status of a match
 type MatchStatus struct {
 	Team1HolePoints  float64 `json:"team1_hole_points"`  // Points from individual holes
@@ -52,6 +86,15 @@ func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scor
 		expectedPlayersPerHole = len(match.Pairing.Players)
 	}
 
+	// Determine hole range for this match
+	startHole := 1
+	endHole := match.Holes
+	if match.StartHole != nil && match.EndHole != nil {
+		// Match has specific hole range (e.g., holes 1-6, 7-12, 13-18)
+		startHole = *match.StartHole
+		endHole = *match.EndHole
+	}
+
 	// Group scores by hole
 	holeScores := make(map[int][]models.Score)
 	for _, score := range scores {
@@ -62,8 +105,8 @@ func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scor
 	team2TotalPoints := 0.0
 	holesCompleted := 0
 
-	// Calculate and store results for each completed hole
-	for holeNum := 1; holeNum <= match.Holes; holeNum++ {
+	// Calculate and store results for each completed hole in this match's range
+	for holeNum := startHole; holeNum <= endHole; holeNum++ {
 		holePlayerScores, exists := holeScores[holeNum]
 		if !exists || len(holePlayerScores) == 0 {
 			continue // Hole not played yet
@@ -214,6 +257,14 @@ func (s *ScoringService) calculateMatchStatusFromScores(match *models.Match, sco
 		expectedPlayersPerHole = len(match.Pairing.Players)
 	}
 
+	// Determine hole range for this match
+	startHole := 1
+	endHole := match.Holes
+	if match.StartHole != nil && match.EndHole != nil {
+		startHole = *match.StartHole
+		endHole = *match.EndHole
+	}
+
 	// Group scores by hole
 	holeScores := make(map[int][]models.Score)
 	for _, score := range scores {
@@ -224,8 +275,8 @@ func (s *ScoringService) calculateMatchStatusFromScores(match *models.Match, sco
 	team2Points := 0.0
 	holesCompleted := 0
 
-	// Calculate points for each completed hole
-	for holeNum := 1; holeNum <= match.Holes; holeNum++ {
+	// Calculate points for each completed hole in this match's range
+	for holeNum := startHole; holeNum <= endHole; holeNum++ {
 		holePlayerScores, exists := holeScores[holeNum]
 		if !exists || len(holePlayerScores) == 0 {
 			continue // Hole not played yet
@@ -246,8 +297,10 @@ func (s *ScoringService) calculateMatchStatusFromScores(match *models.Match, sco
 		holesCompleted++
 	}
 
-	holesRemaining := match.Holes - holesCompleted
-	matchComplete := holesCompleted == match.Holes
+	// Calculate holes in range
+	holesInRange := endHole - startHole + 1
+	holesRemaining := holesInRange - holesCompleted
+	matchComplete := holesCompleted >= holesInRange
 
 	// Determine winner and calculate match points
 	var winnerTeamID *string
