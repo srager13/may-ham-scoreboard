@@ -20,16 +20,22 @@ func NewRepository(database *db.DB) *Repository {
 // ============================================
 
 func (r *Repository) CreateTournament(req *models.CreateTournamentRequest, createdBy string) (*models.Tournament, error) {
+	// Default to 'gross' scoring if not specified
+	scoringMethod := "gross"
+	if req.ScoringMethod != nil && *req.ScoringMethod != "" {
+		scoringMethod = *req.ScoringMethod
+	}
+
 	query := `
-		INSERT INTO tournaments (name, description, start_date, end_date, group_id, created_by, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'draft', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, name, description, start_date, end_date, group_id, created_by, status, created_at, updated_at
+		INSERT INTO tournaments (name, description, start_date, end_date, group_id, created_by, status, scoring_method, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, name, description, start_date, end_date, group_id, created_by, status, scoring_method, created_at, updated_at
 	`
 
 	var tournament models.Tournament
-	err := r.db.QueryRow(query, req.Name, req.Description, req.StartDate, req.EndDate, req.GroupID, createdBy).Scan(
+	err := r.db.QueryRow(query, req.Name, req.Description, req.StartDate, req.EndDate, req.GroupID, createdBy, scoringMethod).Scan(
 		&tournament.ID, &tournament.Name, &tournament.Description, &tournament.StartDate,
-		&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
+		&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.ScoringMethod, &tournament.CreatedAt, &tournament.UpdatedAt,
 	)
 
 	if err != nil {
@@ -40,12 +46,12 @@ func (r *Repository) CreateTournament(req *models.CreateTournamentRequest, creat
 }
 
 func (r *Repository) GetTournament(id string) (*models.Tournament, error) {
-	query := `SELECT id, name, description, start_date, end_date, group_id, created_by, status, created_at, updated_at FROM tournaments WHERE id = $1`
+	query := `SELECT id, name, description, start_date, end_date, group_id, created_by, status, scoring_method, created_at, updated_at FROM tournaments WHERE id = $1`
 
 	var tournament models.Tournament
 	err := r.db.QueryRow(query, id).Scan(
 		&tournament.ID, &tournament.Name, &tournament.Description, &tournament.StartDate,
-		&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
+		&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.ScoringMethod, &tournament.CreatedAt, &tournament.UpdatedAt,
 	)
 
 	if err != nil {
@@ -59,7 +65,7 @@ func (r *Repository) GetTournament(id string) (*models.Tournament, error) {
 }
 
 func (r *Repository) ListTournaments() ([]models.Tournament, error) {
-	query := `SELECT id, name, description, start_date, end_date, group_id, created_by, status, created_at, updated_at FROM tournaments ORDER BY created_at DESC`
+	query := `SELECT id, name, description, start_date, end_date, group_id, created_by, status, scoring_method, created_at, updated_at FROM tournaments ORDER BY created_at DESC`
 
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -72,7 +78,7 @@ func (r *Repository) ListTournaments() ([]models.Tournament, error) {
 		var tournament models.Tournament
 		err := rows.Scan(
 			&tournament.ID, &tournament.Name, &tournament.Description, &tournament.StartDate,
-			&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
+			&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.ScoringMethod, &tournament.CreatedAt, &tournament.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan tournament: %w", err)
@@ -85,7 +91,7 @@ func (r *Repository) ListTournaments() ([]models.Tournament, error) {
 
 func (r *Repository) GetUserTournaments(userID string) ([]models.Tournament, error) {
 	query := `
-		SELECT DISTINCT t.id, t.name, t.description, t.start_date, t.end_date, t.group_id, t.created_by, t.status, t.created_at, t.updated_at
+		SELECT DISTINCT t.id, t.name, t.description, t.start_date, t.end_date, t.group_id, t.created_by, t.status, t.scoring_method, t.created_at, t.updated_at
 		FROM tournaments t
 		INNER JOIN teams teams ON teams.tournament_id = t.id
 		INNER JOIN team_members tm ON tm.team_id = teams.id
@@ -104,7 +110,7 @@ func (r *Repository) GetUserTournaments(userID string) ([]models.Tournament, err
 		var tournament models.Tournament
 		err := rows.Scan(
 			&tournament.ID, &tournament.Name, &tournament.Description, &tournament.StartDate,
-			&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.CreatedAt, &tournament.UpdatedAt,
+			&tournament.EndDate, &tournament.GroupID, &tournament.CreatedBy, &tournament.Status, &tournament.ScoringMethod, &tournament.CreatedAt, &tournament.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan tournament: %w", err)
@@ -306,6 +312,8 @@ func (r *Repository) CreatePairing(roundID string, req *models.CreatePairingRequ
 			Team2ID:         matchReq.Team2ID,
 			MatchFormatID:   matchReq.MatchFormatID,
 			Holes:           matchReq.Holes,
+			StartHole:       matchReq.StartHole,
+			EndHole:         matchReq.EndHole,
 			PointsAvailable: &pointsAvailable,
 		}
 		if _, err := r.CreateMatchForPairing(pairing.ID, roundID, i+1, matchCreateReq); err != nil {
@@ -442,15 +450,15 @@ func (r *Repository) CreateMatchForPairing(pairingID, roundID string, matchNumbe
 	}
 
 	query := `
-		INSERT INTO matches (pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'not_started', $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at
+		INSERT INTO matches (pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, start_hole, end_hole, status, points_available, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'not_started', $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, start_hole, end_hole, status, points_available, team1_points, team2_points, created_at, updated_at
 	`
 
 	var match models.Match
-	err := r.db.QueryRow(query, pairingID, roundID, req.Team1ID, req.Team2ID, req.MatchFormatID, matchNumber, req.Holes, pointsAvailable).Scan(
+	err := r.db.QueryRow(query, pairingID, roundID, req.Team1ID, req.Team2ID, req.MatchFormatID, matchNumber, req.Holes, req.StartHole, req.EndHole, pointsAvailable).Scan(
 		&match.ID, &match.PairingID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
-		&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
+		&match.MatchNumber, &match.Holes, &match.StartHole, &match.EndHole, &match.Status, &match.PointsAvailable,
 		&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
 	)
 
@@ -477,15 +485,15 @@ func (r *Repository) CreateMatch(roundID string, req *models.CreateMatchRequest)
 	}
 
 	query := `
-		INSERT INTO matches (round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'not_started', $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at
+		INSERT INTO matches (round_id, team1_id, team2_id, match_format_id, match_number, holes, start_hole, end_hole, status, points_available, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'not_started', $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, start_hole, end_hole, status, points_available, team1_points, team2_points, created_at, updated_at
 	`
 
 	var match models.Match
-	err = r.db.QueryRow(query, roundID, req.Team1ID, req.Team2ID, req.MatchFormatID, nextMatchNumber, req.Holes, pointsAvailable).Scan(
+	err = r.db.QueryRow(query, roundID, req.Team1ID, req.Team2ID, req.MatchFormatID, nextMatchNumber, req.Holes, req.StartHole, req.EndHole, pointsAvailable).Scan(
 		&match.ID, &match.PairingID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
-		&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
+		&match.MatchNumber, &match.Holes, &match.StartHole, &match.EndHole, &match.Status, &match.PointsAvailable,
 		&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
 	)
 
@@ -497,12 +505,12 @@ func (r *Repository) CreateMatch(roundID string, req *models.CreateMatchRequest)
 }
 
 func (r *Repository) GetMatch(id string) (*models.Match, error) {
-	query := `SELECT id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE id = $1`
+	query := `SELECT id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, start_hole, end_hole, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE id = $1`
 
 	var match models.Match
 	err := r.db.QueryRow(query, id).Scan(
 		&match.ID, &match.PairingID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
-		&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
+		&match.MatchNumber, &match.Holes, &match.StartHole, &match.EndHole, &match.Status, &match.PointsAvailable,
 		&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
 	)
 
@@ -524,7 +532,7 @@ func (r *Repository) GetMatch(id string) (*models.Match, error) {
 }
 
 func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
-	query := `SELECT id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE round_id = $1 ORDER BY pairing_id NULLS FIRST, match_number`
+	query := `SELECT id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, start_hole, end_hole, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE round_id = $1 ORDER BY pairing_id NULLS FIRST, match_number`
 
 	rows, err := r.db.Query(query, roundID)
 	if err != nil {
@@ -537,7 +545,7 @@ func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 		var match models.Match
 		err := rows.Scan(
 			&match.ID, &match.PairingID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
-			&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
+			&match.MatchNumber, &match.Holes, &match.StartHole, &match.EndHole, &match.Status, &match.PointsAvailable,
 			&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
 		)
 		if err != nil {
@@ -579,7 +587,7 @@ func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 }
 
 func (r *Repository) GetMatchesByPairing(pairingID string) ([]models.Match, error) {
-	query := `SELECT id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE pairing_id = $1 ORDER BY match_number`
+	query := `SELECT id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, start_hole, end_hole, status, points_available, team1_points, team2_points, created_at, updated_at FROM matches WHERE pairing_id = $1 ORDER BY match_number`
 
 	rows, err := r.db.Query(query, pairingID)
 	if err != nil {
@@ -592,7 +600,7 @@ func (r *Repository) GetMatchesByPairing(pairingID string) ([]models.Match, erro
 		var match models.Match
 		err := rows.Scan(
 			&match.ID, &match.PairingID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
-			&match.MatchNumber, &match.Holes, &match.Status, &match.PointsAvailable,
+			&match.MatchNumber, &match.Holes, &match.StartHole, &match.EndHole, &match.Status, &match.PointsAvailable,
 			&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
 		)
 		if err != nil {
@@ -628,13 +636,13 @@ func (r *Repository) SubmitScore(pairingID, userID string, holeNumber, strokes i
 		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		ON CONFLICT (pairing_id, user_id, hole_number) 
 		DO UPDATE SET strokes = EXCLUDED.strokes, updated_at = CURRENT_TIMESTAMP
-		RETURNING id, pairing_id, user_id, hole_number, strokes, created_at, updated_at
+		RETURNING id, pairing_id, user_id, hole_number, strokes, stableford_points, created_at, updated_at
 	`
 
 	var score models.Score
 	err := r.db.QueryRow(query, pairingID, userID, holeNumber, strokes).Scan(
 		&score.ID, &score.PairingID, &score.UserID, &score.HoleNumber,
-		&score.Strokes, &score.CreatedAt, &score.UpdatedAt,
+		&score.Strokes, &score.StablefordPoints, &score.CreatedAt, &score.UpdatedAt,
 	)
 
 	if err != nil {
@@ -660,7 +668,7 @@ func (r *Repository) SubmitScoreByMatch(matchID, userID string, holeNumber, stro
 }
 
 func (r *Repository) GetPairingScores(pairingID string) ([]models.Score, error) {
-	query := `SELECT id, pairing_id, user_id, hole_number, strokes, created_at, updated_at FROM hole_scores WHERE pairing_id = $1 ORDER BY hole_number, user_id`
+	query := `SELECT id, pairing_id, user_id, hole_number, strokes, stableford_points, created_at, updated_at FROM hole_scores WHERE pairing_id = $1 ORDER BY hole_number, user_id`
 
 	rows, err := r.db.Query(query, pairingID)
 	if err != nil {
@@ -673,7 +681,7 @@ func (r *Repository) GetPairingScores(pairingID string) ([]models.Score, error) 
 		var score models.Score
 		err := rows.Scan(
 			&score.ID, &score.PairingID, &score.UserID, &score.HoleNumber,
-			&score.Strokes, &score.CreatedAt, &score.UpdatedAt,
+			&score.Strokes, &score.StablefordPoints, &score.CreatedAt, &score.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan score: %w", err)
@@ -849,11 +857,11 @@ func (r *Repository) UpdatePairingStatus(pairingID, status string) error {
 // ============================================
 
 func (r *Repository) GetMatchFormat(formatID string) (*models.MatchFormatEntity, error) {
-	query := `SELECT id, name, description, players_per_side, scoring_type, created_at FROM match_formats WHERE id = $1`
+	query := `SELECT id, name, description, players_per_side, scoring_type, score_input_type, created_at FROM match_formats WHERE id = $1`
 
 	var format models.MatchFormatEntity
 	err := r.db.QueryRow(query, formatID).Scan(
-		&format.ID, &format.Name, &format.Description, &format.PlayersPerSide, &format.ScoringType, &format.CreatedAt,
+		&format.ID, &format.Name, &format.Description, &format.PlayersPerSide, &format.ScoringType, &format.ScoreInputType, &format.CreatedAt,
 	)
 
 	if err != nil {
@@ -867,7 +875,7 @@ func (r *Repository) GetMatchFormat(formatID string) (*models.MatchFormatEntity,
 }
 
 func (r *Repository) GetAllMatchFormats() ([]map[string]interface{}, error) {
-	query := `SELECT id, name, description, players_per_side, scoring_type, created_at FROM match_formats ORDER BY name`
+	query := `SELECT id, name, description, players_per_side, scoring_type, score_input_type, created_at FROM match_formats ORDER BY name`
 
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -877,10 +885,10 @@ func (r *Repository) GetAllMatchFormats() ([]map[string]interface{}, error) {
 
 	var formats []map[string]interface{}
 	for rows.Next() {
-		var id, name, description, scoringType, createdAt string
+		var id, name, description, scoringType, scoreInputType, createdAt string
 		var playersPerSide int
 
-		err := rows.Scan(&id, &name, &description, &playersPerSide, &scoringType, &createdAt)
+		err := rows.Scan(&id, &name, &description, &playersPerSide, &scoringType, &scoreInputType, &createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan match format: %w", err)
 		}
@@ -891,6 +899,7 @@ func (r *Repository) GetAllMatchFormats() ([]map[string]interface{}, error) {
 			"description":      description,
 			"players_per_side": playersPerSide,
 			"scoring_type":     scoringType,
+			"score_input_type": scoreInputType,
 			"created_at":       createdAt,
 		}
 		formats = append(formats, format)
