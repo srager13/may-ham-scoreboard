@@ -688,7 +688,7 @@ const TournamentSetup = () => {
               onClick={() => {
                 if (confirm('Are you sure you want to clear all data and start over?')) {
                   clearDraft();
-                  setTournament({ name: '', description: '', start_date: '', end_date: '', group_id: '' });
+                  setTournament({ name: '', description: '', start_date: '', end_date: '', group_id: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
                   setTeams([
                     { name: 'Team USA', color: '#DC2626', players: [] },
                     { name: 'Team Europe', color: '#2563EB', players: [] }
