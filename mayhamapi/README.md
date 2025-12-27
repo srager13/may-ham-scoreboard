@@ -91,28 +91,28 @@ GIN_MODE=debug
 - `POST /api/v1/auth/refresh` - Refresh JWT token
 
 ### Tournaments
-- `GET /api/v1/public/tournaments` - List all tournaments
+- `GET /api/v1/tournaments` - List all tournaments
 - `POST /api/v1/tournaments` - Create new tournament (auth required)
-- `GET /api/v1/public/tournaments/:id` - Get tournament details
+- `GET /api/v1/tournaments/:id` - Get tournament details
 
 ### Teams
-- `GET /api/v1/public/tournaments/:tournament_id/teams` - Get tournament teams
+- `GET /api/v1/tournaments/:tournament_id/teams` - Get tournament teams
 - `POST /api/v1/tournaments/:tournament_id/teams` - Create team (auth required)
 - `POST /api/v1/teams/:team_id/members` - Add team member (auth required)
 
 ### Rounds & Matches
-- `GET /api/v1/public/tournaments/:tournament_id/rounds` - Get tournament rounds
+- `GET /api/v1/tournaments/:tournament_id/rounds` - Get tournament rounds
 - `POST /api/v1/tournaments/:tournament_id/rounds` - Create round (auth required)
-- `GET /api/v1/public/rounds/:round_id/matches` - Get round matches
+- `GET /api/v1/rounds/:round_id/matches` - Get round matches
 - `POST /api/v1/rounds/:round_id/matches` - Create match (auth required)
 
 ### Scoring
-- `GET /api/v1/public/matches/:match_id/scores` - Get match scores
+- `GET /api/v1/matches/:match_id/scores` - Get match scores
 - `POST /api/v1/matches/:match_id/scores` - Submit scores (auth required)
 - `PATCH /api/v1/matches/:match_id/scores/:hole_number` - Update hole score (auth required)
 
 ### Match Formats
-- `GET /api/v1/public/match-formats` - Get available match formats
+- `GET /api/v1/match-formats` - Get available match formats
 
 ### Real-time Updates
 - `WS /api/v1/ws/tournaments/:tournament_id` - WebSocket connection for live updates

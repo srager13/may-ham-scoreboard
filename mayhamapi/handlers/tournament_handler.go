@@ -363,7 +363,7 @@ func (h *TournamentHandler) GetMatch(c *gin.Context) {
 	c.JSON(http.StatusOK, match)
 }
 
-// GET /api/v1/public/match-formats
+// GET /api/v1/match-formats
 func (h *TournamentHandler) GetMatchFormats(c *gin.Context) {
 	formats, err := h.repo.GetAllMatchFormats()
 	if err != nil {

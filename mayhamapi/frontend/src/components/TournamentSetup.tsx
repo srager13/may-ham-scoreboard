@@ -23,6 +23,8 @@ interface PairingPlayerData {
   user_id: string;
   team_id: string;
   player_order: number;
+  user?: User;
+  team?: Team;
 }
 
 interface RoundData {
@@ -61,7 +63,8 @@ const TournamentSetup = () => {
     description: '',
     start_date: '',
     end_date: '',
-    group_id: ''
+    group_id: '',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // Default to browser timezone
   });
   
   const [teams, setTeams] = useState<TeamData[]>([
@@ -247,7 +250,8 @@ const TournamentSetup = () => {
         description: tournamentData.description || '',
         start_date: tournamentData.start_date.split('T')[0],
         end_date: tournamentData.end_date.split('T')[0],
-        group_id: tournamentData.group_id || ''
+        group_id: tournamentData.group_id || '',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
       });
 
       if (tournamentData.group_id) {
@@ -321,10 +325,21 @@ const TournamentSetup = () => {
             team2_players: []
           }));
 
+          // Convert UTC tee_time to local HH:MM format for the time input
+          let localTeeTime = '';
+          if (pairing.tee_time) {
+            const date = new Date(pairing.tee_time);
+            localTeeTime = date.toLocaleTimeString('en-US', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              hour12: false 
+            });
+          }
+
           loadedPairings.push({
             id: pairing.id,
             pairing_number: pairing.pairing_number,
-            tee_time: pairing.tee_time || '',
+            tee_time: localTeeTime,
             golf_course_tee_id: pairing.golf_course_tee_id,
             players: loadedPairingPlayers,
             matches: loadedMatches
@@ -358,7 +373,14 @@ const TournamentSetup = () => {
   const createNewTournament = () => {
     setEditMode(false);
     setSelectedTournamentId('');
-    setTournament({ name: '', description: '', start_date: '', end_date: '', group_id: '' });
+    setTournament({ 
+      name: '', 
+      description: '', 
+      start_date: '', 
+      end_date: '', 
+      group_id: '',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone 
+    });
     setTeams([
       { name: 'Team USA', color: '#DC2626', players: [] },
       { name: 'Team Europe', color: '#2563EB', players: [] }
@@ -473,10 +495,12 @@ const TournamentSetup = () => {
               points_available: match.points_available
             }));
 
-            // Convert tee_time (HH:MM) to full RFC3339 timestamp
+            // Convert tee_time (HH:MM) to full RFC3339 timestamp in UTC
             let fullTeeTime: string | undefined;
             if (pairing.tee_time) {
-              fullTeeTime = `${round.date}T${pairing.tee_time}:00Z`;
+              // Create date in the tournament's timezone, then convert to UTC
+              const localDateTime = new Date(`${round.date}T${pairing.tee_time}:00`);
+              fullTeeTime = localDateTime.toISOString();
             }
 
             await apiClient.createPairing(newRound.id, {
@@ -563,10 +587,12 @@ const TournamentSetup = () => {
               points_available: match.points_available
             }));
 
-            // Convert tee_time (HH:MM) to full RFC3339 timestamp
+            // Convert tee_time (HH:MM) to full RFC3339 timestamp in UTC
             let fullTeeTime: string | undefined;
             if (pairing.tee_time) {
-              fullTeeTime = `${round.date}T${pairing.tee_time}:00Z`;
+              // Create date in the tournament's timezone, then convert to UTC
+              const localDateTime = new Date(`${round.date}T${pairing.tee_time}:00`);
+              fullTeeTime = localDateTime.toISOString();
             }
 
             await apiClient.createPairing(newRound.id, {
@@ -585,7 +611,14 @@ const TournamentSetup = () => {
       
       // Reset form
       setStep(1);
-      setTournament({ name: '', description: '', start_date: '', end_date: '', group_id: '' });
+      setTournament({ 
+        name: '', 
+        description: '', 
+        start_date: '', 
+        end_date: '', 
+        group_id: '',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone 
+      });
       setTeams([
         { name: 'Team USA', color: '#DC2626', players: [] },
         { name: 'Team Europe', color: '#2563EB', players: [] }
@@ -1581,7 +1614,7 @@ const PairingConfig = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 flex-1">
             <span className="font-bold text-blue-700">Pairing {pairing.pairing_number}</span>
-            {pairing.tee_time && <span className="text-sm text-gray-600">⏰ {pairing.tee_time}</span>}
+            {pairing.tee_time && <span className="text-sm text-gray-600">⏰ {pairing.tee_time.includes('T') ? new Date(pairing.tee_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : pairing.tee_time}</span>}
             <span className="text-xs text-gray-500">{playerNames || 'No players'}</span>
             <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">{pairing.matches?.length || 0} match{(pairing.matches?.length || 0) !== 1 ? 'es' : ''}</span>
           </div>
