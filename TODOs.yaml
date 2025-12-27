@@ -1,0 +1,45 @@
+TODOs:
+    - CURRENT:
+
+    - GENERAL:
+        - Fix websocket
+        - Add real admin page
+            - Add/register users? 
+        - Figure out to break a round up into matches
+        - Auth - add actual passwords
+          - have way to stay logged in
+
+    - LEADERBOARD:
+        - Make it more obvious when a team has won
+
+    - SCORING:
+        - match up 6 and 9 hole matches to which part of the round the match is occurring
+        - Fix scoring and leaderboard updates
+        - update match formats for how many scores to enter - update score interface display
+        - Stableford scoring
+        - Make scoring a separate page for each hole (?)
+
+    - GROUPS:
+        - bulk add members to group?
+        - maybe add buttons like teams?
+
+    - TOURNAMENT SETUP:
+        - matches - probably going to need to set front 9/back 9, first/middle/last 6
+          to help with scoring
+
+    - ADD GOLF COURSES:
+        - Add course name, location, etc. to Rounds
+        - Update submit score pages to include course information
+        
+    - PRODUCTIONIZE:
+        - Remove passwords from repo and add gitignores
+        - Create a dev and prod database version
+        - Create dev and prod versions of the servers
+            - protect the api/server (firewall?)
+        - Create a release process
+        - Put load balancer in front of server?
+        - Backup database to obj storage?
+        - Better testing - end-to-end/integration testing?
+
+    - UI:
+        - Optimize for mobile format

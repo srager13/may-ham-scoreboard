@@ -39,16 +39,17 @@ type GroupMember struct {
 }
 
 type Tournament struct {
-	ID          string    `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
-	Description *string   `json:"description,omitempty" db:"description"`
-	StartDate   time.Time `json:"start_date" db:"start_date"`
-	EndDate     time.Time `json:"end_date" db:"end_date"`
-	GroupID     string    `json:"group_id" db:"group_id"`
-	CreatedBy   string    `json:"created_by" db:"created_by"`
-	Status      string    `json:"status" db:"status"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+	ID            string    `json:"id" db:"id"`
+	Name          string    `json:"name" db:"name"`
+	Description   *string   `json:"description,omitempty" db:"description"`
+	StartDate     time.Time `json:"start_date" db:"start_date"`
+	EndDate       time.Time `json:"end_date" db:"end_date"`
+	GroupID       string    `json:"group_id" db:"group_id"`
+	CreatedBy     string    `json:"created_by" db:"created_by"`
+	Status        string    `json:"status" db:"status"`
+	ScoringMethod string    `json:"scoring_method" db:"scoring_method"` // "gross" or "stableford"
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type Team struct {
@@ -195,6 +196,7 @@ type MatchFormatEntity struct {
 	Description    string    `json:"description" db:"description"`
 	PlayersPerSide int       `json:"players_per_side" db:"players_per_side"`
 	ScoringType    string    `json:"scoring_type" db:"scoring_type"`
+	ScoreInputType string    `json:"score_input_type" db:"score_input_type"` // "individual" or "team"
 	CreatedAt      time.Time `json:"created_at" db:"created_at"`
 }
 
@@ -207,6 +209,8 @@ type Match struct {
 	MatchFormatID   string    `json:"match_format_id" db:"match_format_id"`
 	MatchNumber     int       `json:"match_number" db:"match_number"`
 	Holes           int       `json:"holes" db:"holes"`
+	StartHole       *int      `json:"start_hole,omitempty" db:"start_hole"` // First hole of match (1-18), nil for 18-hole
+	EndHole         *int      `json:"end_hole,omitempty" db:"end_hole"`     // Last hole of match (1-18), nil for 18-hole
 	Status          string    `json:"status" db:"status"`
 	PointsAvailable float64   `json:"points_available" db:"points_available"`
 	Team1Points     float64   `json:"team1_points" db:"team1_points"`
@@ -221,13 +225,14 @@ type Match struct {
 }
 
 type Score struct {
-	ID         string    `json:"id" db:"id"`
-	PairingID  string    `json:"pairing_id" db:"pairing_id"`
-	UserID     string    `json:"user_id" db:"user_id"`
-	HoleNumber int       `json:"hole_number" db:"hole_number"`
-	Strokes    int       `json:"strokes" db:"strokes"`
-	CreatedAt  time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
+	ID              string    `json:"id" db:"id"`
+	PairingID       string    `json:"pairing_id" db:"pairing_id"`
+	UserID          string    `json:"user_id" db:"user_id"`
+	HoleNumber      int       `json:"hole_number" db:"hole_number"`
+	Strokes         int       `json:"strokes" db:"strokes"`
+	StablefordPoints *int      `json:"stableford_points,omitempty" db:"stableford_points"` // nil if gross scoring
+	CreatedAt       time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
 	// Related data (not in DB table)
 	User *User `json:"user,omitempty"`
 }
@@ -260,11 +265,12 @@ type AddGroupMemberRequest struct {
 }
 
 type CreateTournamentRequest struct {
-	Name        string    `json:"name" binding:"required"`
-	Description *string   `json:"description,omitempty"`
-	StartDate   time.Time `json:"start_date" binding:"required"`
-	EndDate     time.Time `json:"end_date" binding:"required"`
-	GroupID     string    `json:"group_id" binding:"required"`
+	Name          string    `json:"name" binding:"required"`
+	Description   *string   `json:"description,omitempty"`
+	StartDate     time.Time `json:"start_date" binding:"required"`
+	EndDate       time.Time `json:"end_date" binding:"required"`
+	GroupID       string    `json:"group_id" binding:"required"`
+	ScoringMethod *string   `json:"scoring_method,omitempty"` // "gross" or "stableford", defaults to "gross"
 }
 
 type CreateTeamRequest struct {
@@ -298,6 +304,8 @@ type PairingMatchRequest struct {
 	Team2ID         string   `json:"team2_id" binding:"required"`
 	MatchFormatID   string   `json:"match_format_id" binding:"required"`
 	Holes           int      `json:"holes" binding:"required,min=6,max=18"`
+	StartHole       *int     `json:"start_hole,omitempty" binding:"omitempty,min=1,max=18"`
+	EndHole         *int     `json:"end_hole,omitempty" binding:"omitempty,min=1,max=18"`
 	PointsAvailable *float64 `json:"points_available,omitempty"`
 }
 
@@ -306,6 +314,8 @@ type CreateMatchRequest struct {
 	Team2ID         string   `json:"team2_id" binding:"required"`
 	MatchFormatID   string   `json:"match_format_id" binding:"required"`
 	Holes           int      `json:"holes" binding:"required,min=6,max=18"`
+	StartHole       *int     `json:"start_hole,omitempty" binding:"omitempty,min=1,max=18"`
+	EndHole         *int     `json:"end_hole,omitempty" binding:"omitempty,min=1,max=18"`
 	PointsAvailable *float64 `json:"points_available,omitempty"`
 }
 
