@@ -1920,39 +1920,52 @@ const MatchConfig = ({
             pairingPlayerIds.includes(player.id)
           );
           
+          // Check if we should auto-assign players (2v2 format with exactly 2 players per team)
+          const shouldAutoAssign = playersNeeded === 2 && teamPlayersInPairing.length === 2;
+          
           return (
             <div key={teamIdx}>
               <label className="block text-xs font-medium mb-1" style={{ color: team.color }}>
                 {team.name} Players
               </label>
               <div className="space-y-1">
-                {Array.from({ length: playersNeeded }).map((_, playerSlot) => (
-                  <select
-                    key={playerSlot}
-                    value={teamIdx === 0 ? (match.team1_players[playerSlot] !== undefined ? match.team1_players[playerSlot].toString() : '') : (match.team2_players[playerSlot] !== undefined ? match.team2_players[playerSlot].toString() : '')}
-                    onChange={(e) => {
-                      const newPlayers = [...(teamIdx === 0 ? match.team1_players : match.team2_players)];
-                      if (e.target.value === '') {
-                        newPlayers[playerSlot] = undefined;
-                      } else {
-                        newPlayers[playerSlot] = parseInt(e.target.value);
-                      }
-                      updateMatch(roundIdx, pairingIdx, matchIdx, teamIdx === 0 ? 'team1_players' : 'team2_players', newPlayers);
-                    }}
-                    className="w-full p-1 border rounded text-xs"
-                  >
-                    <option value="">Select...</option>
-                    {teamPlayersInPairing.map((player, pIdx) => {
-                      // Find the original index of this player in team.players
-                      const originalIdx = team.players.findIndex(p => p.id === player.id);
-                      return (
-                        <option key={player.id} value={originalIdx.toString()}>
-                          {player.name}
-                        </option>
-                      );
-                    })}
-                  </select>
-                ))}
+                {shouldAutoAssign ? (
+                  // Auto-assigned view - just show the players
+                  teamPlayersInPairing.map((player) => (
+                    <div key={player.id} className="p-1 bg-gray-100 rounded text-xs border">
+                      {player.name}
+                    </div>
+                  ))
+                ) : (
+                  // Manual selection view - show dropdowns
+                  Array.from({ length: playersNeeded }).map((_, playerSlot) => (
+                    <select
+                      key={playerSlot}
+                      value={teamIdx === 0 ? (match.team1_players[playerSlot] !== undefined ? match.team1_players[playerSlot].toString() : '') : (match.team2_players[playerSlot] !== undefined ? match.team2_players[playerSlot].toString() : '')}
+                      onChange={(e) => {
+                        const newPlayers = [...(teamIdx === 0 ? match.team1_players : match.team2_players)];
+                        if (e.target.value === '') {
+                          newPlayers[playerSlot] = undefined;
+                        } else {
+                          newPlayers[playerSlot] = parseInt(e.target.value);
+                        }
+                        updateMatch(roundIdx, pairingIdx, matchIdx, teamIdx === 0 ? 'team1_players' : 'team2_players', newPlayers);
+                      }}
+                      className="w-full p-1 border rounded text-xs"
+                    >
+                      <option value="">Select...</option>
+                      {teamPlayersInPairing.map((player, pIdx) => {
+                        // Find the original index of this player in team.players
+                        const originalIdx = team.players.findIndex(p => p.id === player.id);
+                        return (
+                          <option key={player.id} value={originalIdx.toString()}>
+                            {player.name}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  ))
+                )}
               </div>
             </div>
           );
