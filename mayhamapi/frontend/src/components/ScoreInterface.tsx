@@ -146,8 +146,15 @@ const ScoreInterface: React.FC = () => {
 
   const loadExistingScores = async (pairing: PairingWithScores) => {
     try {
+      console.log('=== LOADING EXISTING SCORES ===');
+      console.log('Pairing being loaded:', pairing.id);
+      console.log('Pairing players:', pairing.players?.map(p => ({ user_id: p.user_id, name: p.user?.name })));
+      
       const response = await apiClient.getPairingScores(pairing.id);
       const scores = response.scores || [];
+      
+      console.log('Existing scores from API:', scores);
+      console.log('User IDs in existing scores:', [...new Set(scores.map(s => s.user_id))]);
       
       // Convert scores array to the format expected by the UI
       const scoresMap: Record<number, Record<string, number>> = {};
@@ -164,6 +171,9 @@ const ScoreInterface: React.FC = () => {
         }
       });
       
+      console.log('Scores map:', scoresMap);
+      console.log('==============================');
+      
       // Update the pairing with existing scores
       const updatedPairing = {
         ...pairing,
@@ -173,9 +183,10 @@ const ScoreInterface: React.FC = () => {
       
       setSelectedPairing(updatedPairing);
       
-      // Determine the number of holes from the first match in the pairing
+      // Pairings represent the physical group playing together for the full round (18 holes)
+      // Individual matches within the pairing may cover different hole ranges
       const matches = pairing.matches || await apiClient.getPairingMatches(pairing.id);
-      const holes = matches.length > 0 ? matches[0].holes : 18;
+      const holes = 18; // Always 18 holes for a pairing
       
       // If there are existing scores, set the current hole to the first incomplete hole
       const completedHoles = Object.keys(scoresMap).map(h => parseInt(h));
@@ -185,10 +196,13 @@ const ScoreInterface: React.FC = () => {
       
       if (nextHole <= holes) {
         setCurrentHole(nextHole);
-        // Pre-populate with zeros for all players in the pairing
+        // Load existing scores for this hole if they exist, otherwise start with empty object
         const nextHoleScores: Record<string, number> = {};
         pairing.players?.forEach(player => {
-          nextHoleScores[player.user_id] = scoresMap[nextHole]?.[player.user_id] || 0;
+          if (scoresMap[nextHole]?.[player.user_id]) {
+            nextHoleScores[player.user_id] = scoresMap[nextHole][player.user_id];
+          }
+          // Don't pre-populate with zeros - let users enter scores
         });
         setHoleScores(nextHoleScores);
       } else {
@@ -202,10 +216,15 @@ const ScoreInterface: React.FC = () => {
       // Don't show error to user, just proceed without existing scores
       setSelectedPairing(pairing);
       setCurrentHole(1);
-      // Pre-populate with zeros for all players
+      // Pre-populate with empty values (not zeros) for all players
       const initialScores: Record<string, number> = {};
       pairing.players?.forEach(player => {
-        initialScores[player.user_id] = 0;
+        if (player.user_id && player.user_id !== '') {
+          // Don't pre-populate - let user enter scores
+          // initialScores[player.user_id] = 0;
+        } else {
+          console.warn('Invalid player in pairing:', player);
+        }
       });
       setHoleScores(initialScores);
     }
@@ -233,6 +252,21 @@ const ScoreInterface: React.FC = () => {
     
     // Default to number of holes specified in match
     return Array.from({ length: match.holes }, (_, i) => i + 1);
+  };
+
+  // Helper function to find which match applies to a specific hole
+  const getMatchForHole = (pairing: PairingWithScores | null, holeNumber: number): Match | undefined => {
+    if (!pairing?.matches) return undefined;
+    
+    // Find the first match that includes this hole
+    return pairing.matches.find(match => {
+      if (match.start_hole !== undefined && match.end_hole !== undefined) {
+        // Match has specific hole range (e.g., holes 1-6, 7-12, 13-18)
+        return holeNumber >= match.start_hole && holeNumber <= match.end_hole;
+      }
+      // For matches without specific hole ranges, assume they cover all holes
+      return true;
+    });
   };
 
   // Helper function to determine if we need team or individual score inputs
@@ -307,11 +341,42 @@ const ScoreInterface: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      console.log('=== SCORE SUBMISSION DEBUG ===');
+      console.log('holeScores object:', holeScores);
+      console.log('selectedPairing.players:', selectedPairing.players);
+      
+      // Validate that all user_ids in holeScores correspond to valid players
+      const validPlayerIds = new Set(selectedPairing.players?.map(p => p.user_id) || []);
+      console.log('Valid player user_ids in pairing:', Array.from(validPlayerIds));
+      
       // Convert holeScores to API format
-      const scoresArray = Object.entries(holeScores).map(([userId, strokes]) => ({
-        user_id: userId,
-        strokes: strokes
-      }));
+      const scoresArray = Object.entries(holeScores)
+        .filter(([userId, strokes]) => {
+          // Filter out invalid entries
+          if (!userId || userId === '' || strokes === 0 || strokes === null || strokes === undefined) {
+            console.warn('Skipping invalid score entry:', { userId, strokes });
+            return false;
+          }
+          // Check if this user_id is actually in the pairing
+          if (!validPlayerIds.has(userId)) {
+            console.error('ERROR: user_id not in pairing players:', userId);
+            return false;
+          }
+          return true;
+        })
+        .map(([userId, strokes]) => ({
+          user_id: userId,
+          strokes: strokes
+        }));
+
+      if (scoresArray.length === 0) {
+        setError('No valid scores to submit. Please enter scores for all players.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      console.log('Final scores to submit:', scoresArray);
+      console.log('Submitting to pairing:', selectedPairing.id, 'hole:', currentHole);
 
       await apiClient.submitPairingScores(selectedPairing.id, {
         hole_number: currentHole,
@@ -329,7 +394,7 @@ const ScoreInterface: React.FC = () => {
 
       // Determine the number of holes
       const matches = await apiClient.getPairingMatches(selectedPairing.id);
-      const holes = matches.length > 0 ? matches[0].holes : 18;
+      const holes = 18; // Always 18 holes for a pairing
 
       // Move to next hole or stay on current
       if (currentHole < holes) {
@@ -538,6 +603,17 @@ const ScoreInterface: React.FC = () => {
                       <button
                         key={pairing.id}
                         onClick={async () => {
+                          console.log('Selected pairing:', pairing);
+                          console.log('Pairing players:', pairing.players);
+                          pairing.players?.forEach(player => {
+                            console.log('Player details:', {
+                              id: player.id,
+                              user_id: player.user_id,
+                              team_id: player.team_id,
+                              player_order: player.player_order,
+                              user: player.user
+                            });
+                          });
                           await loadExistingScores(pairing);
                         }}
                         className={`p-4 rounded-lg border-2 text-left transition-colors ${
@@ -655,9 +731,8 @@ const ScoreInterface: React.FC = () => {
                 </div>
                 <div className="flex space-x-2 flex-wrap justify-end">
                   {(() => {
-                    // Determine which holes to show based on the first match
-                    const firstMatch = selectedPairing.matches?.[0];
-                    const holesToShow = getHolesForMatch(firstMatch);
+                    // Always show all 18 holes for a pairing (players play the full round)
+                    const holesToShow = Array.from({ length: 18 }, (_, i) => i + 1);
                     
                     return holesToShow.map((hole) => (
                       <button
@@ -667,10 +742,16 @@ const ScoreInterface: React.FC = () => {
                           const existingScores = selectedPairing.scores[hole] || {};
                           const holeScoresMap: Record<string, number> = {};
                           
-                          if (needsTeamScores(firstMatch)) {
-                            // For team scores, initialize with team IDs
+                          // Determine which match this hole belongs to
+                          const holeMatch = getMatchForHole(selectedPairing, hole);
+                          
+                          if (needsTeamScores(holeMatch)) {
+                            // For team scores, use first player from each team
                             getTeamsFromPairing(selectedPairing).forEach(team => {
-                              holeScoresMap[team.id] = existingScores[team.id] || 0;
+                              const teamPlayer = selectedPairing.players?.find(p => p.team_id === team.id);
+                              if (teamPlayer) {
+                                holeScoresMap[teamPlayer.user_id] = existingScores[teamPlayer.user_id] || 0;
+                              }
                             });
                           } else {
                             // For individual scores, initialize with player IDs
@@ -699,59 +780,67 @@ const ScoreInterface: React.FC = () => {
               {/* Score Entry - Team or Individual based on match format */}
               <div className="mb-6">
                 {(() => {
-                  const firstMatch = selectedPairing.matches?.[0];
-                  const isTeamScoring = needsTeamScores(firstMatch);
+                  // Find which match applies to the current hole
+                  const currentMatch = getMatchForHole(selectedPairing, currentHole);
+                  const isTeamScoring = needsTeamScores(currentMatch);
                   const isStableford = selectedTournament?.scoring_method === 'stableford';
                   
                   if (isTeamScoring) {
                     // Team score entry - one score per team
+                    // For team scoring, we assign the score to the first player of each team
                     const teams = getTeamsFromPairing(selectedPairing);
                     
                     return (
                       <div className="space-y-4">
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                           <p className="text-sm text-blue-800">
-                            <strong>Team Scoring:</strong> Enter one combined score per team for {firstMatch?.format?.name || 'this match'}.
-                            {firstMatch?.format?.description && (
-                              <span className="block mt-1 text-xs">{firstMatch.format.description}</span>
+                            <strong>Team Scoring:</strong> Enter one combined score per team for {currentMatch?.format?.name || 'this match'}.
+                            {currentMatch?.format?.description && (
+                              <span className="block mt-1 text-xs">{currentMatch.format.description}</span>
                             )}
                           </p>
                         </div>
                         
                         <div className="grid gap-4">
-                          {teams.map(team => (
-                            <div key={team.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                              <div className="flex items-center">
-                                <div 
-                                  className="w-4 h-4 rounded-full mr-3" 
-                                  style={{ backgroundColor: team.color || '#999' }}
-                                />
-                                <span className="font-medium text-gray-900">{team.name}</span>
-                              </div>
-                              <div className="flex items-center space-x-4">
-                                <div>
-                                  <label className="block text-xs text-gray-500 mb-1">Strokes</label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="12"
-                                    value={holeScores[team.id] || ''}
-                                    onChange={(e) => handleScoreChange(team.id, parseInt(e.target.value) || 0)}
-                                    className="w-20 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-center"
-                                    placeholder="0"
+                          {teams.map(team => {
+                            // Find the first player from this team to assign the score to
+                            const teamPlayer = selectedPairing.players?.find(p => p.team_id === team.id);
+                            if (!teamPlayer) return null;
+                            
+                            return (
+                              <div key={team.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                                <div className="flex items-center">
+                                  <div 
+                                    className="w-4 h-4 rounded-full mr-3" 
+                                    style={{ backgroundColor: team.color || '#999' }}
                                   />
+                                  <span className="font-medium text-gray-900">{team.name}</span>
                                 </div>
-                                {isStableford && selectedPairing.stablefordPoints?.[currentHole]?.[team.id] !== undefined && (
+                                <div className="flex items-center space-x-4">
                                   <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Points</label>
-                                    <div className="w-20 px-3 py-2 bg-green-50 border border-green-200 rounded-md text-center font-medium text-green-700">
-                                      {selectedPairing.stablefordPoints[currentHole][team.id]}
-                                    </div>
+                                    <label className="block text-xs text-gray-500 mb-1">Strokes</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="12"
+                                      value={holeScores[teamPlayer.user_id] || ''}
+                                      onChange={(e) => handleScoreChange(teamPlayer.user_id, parseInt(e.target.value) || 0)}
+                                      className="w-20 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-center"
+                                      placeholder="0"
+                                    />
                                   </div>
+                                  {isStableford && selectedPairing.stablefordPoints?.[currentHole]?.[teamPlayer.user_id] !== undefined && (
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">Points</label>
+                                      <div className="w-20 px-3 py-2 bg-green-50 border border-green-200 rounded-md text-center font-medium text-green-700">
+                                        {selectedPairing.stablefordPoints[currentHole][teamPlayer.user_id]}
+                                      </div>
+                                    </div>
                                 )}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     );
