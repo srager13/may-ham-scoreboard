@@ -30,7 +30,7 @@ func NewScoringService(repo *repository.Repository) *ScoringService {
 func CalculateStablefordPoints(par, strokes, handicapStrokes int) int {
 	// Net score = gross strokes - handicap strokes
 	netScore := strokes - handicapStrokes
-	
+
 	// Stableford points based on net score vs par:
 	// Albatross or better (-3 or more): 5 points
 	// Eagle (-2): 4 points
@@ -39,7 +39,7 @@ func CalculateStablefordPoints(par, strokes, handicapStrokes int) int {
 	// Bogey (+1): 1 point
 	// Double bogey or worse (+2 or more): 0 points
 	scoreToPar := netScore - par
-	
+
 	switch {
 	case scoreToPar <= -3:
 		return 5 // Albatross or better
