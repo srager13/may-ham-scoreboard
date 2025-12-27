@@ -22,6 +22,7 @@ export interface Tournament {
   group_id?: string;
   created_by: string;
   status: string;
+  scoring_method: string; // 'gross' or 'stableford'
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +63,7 @@ export interface MatchFormat {
   description?: string;
   players_per_side: number;
   scoring_type: string;
+  score_input_type: string; // 'individual' or 'team'
   created_at: string;
 }
 
@@ -72,6 +74,8 @@ export interface Match {
   match_format_id: string;
   match_number: number;
   holes: number;
+  start_hole?: number; // First hole of match (1-18)
+  end_hole?: number;   // Last hole of match (1-18)
   status: string;
   team1_id: string;
   team2_id: string;
@@ -123,6 +127,7 @@ export interface Score {
   user_id: string;
   hole_number: number;
   strokes: number;
+  stableford_points?: number; // Points for Stableford scoring (0-5)
   created_at: string;
   updated_at: string;
 }
@@ -237,6 +242,7 @@ export interface CreateTournamentRequest {
   description?: string;
   start_date: string;
   end_date: string;
+  scoring_method?: string; // 'gross' or 'stableford'
 }
 
 export interface CreateTeamRequest {
@@ -257,6 +263,8 @@ export interface CreateMatchRequest {
   team2_id: string;
   match_format_id: string;
   holes: number;
+  start_hole?: number; // First hole of match (1-18)
+  end_hole?: number;   // Last hole of match (1-18)
   player_assignments?: {
     team1_players: string[];
     team2_players: string[];
@@ -283,6 +291,8 @@ export interface PairingMatchRequest {
   team2_id: string;
   match_format_id: string;
   holes: number;
+  start_hole?: number; // First hole of match (1-18)
+  end_hole?: number;   // Last hole of match (1-18)
   points_available?: number;
 }
 
