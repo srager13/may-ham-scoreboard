@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock } from 'lucide-react';
-import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee, Match, MatchFormat } from '../services/api';
+import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat } from '../services/api';
 
 interface PairingWithScores extends Pairing {
   round?: Round;
   scores: Record<number, Record<string, number>>; // { holeNumber: { userId: strokes } }
   stablefordPoints?: Record<number, Record<string, number>>; // { holeNumber: { userId: points } } for Stableford scoring
   tee?: GolfCourseTee;
+  holes?: GolfCourseHole[]; // Hole-by-hole data (par, yardage, handicap)
   matches?: Match[]; // Matches associated with this pairing
 }
 
@@ -103,12 +104,26 @@ const ScoreInterface: React.FC = () => {
             
             // Load tee information if available
             let tee: GolfCourseTee | undefined;
+            let holes: GolfCourseHole[] | undefined;
             if (pairing.golf_course_tee_id && round.golf_course_id) {
               try {
                 const tees = await apiClient.getGolfCourseTees(round.golf_course_id);
                 tee = tees.find(t => t.id === pairing.golf_course_tee_id);
+                
+                console.log('[loadPairings] Golf course:', round.golf_course_id);
+                console.log('[loadPairings] Tee found:', tee);
+                
+                // Fetch hole-by-hole data for this tee
+                if (tee) {
+                  holes = await apiClient.getGolfCourseHoles(tee.id);
+                  console.log('[loadPairings] Holes loaded for tee', tee.id, ':', holes);
+                  console.log('[loadPairings] Number of holes:', holes.length);
+                  if (holes.length > 0) {
+                    console.log('[loadPairings] Sample hole:', holes[0]);
+                  }
+                }
               } catch (err) {
-                console.warn('Failed to load tee info:', err);
+                console.warn('Failed to load tee/hole info:', err);
               }
             }
             
@@ -119,7 +134,8 @@ const ScoreInterface: React.FC = () => {
               scores: {},
               stablefordPoints: {},
               round,
-              tee
+              tee,
+              holes
             };
             
             allPairings.push(pairingWithScores);
@@ -785,13 +801,37 @@ const ScoreInterface: React.FC = () => {
                   const isTeamScoring = needsTeamScores(currentMatch);
                   const isStableford = selectedTournament?.scoring_method === 'stableford';
                   
-                  if (isTeamScoring) {
-                    // Team score entry - one score per team
-                    // For team scoring, we assign the score to the first player of each team
-                    const teams = getTeamsFromPairing(selectedPairing);
-                    
-                    return (
-                      <div className="space-y-4">
+                  // Get course information for the current hole
+                  const currentHoleData = selectedPairing.holes?.find(h => h.hole_number === currentHole);
+                  
+                  return (
+                    <div className="space-y-4">
+                      {/* Course Information Header */}
+                      {selectedPairing.round?.golf_course && (
+                        <div className="bg-green-50 border-2 border-green-600 rounded-lg p-4 mb-4">
+                          <div className="text-center">
+                            <h3 className="text-xl font-bold text-green-900">
+                              {selectedPairing.round.golf_course.course_name}
+                            </h3>
+                            {selectedPairing.round.golf_course.city && selectedPairing.round.golf_course.state && (
+                              <p className="text-sm text-green-700">
+                                {selectedPairing.round.golf_course.city}, {selectedPairing.round.golf_course.state}
+                              </p>
+                            )}
+                            {selectedPairing.tee && (
+                              <p className="text-sm text-green-700 mt-1">
+                                <strong>{selectedPairing.tee.tee_name} Tees</strong>
+                                {selectedPairing.tee.total_yards && ` - ${selectedPairing.tee.total_yards} yards`}
+                                {selectedPairing.tee.course_rating && selectedPairing.tee.slope_rating && 
+                                  ` - Rating: ${selectedPairing.tee.course_rating}/${selectedPairing.tee.slope_rating}`}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Match Format Info */}
+                      {isTeamScoring && (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                           <p className="text-sm text-blue-800">
                             <strong>Team Scoring:</strong> Enter one combined score per team for {currentMatch?.format?.name || 'this match'}.
@@ -800,121 +840,158 @@ const ScoreInterface: React.FC = () => {
                             )}
                           </p>
                         </div>
-                        
-                        <div className="grid gap-4">
-                          {teams.map(team => {
-                            // Find the first player from this team to assign the score to
-                            const teamPlayer = selectedPairing.players?.find(p => p.team_id === team.id);
-                            if (!teamPlayer) return null;
-                            
-                            return (
-                              <div key={team.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                                <div className="flex items-center">
-                                  <div 
-                                    className="w-4 h-4 rounded-full mr-3" 
-                                    style={{ backgroundColor: team.color || '#999' }}
-                                  />
-                                  <span className="font-medium text-gray-900">{team.name}</span>
-                                </div>
-                                <div className="flex items-center space-x-4">
-                                  <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Strokes</label>
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      max="12"
-                                      value={holeScores[teamPlayer.user_id] || ''}
-                                      onChange={(e) => handleScoreChange(teamPlayer.user_id, parseInt(e.target.value) || 0)}
-                                      className="w-20 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-center"
-                                      placeholder="0"
-                                    />
-                                  </div>
-                                  {isStableford && selectedPairing.stablefordPoints?.[currentHole]?.[teamPlayer.user_id] !== undefined && (
-                                    <div>
-                                      <label className="block text-xs text-gray-500 mb-1">Points</label>
-                                      <div className="w-20 px-3 py-2 bg-green-50 border border-green-200 rounded-md text-center font-medium text-green-700">
-                                        {selectedPairing.stablefordPoints[currentHole][teamPlayer.user_id]}
-                                      </div>
-                                    </div>
-                                )}
-                              </div>
-                            </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  } else {
-                    // Individual score entry - one score per player
-                    return (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
+                      )}
+                      
+                      {/* Scorecard Table */}
+                      <div className="overflow-x-auto border-2 border-gray-800 rounded-lg">
+                        <table className="min-w-full divide-y-2 divide-gray-800 bg-white">
+                          <thead className="bg-gray-100">
                             <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Player
+                              <th className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase border-r-2 border-gray-800">
+                                Hole
                               </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Team
+                              <th className="px-4 py-3 text-center text-2xl font-bold text-gray-900 border-r border-gray-300">
+                                {currentHole}
                               </th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Strokes
-                              </th>
-                              {isStableford && (
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  Points
-                                </th>
-                              )}
                             </tr>
                           </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {(selectedPairing.players || []).map((player) => (
-                              <tr key={player.user_id}>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="font-medium text-gray-900">
-                                    {player.user?.name || `Player ${player.user_id}`}
-                                  </div>
+                          <tbody className="divide-y-2 divide-gray-800">
+                            {/* Yardage Row */}
+                            {currentHoleData?.yards && (
+                              <tr className="bg-gray-50">
+                                <td className="px-4 py-2 text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800">
+                                  Yards
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="flex items-center">
-                                    <div 
-                                      className="w-3 h-3 rounded-full mr-2" 
-                                      style={{ backgroundColor: player.team?.color || '#999' }}
-                                    />
-                                    <span className="text-sm text-gray-700">
-                                      {player.team?.name || 'Unknown'}
-                                    </span>
-                                  </div>
+                                <td className="px-4 py-2 text-center text-sm font-medium text-gray-900 border-r border-gray-300">
+                                  {currentHoleData.yards}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="12"
-                                    value={holeScores[player.user_id] || ''}
-                                    onChange={(e) => handleScoreChange(player.user_id, parseInt(e.target.value) || 0)}
-                                    className="w-16 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-center"
-                                    placeholder="0"
-                                  />
-                                </td>
-                                {isStableford && (
-                                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                                    {selectedPairing.stablefordPoints?.[currentHole]?.[player.user_id] !== undefined ? (
-                                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                                        {selectedPairing.stablefordPoints[currentHole][player.user_id]} pts
-                                      </span>
-                                    ) : (
-                                      <span className="text-gray-400 text-sm">-</span>
-                                    )}
-                                  </td>
-                                )}
                               </tr>
-                            ))}
+                            )}
+                            
+                            {/* Par Row */}
+                            {currentHoleData?.par && (
+                              <tr className="bg-yellow-50">
+                                <td className="px-4 py-2 text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800">
+                                  Par
+                                </td>
+                                <td className="px-4 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300">
+                                  {currentHoleData.par}
+                                </td>
+                              </tr>
+                            )}
+                            
+                            {/* Handicap Row */}
+                            {currentHoleData?.handicap && (
+                              <tr className="bg-gray-50">
+                                <td className="px-4 py-2 text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800">
+                                  HCP
+                                </td>
+                                <td className="px-4 py-2 text-center text-sm text-gray-700 border-r border-gray-300">
+                                  {currentHoleData.handicap}
+                                </td>
+                              </tr>
+                            )}
+                            
+                            {/* Player Score Rows */}
+                            {isTeamScoring ? (
+                              // Team scoring - one row per team with combined cells
+                              getTeamsFromPairing(selectedPairing).map(team => {
+                                const teamPlayer = selectedPairing.players?.find(p => p.team_id === team.id);
+                                if (!teamPlayer) return null;
+                                
+                                return (
+                                  <tr key={team.id} className="border-t-2 border-gray-400">
+                                    <td className="px-4 py-3 border-r-2 border-gray-800">
+                                      <div className="flex items-center">
+                                        <div 
+                                          className="w-4 h-4 rounded-full mr-2" 
+                                          style={{ backgroundColor: team.color || '#999' }}
+                                        />
+                                        <div>
+                                          <div className="font-bold text-gray-900">{team.name}</div>
+                                          <div className="text-xs text-gray-500">
+                                            {selectedPairing.players
+                                              ?.filter(p => p.team_id === team.id)
+                                              .map(p => p.user?.name)
+                                              .join(' & ')}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-center border-r border-gray-300">
+                                      <div className="flex flex-col items-center gap-2">
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          max="12"
+                                          value={holeScores[teamPlayer.user_id] || ''}
+                                          onChange={(e) => handleScoreChange(teamPlayer.user_id, parseInt(e.target.value) || 0)}
+                                          className="w-16 px-3 py-2 border-2 border-gray-800 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center text-lg font-bold"
+                                          placeholder="-"
+                                        />
+                                        {isStableford && selectedPairing.stablefordPoints?.[currentHole]?.[teamPlayer.user_id] !== undefined && (
+                                          <div className="text-xs font-semibold text-green-700">
+                                            {selectedPairing.stablefordPoints[currentHole][teamPlayer.user_id]} pts
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              // Individual scoring - one row per player
+                              (selectedPairing.players || []).map((player, idx) => {
+                                // Group players by team for visual separation
+                                const isFirstInTeam = idx === 0 || 
+                                  selectedPairing.players![idx - 1].team_id !== player.team_id;
+                                
+                                return (
+                                  <tr 
+                                    key={player.user_id} 
+                                    className={isFirstInTeam ? 'border-t-2 border-gray-400' : ''}
+                                  >
+                                    <td className="px-4 py-3 border-r-2 border-gray-800">
+                                      <div className="flex items-center">
+                                        <div 
+                                          className="w-4 h-4 rounded-full mr-2" 
+                                          style={{ backgroundColor: player.team?.color || '#999' }}
+                                        />
+                                        <div>
+                                          <div className="font-medium text-gray-900">
+                                            {player.user?.name || `Player ${player.user_id}`}
+                                          </div>
+                                          <div className="text-xs text-gray-500">{player.team?.name}</div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-center border-r border-gray-300">
+                                      <div className="flex flex-col items-center gap-2">
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          max="12"
+                                          value={holeScores[player.user_id] || ''}
+                                          onChange={(e) => handleScoreChange(player.user_id, parseInt(e.target.value) || 0)}
+                                          className="w-16 px-3 py-2 border-2 border-gray-800 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center text-lg font-bold"
+                                          placeholder="-"
+                                        />
+                                        {isStableford && selectedPairing.stablefordPoints?.[currentHole]?.[player.user_id] !== undefined && (
+                                          <div className="text-xs font-semibold text-green-700">
+                                            {selectedPairing.stablefordPoints[currentHole][player.user_id]} pts
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
                           </tbody>
                         </table>
                       </div>
-                    );
-                  }
+                    </div>
+                  );
                 })()}
               </div>
 

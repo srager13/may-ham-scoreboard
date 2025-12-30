@@ -150,7 +150,6 @@ type GolfCourseHole struct {
 	HoleNumber int       `json:"hole_number" db:"hole_number"`
 	Par        int       `json:"par" db:"par"`
 	Yards      *int      `json:"yards,omitempty" db:"yards"`
-	Meters     *int      `json:"meters,omitempty" db:"meters"`
 	Handicap   *int      `json:"handicap,omitempty" db:"handicap"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 }

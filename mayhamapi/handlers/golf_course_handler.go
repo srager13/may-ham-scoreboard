@@ -133,11 +133,6 @@ func (h *GolfCourseHandler) SaveGolfCourse(c *gin.Context) {
 		return
 	}
 
-	if existingCourse != nil {
-		c.JSON(http.StatusOK, existingCourse)
-		return
-	}
-
 	// Fetch course details from external API
 	url := fmt.Sprintf("https://api.golfcourseapi.com/v1/courses/%d", req.ExternalID)
 	httpReq, err := http.NewRequest("GET", url, nil)
@@ -201,14 +196,23 @@ func (h *GolfCourseHandler) SaveGolfCourse(c *gin.Context) {
 		Longitude:  &apiResponse.Course.Location.Longitude,
 	}
 
-	if err := h.repo.CreateGolfCourse(course); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create golf course"})
-		return
+	// If course exists, use existing ID and skip creation; otherwise create new
+	if existingCourse != nil {
+		course.ID = existingCourse.ID
+		fmt.Printf("Updating existing golf course ID: %s, External ID: %d\n", course.ID, *course.ExternalID)
+	} else {
+		if err := h.repo.CreateGolfCourse(course); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create golf course"})
+			return
+		}
+		fmt.Printf("Created new golf course ID: %s, External ID: %d\n", course.ID, *course.ExternalID)
 	}
 
 	// Save tees and holes for male tees
-	for _, teeData := range apiResponse.Course.Tees.Male {
+	fmt.Printf("Processing %d male tees for course %s\n", len(apiResponse.Course.Tees.Male), course.ID)
+	for i, teeData := range apiResponse.Course.Tees.Male {
 		gender := "male"
+		fmt.Printf("  Tee %d: %s with %d holes\n", i+1, teeData.TeeName, len(teeData.Holes))
 		if err := h.saveTee(course.ID, gender, teeData); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to save tee: %v", err)})
 			return
@@ -216,8 +220,10 @@ func (h *GolfCourseHandler) SaveGolfCourse(c *gin.Context) {
 	}
 
 	// Save tees and holes for female tees
-	for _, teeData := range apiResponse.Course.Tees.Female {
+	fmt.Printf("Processing %d female tees for course %s\n", len(apiResponse.Course.Tees.Female), course.ID)
+	for i, teeData := range apiResponse.Course.Tees.Female {
 		gender := "female"
+		fmt.Printf("  Tee %d: %s with %d holes\n", i+1, teeData.TeeName, len(teeData.Holes))
 		if err := h.saveTee(course.ID, gender, teeData); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to save tee: %v", err)})
 			return
@@ -246,14 +252,14 @@ type TeeData struct {
 }
 
 type HoleData struct {
-	HoleNumber int `json:"hole_number"`
-	Par        int `json:"par"`
-	Yards      int `json:"yards"`
-	Meters     int `json:"meters"`
-	Handicap   int `json:"handicap"`
+	Par      int `json:"par"`
+	Yards    int `json:"yardage"` // API uses "yardage" not "yards"
+	Handicap int `json:"handicap"`
 }
 
 func (h *GolfCourseHandler) saveTee(courseID string, gender string, teeData TeeData) error {
+	fmt.Printf("    saveTee called for tee: %s, gender: %s, holes in data: %d\n", teeData.TeeName, gender, len(teeData.Holes))
+
 	tee := &models.GolfCourseTee{
 		CourseID:          courseID,
 		TeeName:           teeData.TeeName,
@@ -274,25 +280,35 @@ func (h *GolfCourseHandler) saveTee(courseID string, gender string, teeData TeeD
 	}
 
 	if err := h.repo.CreateGolfCourseTee(tee); err != nil {
+		fmt.Printf("    ERROR creating tee: %v\n", err)
 		return err
 	}
+	fmt.Printf("    Created tee with ID: %s\n", tee.ID)
 
 	// Save holes for this tee
-	for _, holeData := range teeData.Holes {
+	fmt.Printf("    Processing %d holes for tee %s\n", len(teeData.Holes), tee.ID)
+	for i, holeData := range teeData.Holes {
+		// Hole number is the array index + 1 (1-18)
+		holeNumber := i + 1
+		fmt.Printf("      Hole %d: number=%d, par=%d, yards=%d, handicap=%d\n",
+			i+1, holeNumber, holeData.Par, holeData.Yards, holeData.Handicap)
+
 		hole := &models.GolfCourseHole{
 			TeeID:      tee.ID,
-			HoleNumber: holeData.HoleNumber,
+			HoleNumber: holeNumber,
 			Par:        holeData.Par,
 			Yards:      &holeData.Yards,
-			Meters:     &holeData.Meters,
 			Handicap:   &holeData.Handicap,
 		}
 
 		if err := h.repo.CreateGolfCourseHole(hole); err != nil {
+			fmt.Printf("      ERROR creating hole: %v\n", err)
 			return err
 		}
+		fmt.Printf("      Created hole with ID: %s\n", hole.ID)
 	}
 
+	fmt.Printf("    Successfully saved %d holes for tee %s\n", len(teeData.Holes), tee.ID)
 	return nil
 }
 
@@ -334,4 +350,18 @@ func (h *GolfCourseHandler) GetGolfCourseTees(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, tees)
+}
+
+// GetGolfCourseHoles returns all holes for a specific tee
+// GET /api/v1/golf-courses/tees/:tee_id/holes
+func (h *GolfCourseHandler) GetGolfCourseHoles(c *gin.Context) {
+	teeID := c.Param("tee_id")
+
+	holes, err := h.repo.GetGolfCourseHoles(teeID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get golf course holes"})
+		return
+	}
+
+	c.JSON(http.StatusOK, holes)
 }

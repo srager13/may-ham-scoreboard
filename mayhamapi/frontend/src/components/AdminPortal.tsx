@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Save, CheckCircle, XCircle, Loader, MapPin } from 'lucide-react';
+import { Search, Save, CheckCircle, XCircle, Loader, MapPin, RefreshCw } from 'lucide-react';
 import { apiClient, GolfCourseSearchResult, GolfCourse } from '../services/api';
 
 const AdminPortal: React.FC = () => {
@@ -8,6 +8,7 @@ const AdminPortal: React.FC = () => {
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUpdating, setIsUpdating] = useState<string | null>(null); // Store the ID of the course being updated
   const [saveStatus, setSaveStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [storedCourses, setStoredCourses] = useState<GolfCourse[]>([]);
 
@@ -75,6 +76,37 @@ const AdminPortal: React.FC = () => {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleUpdateCourse = async (course: GolfCourse) => {
+    if (!course.external_id) {
+      setSaveStatus({ 
+        success: false, 
+        message: 'Cannot update course: missing external ID' 
+      });
+      return;
+    }
+
+    setIsUpdating(course.id);
+    setSaveStatus(null);
+
+    try {
+      // Re-fetch and save the course using the external ID
+      await apiClient.saveGolfCourse(course.external_id);
+      setSaveStatus({ 
+        success: true, 
+        message: `${course.club_name} updated successfully!` 
+      });
+      await loadStoredCourses();
+    } catch (error: any) {
+      console.error('Failed to update course:', error);
+      setSaveStatus({ 
+        success: false, 
+        message: error.message || `Failed to update ${course.club_name}. Please try again.` 
+      });
+    } finally {
+      setIsUpdating(null);
     }
   };
 
@@ -234,13 +266,32 @@ const AdminPortal: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {storedCourses.map((course) => (
-              <div key={course.id} className="p-4 border border-gray-200 rounded-lg">
+              <div key={course.id} className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
                 <h4 className="font-semibold text-gray-900">{course.club_name}</h4>
                 <p className="text-sm text-gray-600">{course.course_name}</p>
                 <div className="flex items-center gap-1 mt-2 text-sm text-gray-500">
                   <MapPin className="h-4 w-4" />
                   {course.city}, {course.state}
                 </div>
+                {course.external_id && (
+                  <button
+                    onClick={() => handleUpdateCourse(course)}
+                    disabled={isUpdating === course.id}
+                    className="mt-3 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 flex items-center justify-center gap-2 text-sm"
+                  >
+                    {isUpdating === course.id ? (
+                      <>
+                        <Loader className="h-4 w-4 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4" />
+                        Update from API
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             ))}
           </div>

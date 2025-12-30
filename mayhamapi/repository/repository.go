@@ -211,15 +211,15 @@ func (r *Repository) AddTeamMember(teamID, userID string) (*models.TeamMember, e
 
 func (r *Repository) CreateRound(tournamentID string, req *models.CreateRoundRequest) (*models.Round, error) {
 	query := `
-		INSERT INTO rounds (tournament_id, name, round_number, round_date, start_time, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 'scheduled', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, tournament_id, name, round_number, round_date, start_time, status, created_at, updated_at
+		INSERT INTO rounds (tournament_id, name, round_number, round_date, start_time, golf_course_id, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, tournament_id, name, round_number, round_date, start_time, golf_course_id, status, created_at, updated_at
 	`
 
 	var round models.Round
 	err := r.db.QueryRow(query, tournamentID, req.Name, req.RoundNumber, req.RoundDate, req.StartTime).Scan(
 		&round.ID, &round.TournamentID, &round.Name, &round.RoundNumber,
-		&round.RoundDate, &round.StartTime, &round.Status, &round.CreatedAt, &round.UpdatedAt,
+		&round.RoundDate, &round.StartTime, &round.GolfCourseID, &round.Status, &round.CreatedAt, &round.UpdatedAt,
 	)
 
 	if err != nil {
@@ -1539,45 +1539,6 @@ func (r *Repository) GetTeamMembers(teamID string) ([]models.TeamMember, error) 
 	return members, nil
 }
 
-// DEPRECATED: Use GetPairingPlayers instead
-/*
-func (r *Repository) GetMatchPlayers(matchID string) ([]models.MatchPlayer, error) {
-	query := `
-		SELECT mp.id, mp.match_id, mp.user_id, mp.team_id, mp.player_order,
-		       u.id, u.email, u.name, u.handicap, u.is_admin, u.created_at, u.updated_at
-		FROM match_players mp
-		LEFT JOIN users u ON mp.user_id = u.id
-		WHERE mp.match_id = $1
-		ORDER BY mp.player_order
-	`
-
-	rows, err := r.db.Query(query, matchID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get match players: %w", err)
-	}
-	defer rows.Close()
-
-	var players []models.MatchPlayer
-	for rows.Next() {
-		var player models.MatchPlayer
-		var user models.User
-
-		err := rows.Scan(
-			&player.ID, &player.MatchID, &player.UserID, &player.TeamID, &player.Position,
-			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan match player: %w", err)
-		}
-
-		player.User = &user
-		players = append(players, player)
-	}
-
-	return players, nil
-}
-*/
-
 // ============================================
 // Golf Course Methods
 // ============================================
@@ -1633,17 +1594,16 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 
 func (r *Repository) CreateGolfCourseHole(hole *models.GolfCourseHole) error {
 	query := `
-		INSERT INTO golf_course_holes (tee_id, hole_number, par, yards, meters, handicap)
+		INSERT INTO golf_course_holes (tee_id, hole_number, par, yards, handicap)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (tee_id, hole_number) DO UPDATE SET
 			par = EXCLUDED.par,
 			yards = EXCLUDED.yards,
-			meters = EXCLUDED.meters,
 			handicap = EXCLUDED.handicap
 		RETURNING id, created_at
 	`
 	err := r.db.QueryRow(query,
-		hole.TeeID, hole.HoleNumber, hole.Par, hole.Yards, hole.Meters, hole.Handicap,
+		hole.TeeID, hole.HoleNumber, hole.Par, hole.Yards, hole.Handicap,
 	).Scan(&hole.ID, &hole.CreatedAt)
 
 	return err
@@ -1753,4 +1713,33 @@ ORDER BY total_yards DESC
 	}
 
 	return tees, nil
+}
+
+func (r *Repository) GetGolfCourseHoles(teeID string) ([]*models.GolfCourseHole, error) {
+	query := `
+SELECT id, tee_id, hole_number, par, yards, handicap, created_at
+FROM golf_course_holes
+WHERE tee_id = $1
+ORDER BY hole_number
+`
+	rows, err := r.db.Query(query, teeID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get golf course holes: %w", err)
+	}
+	defer rows.Close()
+
+	var holes []*models.GolfCourseHole
+	for rows.Next() {
+		var hole models.GolfCourseHole
+		err := rows.Scan(
+			&hole.ID, &hole.TeeID, &hole.HoleNumber, &hole.Par,
+			&hole.Yards, &hole.Handicap, &hole.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan golf course hole: %w", err)
+		}
+		holes = append(holes, &hole)
+	}
+
+	return holes, nil
 }

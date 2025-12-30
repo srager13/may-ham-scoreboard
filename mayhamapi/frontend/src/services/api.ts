@@ -165,6 +165,17 @@ export interface GolfCourse {
   updated_at: string;
 }
 
+export interface GolfCourseHole {
+  id: string;
+  tee_id: string;
+  hole_number: number;
+  par: number;
+  yards?: number;
+  meters?: number;
+  handicap?: number;
+  created_at: string;
+}
+
 export interface GolfCourseTee {
   id: string;
   course_id: string;
@@ -675,6 +686,10 @@ class ApiClient {
 
   async getGolfCourseTees(courseId: string): Promise<GolfCourseTee[]> {
     return this.request<GolfCourseTee[]>(`/golf-courses/${courseId}/tees`);
+  }
+
+  async getGolfCourseHoles(teeId: string): Promise<GolfCourseHole[]> {
+    return this.request<GolfCourseHole[]>(`/golf-courses/tees/${teeId}/holes`);
   }
 }
 

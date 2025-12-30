@@ -11,12 +11,12 @@ TODOs:
 
     - LEADERBOARD:
         - Make it more obvious when a team has won
+        - Implement individual statistics
 
     - SCORING:
+        - make score entry look like a scorecard
         - match up 6 and 9 hole matches to which part of the round the match is occurring
         - Fix scoring and leaderboard updates
-        - update match formats for how many scores to enter - update score interface display
-        - Stableford scoring
         - Make scoring a separate page for each hole (?)
 
     - GROUPS:
@@ -24,8 +24,10 @@ TODOs:
         - maybe add buttons like teams?
 
     - TOURNAMENT SETUP:
-        - matches - probably going to need to set front 9/back 9, first/middle/last 6
-          to help with scoring
+        - refactor:
+            - set matches for a round and auto-populate the pairings with the same matches
+        - matches - choose hole selection from drop-downs instead of entering hole numbers
+        - set tee time to 10 minutes from previous pairing by default
 
     - ADD GOLF COURSES:
         - Add course name, location, etc. to Rounds
