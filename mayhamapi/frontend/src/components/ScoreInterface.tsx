@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock } from 'lucide-react';
-import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat } from '../services/api';
+import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock, CheckCircle, Trophy, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat, HoleResult } from '../services/api';
+
+interface MatchWithResults extends Match {
+  hole_results?: HoleResult[];
+}
 
 interface PairingWithScores extends Pairing {
   round?: Round;
@@ -9,6 +13,7 @@ interface PairingWithScores extends Pairing {
   tee?: GolfCourseTee;
   holes?: GolfCourseHole[]; // Hole-by-hole data (par, yardage, handicap)
   matches?: Match[]; // Matches associated with this pairing
+  matchResults?: MatchWithResults[]; // Match results with hole-by-hole breakdown
 }
 
 const ScoreInterface: React.FC = () => {
@@ -24,6 +29,7 @@ const ScoreInterface: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showMyPairingsOnly, setShowMyPairingsOnly] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [loadingResults, setLoadingResults] = useState(false);
 
   useEffect(() => {
     loadTournaments();
@@ -169,6 +175,32 @@ const ScoreInterface: React.FC = () => {
       const response = await apiClient.getPairingScores(pairing.id);
       const scores = response.scores || [];
       
+      // Load match results if pairing is completed
+      let matchResults: MatchWithResults[] | undefined;
+      if (pairing.status === 'completed' && pairing.matches) {
+        setLoadingResults(true);
+        try {
+          matchResults = await Promise.all(
+            pairing.matches.map(async (match) => {
+              try {
+                const matchScores = await apiClient.getMatchScores(match.id);
+                return {
+                  ...match,
+                  hole_results: matchScores.hole_results || []
+                };
+              } catch (err) {
+                console.warn('Error loading results for match:', match.id, err);
+                return match;
+              }
+            })
+          );
+        } catch (err) {
+          console.warn('Error loading match results:', err);
+        } finally {
+          setLoadingResults(false);
+        }
+      }
+      
       console.log('Existing scores from API:', scores);
       console.log('User IDs in existing scores:', [...new Set(scores.map(s => s.user_id))]);
       
@@ -190,11 +222,12 @@ const ScoreInterface: React.FC = () => {
       console.log('Scores map:', scoresMap);
       console.log('==============================');
       
-      // Update the pairing with existing scores
+      // Update the pairing with existing scores and match results
       const updatedPairing = {
         ...pairing,
         scores: scoresMap,
-        stablefordPoints: stablefordMap
+        stablefordPoints: stablefordMap,
+        matchResults
       };
       
       setSelectedPairing(updatedPairing);
@@ -536,6 +569,227 @@ const ScoreInterface: React.FC = () => {
       </div>
     );
   }
+
+  // Component to display match results for completed pairings
+  const MatchResultsDisplay = ({ pairing }: { pairing: PairingWithScores }) => {
+    if (!pairing.matchResults || pairing.matchResults.length === 0) {
+      return (
+        <div className="text-center py-4 text-gray-500">
+          <p>Match results are being calculated...</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center mb-6">
+          <Trophy className="h-8 w-8 text-yellow-500 mr-3" />
+          <h2 className="text-2xl font-bold text-gray-900">Match Results</h2>
+        </div>
+
+        {pairing.matchResults.map((match, idx) => {
+          const team1Won = match.team1_points > match.team2_points;
+          const team2Won = match.team2_points > match.team1_points;
+          const tied = match.team1_points === match.team2_points;
+
+          // Calculate holes won/lost/tied from hole results
+          let team1HolesWon = 0;
+          let team2HolesWon = 0;
+          let holesHalved = 0;
+
+          if (match.hole_results) {
+            match.hole_results.forEach(hr => {
+              if (hr.winner_team_id === match.team1_id) {
+                team1HolesWon++;
+              } else if (hr.winner_team_id === match.team2_id) {
+                team2HolesWon++;
+              } else {
+                holesHalved++;
+              }
+            });
+          }
+
+          return (
+            <div key={match.id} className="bg-white border-2 border-gray-200 rounded-lg overflow-hidden shadow-lg">
+              {/* Match Header */}
+              <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      Match {match.match_number}: {match.format?.name || 'Unknown Format'}
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {match.format?.description || ''} • {match.holes} holes
+                      {match.start_hole && match.end_hole && (
+                        <span> (Holes {match.start_hole}-{match.end_hole})</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-gray-600">Match Points</div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {match.points_available.toFixed(1)} available
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Match Score */}
+              <div className="p-6">
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  {/* Team 1 */}
+                  <div className={`text-center p-4 rounded-lg ${team1Won ? 'bg-green-100 border-2 border-green-500' : 'bg-gray-50'}`}>
+                    <div className="flex items-center justify-center mb-2">
+                      {team1Won && <Trophy className="h-5 w-5 text-green-600 mr-2" />}
+                      <div
+                        className="w-3 h-3 rounded-full mr-2"
+                        style={{ backgroundColor: match.team1?.color }}
+                      ></div>
+                      <div className="font-semibold text-gray-900">{match.team1?.name}</div>
+                    </div>
+                    <div className="text-4xl font-bold mb-2" style={{ color: match.team1?.color }}>
+                      {match.team1_points.toFixed(1)}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {team1HolesWon} holes won
+                    </div>
+                  </div>
+
+                  {/* VS / Result */}
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="text-2xl font-bold text-gray-400 mb-2">VS</div>
+                    {tied && (
+                      <div className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
+                        Tied
+                      </div>
+                    )}
+                    {holesHalved > 0 && (
+                      <div className="text-xs text-gray-500 mt-2">
+                        {holesHalved} hole{holesHalved !== 1 ? 's' : ''} halved
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Team 2 */}
+                  <div className={`text-center p-4 rounded-lg ${team2Won ? 'bg-green-100 border-2 border-green-500' : 'bg-gray-50'}`}>
+                    <div className="flex items-center justify-center mb-2">
+                      {team2Won && <Trophy className="h-5 w-5 text-green-600 mr-2" />}
+                      <div
+                        className="w-3 h-3 rounded-full mr-2"
+                        style={{ backgroundColor: match.team2?.color }}
+                      ></div>
+                      <div className="font-semibold text-gray-900">{match.team2?.name}</div>
+                    </div>
+                    <div className="text-4xl font-bold mb-2" style={{ color: match.team2?.color }}>
+                      {match.team2_points.toFixed(1)}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {team2HolesWon} holes won
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hole-by-Hole Results (Optional - can be collapsed/expanded) */}
+                {match.hole_results && match.hole_results.length > 0 && (
+                  <details className="mt-4">
+                    <summary className="cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center">
+                      <TrendingUp className="h-4 w-4 mr-1" />
+                      View Hole-by-Hole Results ({match.hole_results.length} holes)
+                    </summary>
+                    <div className="mt-4 overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Hole</th>
+                            <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">{match.team1?.name}</th>
+                            <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">{match.team2?.name}</th>
+                            <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Result</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {match.hole_results.map((hr) => (
+                            <tr key={hr.hole_number} className="hover:bg-gray-50">
+                              <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-900">
+                                {hr.hole_number}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={hr.winner_team_id === match.team1_id ? 'font-bold text-green-600' : ''}>
+                                  {hr.team1_score !== undefined && hr.team1_score !== null ? hr.team1_score : '-'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={hr.winner_team_id === match.team2_id ? 'font-bold text-green-600' : ''}>
+                                  {hr.team2_score !== undefined && hr.team2_score !== null ? hr.team2_score : '-'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                {hr.winner_team_id === match.team1_id && (
+                                  <CheckCircle className="h-5 w-5 text-green-600 mx-auto" />
+                                )}
+                                {hr.winner_team_id === match.team2_id && (
+                                  <CheckCircle className="h-5 w-5 text-green-600 mx-auto" />
+                                )}
+                                {!hr.winner_team_id && (
+                                  <span className="text-gray-400">Halved</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Summary Card */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Pairing Summary</h3>
+          <div className="grid grid-cols-2 gap-4">
+            {(() => {
+              // Calculate total points for each team from this pairing
+              const teamPoints = new Map<string, number>();
+              pairing.matchResults.forEach(match => {
+                const team1Id = match.team1_id;
+                const team2Id = match.team2_id;
+                teamPoints.set(team1Id, (teamPoints.get(team1Id) || 0) + match.team1_points);
+                teamPoints.set(team2Id, (teamPoints.get(team2Id) || 0) + match.team2_points);
+              });
+
+              return Array.from(teamPoints.entries()).map(([teamId, points]) => {
+                const team = pairing.matchResults?.[0]?.team1_id === teamId 
+                  ? pairing.matchResults[0].team1 
+                  : pairing.matchResults?.[0]?.team2;
+                
+                if (!team) return null;
+
+                return (
+                  <div key={teamId} className="bg-white rounded-lg p-4 shadow">
+                    <div className="flex items-center mb-2">
+                      <div
+                        className="w-4 h-4 rounded-full mr-2"
+                        style={{ backgroundColor: team.color }}
+                      ></div>
+                      <div className="font-semibold text-gray-900">{team.name}</div>
+                    </div>
+                    <div className="text-3xl font-bold" style={{ color: team.color }}>
+                      {points.toFixed(1)}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      total points earned
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -1031,20 +1285,29 @@ const ScoreInterface: React.FC = () => {
           
           {/* Show info for completed pairings */}
           {selectedPairing.status === 'completed' && (
-            <div className="text-center py-8">
-              <div className="text-green-600 mb-4">
-                <Award className="h-16 w-16 mx-auto mb-2" />
-                <p className="text-lg font-medium">Round Completed!</p>
+            <div>
+              {/* Match Results Display */}
+              {loadingResults ? (
+                <div className="text-center py-8">
+                  <RefreshCw className="h-8 w-8 animate-spin text-gray-500 mx-auto mb-4" />
+                  <p className="text-gray-500">Loading match results...</p>
+                </div>
+              ) : (
+                <MatchResultsDisplay pairing={selectedPairing} />
+              )}
+
+              {/* Reopen Button */}
+              <div className="text-center py-6 mt-6 border-t border-gray-200">
+                <p className="text-gray-500 mb-4">
+                  Need to make changes? You can reopen this pairing for editing.
+                </p>
+                <button
+                  onClick={() => startPairing(selectedPairing.id)}
+                  className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium transition-colors"
+                >
+                  Reopen for Editing
+                </button>
               </div>
-              <p className="text-gray-500 mb-4">
-                All scores have been submitted for this pairing.
-              </p>
-              <button
-                onClick={() => startPairing(selectedPairing.id)}
-                className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium transition-colors"
-              >
-                Reopen for Editing
-              </button>
             </div>
           )}
         </div>

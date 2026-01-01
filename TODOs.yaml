@@ -5,7 +5,6 @@ TODOs:
         - Fix websocket
         - Add real admin page
             - Add/register users? 
-        - Figure out to break a round up into matches
         - Auth - add actual passwords
           - have way to stay logged in
 
@@ -15,9 +14,9 @@ TODOs:
 
     - SCORING:
         - make score entry look like a scorecard
-        - match up 6 and 9 hole matches to which part of the round the match is occurring
         - Fix scoring and leaderboard updates
         - Make scoring a separate page for each hole (?)
+        - Check high-low scoring
 
     - GROUPS:
         - bulk add members to group?

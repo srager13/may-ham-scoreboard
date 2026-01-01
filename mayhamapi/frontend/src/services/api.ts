@@ -132,6 +132,19 @@ export interface Score {
   updated_at: string;
 }
 
+export interface HoleResult {
+  id: string;
+  match_id: string;
+  hole_number: number;
+  team1_score?: number;
+  team2_score?: number;
+  winner_team_id?: string;
+  team1_points: number;
+  team2_points: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Group {
   id: string;
   name: string;
@@ -561,8 +574,8 @@ class ApiClient {
   }
 
   // Scoring
-  async getMatchScores(matchId: string): Promise<{scores: Score[], match_status: any}> {
-    return this.request<{scores: Score[], match_status: any}>(`/matches/${matchId}/scores`);
+  async getMatchScores(matchId: string): Promise<{scores: Score[], match_status: any, hole_results?: HoleResult[]}>{
+    return this.request<{scores: Score[], match_status: any, hole_results?: HoleResult[]}>(`/matches/${matchId}/scores`);
   }
 
   async submitScores(matchId: string, data: SubmitScoresRequest): Promise<void> {

@@ -94,9 +94,17 @@ func (h *ScoringHandler) GetMatchScores(c *gin.Context) {
 		return
 	}
 
+	// Get hole results from database
+	holeResults, err := h.repo.GetMatchHoleResults(match.ID)
+	if err != nil {
+		// Don't fail if hole results aren't available, just log it
+		holeResults = []models.HoleResult{}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"scores":       scores,
 		"match_status": matchStatus,
+		"hole_results": holeResults,
 	})
 }
 
