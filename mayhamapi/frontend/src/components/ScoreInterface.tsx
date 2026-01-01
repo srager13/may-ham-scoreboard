@@ -724,10 +724,16 @@ const ScoreInterface: React.FC = () => {
                               </td>
                               <td className="px-3 py-2 text-center">
                                 {hr.winner_team_id === match.team1_id && (
-                                  <CheckCircle className="h-5 w-5 text-green-600 mx-auto" />
+                                  <CheckCircle 
+                                    className="h-5 w-5 mx-auto" 
+                                    style={{ color: match.team1?.color }}
+                                  />
                                 )}
                                 {hr.winner_team_id === match.team2_id && (
-                                  <CheckCircle className="h-5 w-5 text-green-600 mx-auto" />
+                                  <CheckCircle 
+                                    className="h-5 w-5 mx-auto" 
+                                    style={{ color: match.team2?.color }}
+                                  />
                                 )}
                                 {!hr.winner_team_id && (
                                   <span className="text-gray-400">Halved</span>
