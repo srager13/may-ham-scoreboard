@@ -701,46 +701,79 @@ const ScoreInterface: React.FC = () => {
                         <thead className="bg-gray-50">
                           <tr>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Hole</th>
-                            <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">{match.team1?.name}</th>
-                            <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">{match.team2?.name}</th>
+                            <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase" style={{ color: match.team1?.color }}>
+                              {match.team1?.name}
+                            </th>
+                            <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase" style={{ color: match.team2?.color }}>
+                              {match.team2?.name}
+                            </th>
                             <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Result</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {match.hole_results.map((hr) => (
-                            <tr key={hr.hole_number} className="hover:bg-gray-50">
-                              <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-900">
-                                {hr.hole_number}
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                <span className={hr.winner_team_id === match.team1_id ? 'font-bold text-green-600' : ''}>
-                                  {hr.team1_score !== undefined && hr.team1_score !== null ? hr.team1_score : '-'}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                <span className={hr.winner_team_id === match.team2_id ? 'font-bold text-green-600' : ''}>
-                                  {hr.team2_score !== undefined && hr.team2_score !== null ? hr.team2_score : '-'}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                {hr.winner_team_id === match.team1_id && (
-                                  <CheckCircle 
-                                    className="h-5 w-5 mx-auto" 
-                                    style={{ color: match.team1?.color }}
-                                  />
-                                )}
-                                {hr.winner_team_id === match.team2_id && (
-                                  <CheckCircle 
-                                    className="h-5 w-5 mx-auto" 
-                                    style={{ color: match.team2?.color }}
-                                  />
-                                )}
-                                {!hr.winner_team_id && (
-                                  <span className="text-gray-400">Halved</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
+                          {match.hole_results.map((hr) => {
+                            const isHighLow = match.format?.scoring_type === 'high_low';
+                            
+                            return (
+                              <tr key={hr.hole_number} className="hover:bg-gray-50">
+                                <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-900">
+                                  {hr.hole_number}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  {isHighLow ? (
+                                    <span className="text-xs text-gray-500 italic">High-Low</span>
+                                  ) : (
+                                    <span className={hr.winner_team_id === match.team1_id ? 'font-bold text-green-600' : ''}>
+                                      {hr.team1_score !== undefined && hr.team1_score !== null ? hr.team1_score : '-'}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  {isHighLow ? (
+                                    <span className="text-xs text-gray-500 italic">Format</span>
+                                  ) : (
+                                    <span className={hr.winner_team_id === match.team2_id ? 'font-bold text-green-600' : ''}>
+                                      {hr.team2_score !== undefined && hr.team2_score !== null ? hr.team2_score : '-'}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  {isHighLow ? (
+                                    // High-low shows points breakdown since there are two comparisons (low vs low, high vs high)
+                                    <div className="flex items-center justify-center gap-2 text-xs">
+                                      <span style={{ color: match.team1?.color }} className="font-semibold">
+                                        {hr.team1_points}
+                                      </span>
+                                      <span className="text-gray-400">-</span>
+                                      <span style={{ color: match.team2?.color }} className="font-semibold">
+                                        {hr.team2_points}
+                                      </span>
+                                      <span className="text-gray-500 ml-1">pts</span>
+                                    </div>
+                                  ) : (
+                                    // Standard formats show winner icon
+                                    <div>
+                                      {hr.winner_team_id === match.team1_id && (
+                                        <CheckCircle 
+                                          className="h-5 w-5 mx-auto" 
+                                          style={{ color: match.team1?.color }}
+                                        />
+                                      )}
+                                      {hr.winner_team_id === match.team2_id && (
+                                        <CheckCircle 
+                                          className="h-5 w-5 mx-auto" 
+                                          style={{ color: match.team2?.color }}
+                                        />
+                                      )}
+                                      {!hr.winner_team_id && (
+                                        <span className="text-gray-400">Halved</span>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

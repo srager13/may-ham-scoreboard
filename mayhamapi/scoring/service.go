@@ -671,13 +671,12 @@ func (s *ScoringService) calculateHighLowHole(match *models.Match, holeNumber in
 		}
 	}
 
-	team1Total := team1High + team1Low
-	team2Total := team2High + team2Low
-
+	// For high-low, we don't store a single team score since there are two separate comparisons
+	// (low vs low, and high vs high). The points tell the full story.
 	result := &HoleResult{
 		HoleNumber:   holeNumber,
-		Team1Score:   &team1Total,
-		Team2Score:   &team2Total,
+		Team1Score:   nil, // Not applicable for high-low format
+		Team2Score:   nil, // Not applicable for high-low format
 		PlayerScores: scores,
 		Team1Points:  0,
 		Team2Points:  0,
