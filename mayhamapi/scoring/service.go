@@ -12,7 +12,7 @@ import (
 // - 2v2 Best Ball: Each team uses their best score per hole
 // - 2v2 Scramble: Teams play one ball together (combined score)
 // - 2v2 Alternate Shot: Teams alternate shots with one ball (combined score)
-// - High-Low: Teams add their highest and lowest individual scores
+// - High-Low: Head-to-head comparison of lowest scores from each team and highest scores from each team
 // - Shamble: Teams tee off together, then play best ball from the best drive
 type ScoringService struct {
 	repo *repository.Repository
@@ -683,15 +683,30 @@ func (s *ScoringService) calculateHighLowHole(match *models.Match, holeNumber in
 		Team2Points:  0,
 	}
 
-	if team1Total < team2Total {
-		result.Team1Points = 1
-		result.WinnerTeamID = &match.Team1ID
-	} else if team2Total < team1Total {
-		result.Team2Points = 1
-		result.WinnerTeamID = &match.Team2ID
+	// Calculate low scores winner
+	if team1Low < team2Low {
+		result.Team1Points += 1
+	} else if team2Low < team1Low {
+		result.Team2Points += 1
 	} else {
-		result.Team1Points = 0.5
-		result.Team2Points = 0.5
+		result.Team1Points += 0.5
+		result.Team2Points += 0.5
+	}
+
+	// Calculate high scores winner
+	if team1High < team2High {
+		result.Team1Points += 1
+	} else if team2High < team1High {
+		result.Team2Points += 1
+	} else {
+		result.Team1Points += 0.5
+		result.Team2Points += 0.5
+	}
+
+	if result.Team1Points > result.Team2Points {
+		result.WinnerTeamID = &match.Team1ID
+	} else if result.Team2Points > result.Team1Points {
+		result.WinnerTeamID = &match.Team2ID
 	}
 
 	return result, nil
