@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Users, User, Award, Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { apiClient, ApiError, Tournament, Team, Match, TeamStanding, LeaderboardData } from '../services/api';
+import { Trophy, Users, User, Award, Clock, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
+import { apiClient, ApiError, Tournament, Team, Match, TeamStanding, LeaderboardData, Round, Pairing, HoleResult } from '../services/api';
 
 // Helper function to format date as MM-DD-YYYY
 const formatDate = (dateString: string): string => {
@@ -12,11 +12,27 @@ const formatDate = (dateString: string): string => {
   });
 };
 
+interface MatchWithResults extends Match {
+  hole_results?: HoleResult[];
+}
+
+interface PairingWithResults extends Pairing {
+  matchResults?: MatchWithResults[];
+}
+
+interface RoundWithPairings extends Round {
+  pairings?: PairingWithResults[];
+}
+
 const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [view, setView] = useState<'team' | 'individual'>('team');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [rounds, setRounds] = useState<RoundWithPairings[]>([]);
+  const [loadingRounds, setLoadingRounds] = useState(false);
+  const [expandedRounds, setExpandedRounds] = useState<Set<string>>(new Set());
+  const [showRoundHistory, setShowRoundHistory] = useState(false);
 
   useEffect(() => {
     loadLeaderboardData();
@@ -24,6 +40,24 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
     const interval = setInterval(loadLeaderboardData, 30000);
     return () => clearInterval(interval);
   }, [tournamentId]);
+
+  useEffect(() => {
+    if (showRoundHistory && rounds.length === 0) {
+      loadRoundsData();
+    }
+  }, [showRoundHistory]);
+
+  const toggleRound = (roundId: string) => {
+    setExpandedRounds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(roundId)) {
+        newSet.delete(roundId);
+      } else {
+        newSet.add(roundId);
+      }
+      return newSet;
+    });
+  };
 
   const loadLeaderboardData = async () => {
     try {
@@ -42,6 +76,75 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
       setData(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadRoundsData = async () => {
+    try {
+      setLoadingRounds(true);
+      
+      // Get all rounds for this tournament
+      const roundsData = await apiClient.getTournamentRounds(tournamentId);
+      
+      // Load pairings and match results for each round
+      const roundsWithData: RoundWithPairings[] = await Promise.all(
+        roundsData.map(async (round) => {
+          try {
+            const pairings = await apiClient.getRoundPairings(round.id);
+            
+            // Only include completed pairings with their match results
+            const completedPairings = await Promise.all(
+              pairings
+                .filter(p => p.status === 'completed')
+                .map(async (pairing) => {
+                  try {
+                    const matches = await apiClient.getPairingMatches(pairing.id);
+                    const matchResults = await Promise.all(
+                      matches.map(async (match) => {
+                        try {
+                          const matchScores = await apiClient.getMatchScores(match.id);
+                          return {
+                            ...match,
+                            hole_results: matchScores.hole_results || []
+                          };
+                        } catch (err) {
+                          console.warn('Error loading match results:', match.id, err);
+                          return match;
+                        }
+                      })
+                    );
+                    return {
+                      ...pairing,
+                      matchResults
+                    };
+                  } catch (err) {
+                    console.warn('Error loading pairing matches:', pairing.id, err);
+                    return pairing;
+                  }
+                })
+            );
+            
+            return {
+              ...round,
+              pairings: completedPairings
+            };
+          } catch (err) {
+            console.warn('Error loading round pairings:', round.id, err);
+            return { ...round, pairings: [] };
+          }
+        })
+      );
+      
+      // Filter to only rounds with completed pairings and sort by round number (descending)
+      const completedRounds = roundsWithData
+        .filter(r => r.pairings && r.pairings.length > 0)
+        .sort((a, b) => b.round_number - a.round_number);
+      
+      setRounds(completedRounds);
+    } catch (err) {
+      console.error('Error loading rounds data:', err);
+    } finally {
+      setLoadingRounds(false);
     }
   };
 
@@ -142,6 +245,16 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
             <p className="text-sm text-gray-400 mt-2">Coming soon: detailed player performance metrics and rankings.</p>
           </div>
         )}
+
+        {/* Round History Section */}
+        <RoundHistorySection 
+          showHistory={showRoundHistory}
+          onToggle={() => setShowRoundHistory(!showRoundHistory)}
+          rounds={rounds}
+          loadingRounds={loadingRounds}
+          expandedRounds={expandedRounds}
+          onToggleRound={toggleRound}
+        />
       </div>
     </div>
   );
@@ -262,6 +375,227 @@ const LiveMatchCard = ({ match }: { match: Match }) => {
       <div className="pt-3 border-t text-center">
         <div className="text-sm text-gray-600">
           Status: {match.status}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Round History Section Component
+const RoundHistorySection = ({
+  showHistory,
+  onToggle,
+  rounds,
+  loadingRounds,
+  expandedRounds,
+  onToggleRound
+}: {
+  showHistory: boolean;
+  onToggle: () => void;
+  rounds: RoundWithPairings[];
+  loadingRounds: boolean;
+  expandedRounds: Set<string>;
+  onToggleRound: (roundId: string) => void;
+}) => {
+  return (
+    <div className="mb-8">
+      <button
+        onClick={onToggle}
+        className="w-full bg-white rounded-lg shadow-sm p-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
+      >
+        <h2 className="text-2xl font-bold flex items-center">
+          <Clock className="mr-3 text-blue-600" size={24} />
+          Round History
+        </h2>
+        {showHistory ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+      </button>
+
+      {showHistory && (
+        <div className="mt-4">
+          {loadingRounds ? (
+            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading round history...</p>
+            </div>
+          ) : rounds.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+              <p className="text-gray-600">No completed rounds yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {rounds.map((round) => (
+                <RoundCard
+                  key={round.id}
+                  round={round}
+                  isExpanded={expandedRounds.has(round.id)}
+                  onToggle={() => onToggleRound(round.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Round Card Component
+const RoundCard = ({
+  round,
+  isExpanded,
+  onToggle
+}: {
+  round: RoundWithPairings;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) => {
+  const completedPairingsCount = round.pairings?.length || 0;
+  const totalMatches = round.pairings?.reduce((sum, p) => sum + (p.matchResults?.length || 0), 0) || 0;
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full p-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
+      >
+        <div className="flex items-center">
+          <div className="bg-blue-100 rounded-full p-2 mr-4">
+            <Trophy className="text-blue-600" size={20} />
+          </div>
+          <div className="text-left">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Round {round.round_number}: {round.name}
+            </h3>
+            <p className="text-sm text-gray-600">
+              {formatDate(round.round_date)} • {completedPairingsCount} completed pairing{completedPairingsCount !== 1 ? 's' : ''} • {totalMatches} match{totalMatches !== 1 ? 'es' : ''}
+            </p>
+          </div>
+        </div>
+        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+      </button>
+
+      {isExpanded && round.pairings && (
+        <div className="border-t border-gray-200 p-4 bg-gray-50">
+          <div className="space-y-6">
+            {round.pairings.map((pairing) => (
+              <PairingResultCard key={pairing.id} pairing={pairing} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Pairing Result Card Component
+const PairingResultCard = ({ pairing }: { pairing: PairingWithResults }) => {
+  if (!pairing.matchResults || pairing.matchResults.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow p-4">
+      <h4 className="text-md font-semibold text-gray-900 mb-4">
+        Pairing {pairing.pairing_number}
+        {pairing.tee_time && (
+          <span className="text-sm font-normal text-gray-600 ml-2">
+            • {new Date(pairing.tee_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+      </h4>
+
+      <div className="space-y-4">
+        {pairing.matchResults.map((match) => (
+          <CompactMatchResult key={match.id} match={match} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Compact Match Result Component
+const CompactMatchResult = ({ match }: { match: MatchWithResults }) => {
+  const team1Won = match.team1_points > match.team2_points;
+  const team2Won = match.team2_points > match.team1_points;
+  const tied = match.team1_points === match.team2_points;
+
+  let team1HolesWon = 0;
+  let team2HolesWon = 0;
+  let holesHalved = 0;
+
+  if (match.hole_results) {
+    match.hole_results.forEach(hr => {
+      if (hr.winner_team_id === match.team1_id) {
+        team1HolesWon++;
+      } else if (hr.winner_team_id === match.team2_id) {
+        team2HolesWon++;
+      } else {
+        holesHalved++;
+      }
+    });
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-medium text-gray-600">
+          {match.format?.name || 'Match'}
+          {match.start_hole && match.end_hole && (
+            <span className="ml-2 text-xs text-gray-500">
+              (Holes {match.start_hole}-{match.end_hole})
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-gray-500">
+          {match.points_available.toFixed(1)} pts available
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        {/* Team 1 */}
+        <div className={`text-center p-2 rounded ${team1Won ? 'bg-green-50 border border-green-300' : 'bg-gray-50'}`}>
+          <div className="flex items-center justify-center mb-1">
+            {team1Won && <Trophy className="h-3 w-3 text-green-600 mr-1" />}
+            <div
+              className="w-2 h-2 rounded-full mr-1"
+              style={{ backgroundColor: match.team1?.color }}
+            ></div>
+            <div className="text-xs font-semibold text-gray-900">{match.team1?.name}</div>
+          </div>
+          <div className="text-xl font-bold" style={{ color: match.team1?.color }}>
+            {match.team1_points.toFixed(1)}
+          </div>
+          <div className="text-xs text-gray-600">
+            {team1HolesWon} hole{team1HolesWon !== 1 ? 's' : ''}
+          </div>
+        </div>
+
+        {/* VS */}
+        <div className="flex flex-col items-center justify-center">
+          <div className="text-sm font-bold text-gray-400">VS</div>
+          {tied && (
+            <div className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full text-xs font-medium mt-1">
+              Tied
+            </div>
+          )}
+        </div>
+
+        {/* Team 2 */}
+        <div className={`text-center p-2 rounded ${team2Won ? 'bg-green-50 border border-green-300' : 'bg-gray-50'}`}>
+          <div className="flex items-center justify-center mb-1">
+            {team2Won && <Trophy className="h-3 w-3 text-green-600 mr-1" />}
+            <div
+              className="w-2 h-2 rounded-full mr-1"
+              style={{ backgroundColor: match.team2?.color }}
+            ></div>
+            <div className="text-xs font-semibold text-gray-900">{match.team2?.name}</div>
+          </div>
+          <div className="text-xl font-bold" style={{ color: match.team2?.color }}>
+            {match.team2_points.toFixed(1)}
+          </div>
+          <div className="text-xs text-gray-600">
+            {team2HolesWon} hole{team2HolesWon !== 1 ? 's' : ''}
+          </div>
         </div>
       </div>
     </div>
