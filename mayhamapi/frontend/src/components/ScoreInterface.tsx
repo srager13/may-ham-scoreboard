@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock, CheckCircle, Trophy, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
-import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat, HoleResult } from '../services/api';
+import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat, HoleResult, MatchPlayer } from '../services/api';
 
 interface MatchWithResults extends Match {
   hole_results?: HoleResult[];
+  match_players?: MatchPlayer[];
 }
 
 interface PairingWithScores extends Pairing {
@@ -183,9 +184,11 @@ const ScoreInterface: React.FC = () => {
             pairing.matches.map(async (match) => {
               try {
                 const matchScores = await apiClient.getMatchScores(match.id);
+                const matchPlayers = await apiClient.getMatchPlayers(match.id);
                 return {
                   ...match,
-                  hole_results: matchScores.hole_results || []
+                  hole_results: matchScores.hole_results || [],
+                  match_players: matchPlayers
                 };
               } catch (err) {
                 console.warn('Error loading results for match:', match.id, err);
@@ -612,6 +615,33 @@ const ScoreInterface: React.FC = () => {
                       ></div>
                       <div className="font-semibold text-gray-900">{match.team1?.name}</div>
                     </div>
+                    {/* Team 1 Players */}
+                    <div className="text-xs text-gray-600 mb-2">
+                      {(() => {
+                        // Use actual match players if available
+                        if (match.match_players && match.match_players.length > 0) {
+                          const team1Players = match.match_players
+                            .filter(mp => mp.team_id === match.team1_id)
+                            .sort((a, b) => a.position - b.position);
+                          return team1Players.map(p => p.user?.name).join(' & ');
+                        }
+                        
+                        // Fallback: use pairing players (for in-progress matches)
+                        const teamPlayers = (pairing.players || [])
+                          .filter(p => p.team_id === match.team1_id)
+                          .sort((a, b) => a.player_order - b.player_order);
+                        
+                        // For singles matches, show only the player for this match number
+                        if (match.format?.players_per_side === 1) {
+                          const playerIndex = (match.match_number - 1) % teamPlayers.length;
+                          const player = teamPlayers[playerIndex];
+                          return player?.user?.name || '';
+                        }
+                        
+                        // For team matches, show all team players
+                        return teamPlayers.map(p => p.user?.name).join(' & ');
+                      })()}
+                    </div>
                     <div className="text-4xl font-bold mb-2" style={{ color: match.team1?.color }}>
                       {match.team1_points.toFixed(1)}
                     </div>
@@ -644,6 +674,33 @@ const ScoreInterface: React.FC = () => {
                         style={{ backgroundColor: match.team2?.color }}
                       ></div>
                       <div className="font-semibold text-gray-900">{match.team2?.name}</div>
+                    </div>
+                    {/* Team 2 Players */}
+                    <div className="text-xs text-gray-600 mb-2">
+                      {(() => {
+                        // Use actual match players if available
+                        if (match.match_players && match.match_players.length > 0) {
+                          const team2Players = match.match_players
+                            .filter(mp => mp.team_id === match.team2_id)
+                            .sort((a, b) => a.position - b.position);
+                          return team2Players.map(p => p.user?.name).join(' & ');
+                        }
+                        
+                        // Fallback: use pairing players (for in-progress matches)
+                        const teamPlayers = (pairing.players || [])
+                          .filter(p => p.team_id === match.team2_id)
+                          .sort((a, b) => a.player_order - b.player_order);
+                        
+                        // For singles matches, show only the player for this match number
+                        if (match.format?.players_per_side === 1) {
+                          const playerIndex = (match.match_number - 1) % teamPlayers.length;
+                          const player = teamPlayers[playerIndex];
+                          return player?.user?.name || '';
+                        }
+                        
+                        // For team matches, show all team players
+                        return teamPlayers.map(p => p.user?.name).join(' & ');
+                      })()}
                     </div>
                     <div className="text-4xl font-bold mb-2" style={{ color: match.team2?.color }}>
                       {match.team2_points.toFixed(1)}
