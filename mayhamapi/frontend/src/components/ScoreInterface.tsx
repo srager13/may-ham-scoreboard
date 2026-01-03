@@ -421,11 +421,13 @@ const ScoreInterface: React.FC = () => {
         }
       }));
 
-      alert(`Successfully submitted scores for ${holesToSubmit.length} hole(s)!`);
+      // Clear any previous errors on success
+      setError(null);
       
     } catch (err) {
       console.error('Error submitting scores:', err);
       setError(err instanceof ApiError ? err.message : 'Failed to submit scores');
+      alert('Error: Failed to submit scores. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
