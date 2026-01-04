@@ -217,7 +217,7 @@ func (r *Repository) CreateRound(tournamentID string, req *models.CreateRoundReq
 	`
 
 	var round models.Round
-	err := r.db.QueryRow(query, tournamentID, req.Name, req.RoundNumber, req.RoundDate, req.StartTime).Scan(
+	err := r.db.QueryRow(query, tournamentID, req.Name, req.RoundNumber, req.RoundDate, req.StartTime, req.GolfCourseID).Scan(
 		&round.ID, &round.TournamentID, &round.Name, &round.RoundNumber,
 		&round.RoundDate, &round.StartTime, &round.GolfCourseID, &round.Status, &round.CreatedAt, &round.UpdatedAt,
 	)

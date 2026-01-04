@@ -290,10 +290,11 @@ type CreateTeamRequest struct {
 }
 
 type CreateRoundRequest struct {
-	Name        string     `json:"name" binding:"required"`
-	RoundNumber int        `json:"round_number" binding:"required"`
-	RoundDate   string     `json:"round_date" binding:"required"`
-	StartTime   *time.Time `json:"start_time,omitempty"`
+	Name         string     `json:"name" binding:"required"`
+	RoundNumber  int        `json:"round_number" binding:"required"`
+	RoundDate    string     `json:"round_date" binding:"required"`
+	StartTime    *time.Time `json:"start_time,omitempty"`
+	GolfCourseID *string    `json:"golf_course_id,omitempty"`
 }
 
 type CreatePairingRequest struct {

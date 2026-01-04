@@ -1278,11 +1278,20 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
     setRounds(newRounds);
   };
 
-  const updateMatch = (roundIdx, pairingIdx, matchIdx, field, value) => {
+  const updateMatch = (roundIdx, pairingIdx, matchIdx, fieldOrFields, value?) => {
     const newRounds = [...rounds];
     const newPairings = [...newRounds[roundIdx].pairings];
     const newMatches = [...newPairings[pairingIdx].matches];
-    newMatches[matchIdx] = { ...newMatches[matchIdx], [field]: value };
+    
+    // Support both single field update and multiple fields update
+    if (typeof fieldOrFields === 'string') {
+      // Single field update: updateMatch(roundIdx, pairingIdx, matchIdx, 'field', value)
+      newMatches[matchIdx] = { ...newMatches[matchIdx], [fieldOrFields]: value };
+    } else {
+      // Multiple fields update: updateMatch(roundIdx, pairingIdx, matchIdx, { field1: value1, field2: value2 })
+      newMatches[matchIdx] = { ...newMatches[matchIdx], ...fieldOrFields };
+    }
+    
     newPairings[pairingIdx] = { ...newPairings[pairingIdx], matches: newMatches };
     newRounds[roundIdx] = { ...newRounds[roundIdx], pairings: newPairings };
     setRounds(newRounds);
@@ -1988,23 +1997,24 @@ const MatchConfig = ({
         {match.holes !== 18 && (
           <div>
             <label className="block text-xs font-medium mb-1">
-              Hole Range (optional)
-              <span className="text-xs text-gray-400 ml-1">Select specific holes</span>
+              Hole Range *
+              <span className="text-xs text-gray-400 ml-1">Which holes to play</span>
             </label>
             <select
               value={match.start_hole && match.end_hole ? `${match.start_hole}-${match.end_hole}` : ''}
               onChange={(e) => {
                 if (e.target.value === '') {
-                  updateMatch(roundIdx, pairingIdx, matchIdx, 'start_hole', undefined);
-                  updateMatch(roundIdx, pairingIdx, matchIdx, 'end_hole', undefined);
+                  // Clear both start and end holes using multi-field update
+                  updateMatch(roundIdx, pairingIdx, matchIdx, { start_hole: undefined, end_hole: undefined });
                 } else {
+                  // Set both start and end holes together using multi-field update
                   const [start, end] = e.target.value.split('-').map(Number);
-                  updateMatch(roundIdx, pairingIdx, matchIdx, 'start_hole', start);
-                  updateMatch(roundIdx, pairingIdx, matchIdx, 'end_hole', end);
+                  updateMatch(roundIdx, pairingIdx, matchIdx, { start_hole: start, end_hole: end });
                 }
               }}
               className="w-full p-2 border rounded text-sm"
             >
+              <option value="">Select hole range...</option>
               {match.holes === 6 && (
                 <>
                   <option value="1-6">Holes 1-6</option>
