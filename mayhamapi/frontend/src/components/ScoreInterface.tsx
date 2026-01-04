@@ -555,6 +555,278 @@ const ScoreInterface: React.FC = () => {
           <h2 className="text-2xl font-bold text-gray-900">Match Results</h2>
         </div>
 
+        {/* Scorecard Display */}
+        <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">
+          <div className="bg-gradient-to-r from-green-50 to-green-100 px-6 py-4 border-b-2 border-gray-300">
+            <h3 className="text-lg font-semibold text-gray-900">Final Scorecard</h3>
+            {pairing.round?.golf_course && (
+              <div className="mt-2">
+                <p className="text-sm font-medium text-green-900">
+                  {pairing.round.golf_course.course_name}
+                </p>
+                {pairing.round.golf_course.city && pairing.round.golf_course.state && (
+                  <p className="text-xs text-green-700">
+                    {pairing.round.golf_course.city}, {pairing.round.golf_course.state}
+                  </p>
+                )}
+                {pairing.tee && (
+                  <p className="text-xs text-green-700 mt-1">
+                    {pairing.tee.tee_name} Tees
+                    {pairing.tee.total_yards && ` - ${pairing.tee.total_yards} yards`}
+                    {pairing.tee.course_rating && pairing.tee.slope_rating && 
+                      ` - Rating: ${pairing.tee.course_rating}/${pairing.tee.slope_rating}`}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y-2 divide-gray-800 bg-white text-xs">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase border-r-2 border-gray-800 bg-gray-100">
+                    Hole
+                  </th>
+                  {Array.from({ length: 9 }, (_, i) => i + 1).map(hole => (
+                    <th key={hole} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300 min-w-[50px]">
+                      {hole}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50 min-w-[60px]">
+                    Out
+                  </th>
+                  {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => (
+                    <th key={hole} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300 min-w-[50px]">
+                      {hole}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-50 min-w-[60px] border-r-2 border-gray-800">
+                    In
+                  </th>
+                  <th className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-green-100 min-w-[60px]">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y-2 divide-gray-800">
+                {/* Yardage Row */}
+                {pairing.holes && pairing.holes.length > 0 && (
+                  <tr className="bg-gray-50">
+                    <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-gray-50">
+                      Yardage
+                    </td>
+                    {Array.from({ length: 9 }, (_, i) => {
+                      const hole = pairing.holes?.find(h => h.hole_number === i + 1);
+                      return (
+                        <td key={i + 1} className="px-3 py-2 text-center text-sm text-gray-700 border-r border-gray-300">
+                          {hole?.yards || '-'}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 text-center text-sm font-semibold text-gray-900 border-r-2 border-gray-800 bg-yellow-50">
+                      {pairing.holes.filter(h => h.hole_number >= 1 && h.hole_number <= 9)
+                        .reduce((sum, h) => sum + (h.yards || 0), 0) || '-'}
+                    </td>
+                    {Array.from({ length: 9 }, (_, i) => {
+                      const hole = pairing.holes?.find(h => h.hole_number === i + 10);
+                      return (
+                        <td key={i + 10} className="px-3 py-2 text-center text-sm text-gray-700 border-r border-gray-300">
+                          {hole?.yards || '-'}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 text-center text-sm font-semibold text-gray-900 bg-yellow-50 border-r-2 border-gray-800">
+                      {pairing.holes.filter(h => h.hole_number >= 10 && h.hole_number <= 18)
+                        .reduce((sum, h) => sum + (h.yards || 0), 0) || '-'}
+                    </td>
+                    <td className="px-3 py-2 text-center text-sm font-semibold text-gray-900 bg-green-100">
+                      {pairing.tee?.total_yards || '-'}
+                    </td>
+                  </tr>
+                )}
+                
+                {/* Par Row */}
+                {pairing.holes && pairing.holes.length > 0 && (
+                  <tr className="bg-yellow-50">
+                    <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-yellow-50">
+                      Par
+                    </td>
+                    {Array.from({ length: 9 }, (_, i) => {
+                      const hole = pairing.holes?.find(h => h.hole_number === i + 1);
+                      return (
+                        <td key={i + 1} className="px-3 py-2 text-center text-sm font-semibold text-gray-900 border-r border-gray-300">
+                          {hole?.par || '-'}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-100">
+                      {pairing.holes.filter(h => h.hole_number >= 1 && h.hole_number <= 9)
+                        .reduce((sum, h) => sum + (h.par || 0), 0) || '-'}
+                    </td>
+                    {Array.from({ length: 9 }, (_, i) => {
+                      const hole = pairing.holes?.find(h => h.hole_number === i + 10);
+                      return (
+                        <td key={i + 10} className="px-3 py-2 text-center text-sm font-semibold text-gray-900 border-r border-gray-300">
+                          {hole?.par || '-'}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-100 border-r-2 border-gray-800">
+                      {pairing.holes.filter(h => h.hole_number >= 10 && h.hole_number <= 18)
+                        .reduce((sum, h) => sum + (h.par || 0), 0) || '-'}
+                    </td>
+                    <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-green-200">
+                      {pairing.tee?.par_total || '-'}
+                    </td>
+                  </tr>
+                )}
+                
+                {/* Handicap Row */}
+                {pairing.holes && pairing.holes.length > 0 && pairing.holes.some(h => h.handicap) && (
+                  <tr className="bg-gray-50">
+                    <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-gray-50">
+                      Handicap
+                    </td>
+                    {Array.from({ length: 9 }, (_, i) => {
+                      const hole = pairing.holes?.find(h => h.hole_number === i + 1);
+                      return (
+                        <td key={i + 1} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
+                          {hole?.handicap || '-'}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 border-r-2 border-gray-800 bg-yellow-50"></td>
+                    {Array.from({ length: 9 }, (_, i) => {
+                      const hole = pairing.holes?.find(h => h.hole_number === i + 10);
+                      return (
+                        <td key={i + 10} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
+                          {hole?.handicap || '-'}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 bg-yellow-50 border-r-2 border-gray-800"></td>
+                    <td className="px-3 py-2 bg-green-100"></td>
+                  </tr>
+                )}
+                
+                {/* Player Score Rows */}
+                {(pairing.players || []).map((player, playerIdx) => {
+                  const isFirstInTeam = playerIdx === 0 || 
+                    pairing.players![playerIdx - 1].team_id !== player.team_id;
+                  
+                  // Calculate front 9, back 9, and total from stored scores
+                  const front9 = Array.from({ length: 9 }, (_, i) => i + 1)
+                    .reduce((sum, hole) => sum + (pairing.scores[hole]?.[player.user_id] || 0), 0);
+                  const back9 = Array.from({ length: 9 }, (_, i) => i + 10)
+                    .reduce((sum, hole) => sum + (pairing.scores[hole]?.[player.user_id] || 0), 0);
+                  const total = front9 + back9;
+
+                  return (
+                    <tr 
+                      key={player.user_id}
+                      className={`${isFirstInTeam ? 'border-t-2 border-gray-400' : ''}`}
+                    >
+                      <td className={`sticky left-0 z-10 px-3 py-2 text-left text-sm font-medium border-r-2 border-gray-800 bg-white`}>
+                        <div className="flex items-center">
+                          <div 
+                            className="w-3 h-3 rounded-full mr-2 flex-shrink-0" 
+                            style={{ backgroundColor: player.team?.color || '#999' }}
+                          />
+                          <span className="truncate">{player.user?.name || 'Unknown'}</span>
+                        </div>
+                      </td>
+                      {/* Front 9 scores */}
+                      {Array.from({ length: 9 }, (_, i) => {
+                        const holeNum = i + 1;
+                        const score = pairing.scores[holeNum]?.[player.user_id] || 0;
+                        const hole = pairing.holes?.find(h => h.hole_number === holeNum);
+                        const par = hole?.par || 0;
+                        const scoreToPar = score > 0 && par > 0 ? score - par : null;
+                        
+                        let bgColor = 'bg-white';
+                        if (scoreToPar !== null) {
+                          if (scoreToPar <= -2) bgColor = 'bg-yellow-200'; // Eagle or better
+                          else if (scoreToPar === -1) bgColor = 'bg-red-200'; // Birdie
+                          else if (scoreToPar === 1) bgColor = 'bg-blue-200'; // Bogey
+                          else if (scoreToPar >= 2) bgColor = 'bg-purple-200'; // Double bogey or worse
+                        }
+                        
+                        return (
+                          <td key={holeNum} className={`px-3 py-2 text-center border-r border-gray-300 ${bgColor}`}>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {score > 0 ? score : '-'}
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-center font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50">
+                        {front9 > 0 ? front9 : '-'}
+                      </td>
+                      {/* Back 9 scores */}
+                      {Array.from({ length: 9 }, (_, i) => {
+                        const holeNum = i + 10;
+                        const score = pairing.scores[holeNum]?.[player.user_id] || 0;
+                        const hole = pairing.holes?.find(h => h.hole_number === holeNum);
+                        const par = hole?.par || 0;
+                        const scoreToPar = score > 0 && par > 0 ? score - par : null;
+                        
+                        let bgColor = 'bg-white';
+                        if (scoreToPar !== null) {
+                          if (scoreToPar <= -2) bgColor = 'bg-yellow-200'; // Eagle or better
+                          else if (scoreToPar === -1) bgColor = 'bg-red-200'; // Birdie
+                          else if (scoreToPar === 1) bgColor = 'bg-blue-200'; // Bogey
+                          else if (scoreToPar >= 2) bgColor = 'bg-purple-200'; // Double bogey or worse
+                        }
+                        
+                        return (
+                          <td key={holeNum} className={`px-3 py-2 text-center border-r border-gray-300 ${bgColor}`}>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {score > 0 ? score : '-'}
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-center font-bold text-gray-900 bg-yellow-50 border-r-2 border-gray-800">
+                        {back9 > 0 ? back9 : '-'}
+                      </td>
+                      <td className="px-3 py-2 text-center font-bold text-lg text-gray-900 bg-green-100">
+                        {total > 0 ? total : '-'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Score Legend */}
+          <div className="bg-gray-50 px-6 py-3 border-t-2 border-gray-300">
+            <div className="flex items-center justify-center gap-6 text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-yellow-200 border border-gray-400"></div>
+                <span>Eagle or better</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-red-200 border border-gray-400"></div>
+                <span>Birdie</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-white border border-gray-400"></div>
+                <span>Par</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-blue-200 border border-gray-400"></div>
+                <span>Bogey</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 bg-purple-200 border border-gray-400"></div>
+                <span>Double bogey+</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {pairing.matchResults.map((match, idx) => {
           const team1Won = match.team1_points > match.team2_points;
           const team2Won = match.team2_points > match.team1_points;
