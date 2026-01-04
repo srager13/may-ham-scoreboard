@@ -1985,33 +1985,42 @@ const MatchConfig = ({
           </select>
         </div>
 
-        <div>
-          <label className="block text-xs font-medium mb-1">
-            Hole Range (optional)
-            <span className="text-xs text-gray-400 ml-1">e.g., 1-6</span>
-          </label>
-          <div className="flex gap-1 items-center">
-            <input
-              type="number"
-              min="1"
-              max="18"
-              value={match.start_hole || ''}
-              onChange={(e) => updateMatch(roundIdx, pairingIdx, matchIdx, 'start_hole', e.target.value ? parseInt(e.target.value) : undefined)}
-              placeholder="1"
+        {match.holes !== 18 && (
+          <div>
+            <label className="block text-xs font-medium mb-1">
+              Hole Range (optional)
+              <span className="text-xs text-gray-400 ml-1">Select specific holes</span>
+            </label>
+            <select
+              value={match.start_hole && match.end_hole ? `${match.start_hole}-${match.end_hole}` : ''}
+              onChange={(e) => {
+                if (e.target.value === '') {
+                  updateMatch(roundIdx, pairingIdx, matchIdx, 'start_hole', undefined);
+                  updateMatch(roundIdx, pairingIdx, matchIdx, 'end_hole', undefined);
+                } else {
+                  const [start, end] = e.target.value.split('-').map(Number);
+                  updateMatch(roundIdx, pairingIdx, matchIdx, 'start_hole', start);
+                  updateMatch(roundIdx, pairingIdx, matchIdx, 'end_hole', end);
+                }
+              }}
               className="w-full p-2 border rounded text-sm"
-            />
-            <span className="text-xs text-gray-500">to</span>
-            <input
-              type="number"
-              min="1"
-              max="18"
-              value={match.end_hole || ''}
-              onChange={(e) => updateMatch(roundIdx, pairingIdx, matchIdx, 'end_hole', e.target.value ? parseInt(e.target.value) : undefined)}
-              placeholder={match.holes.toString()}
-              className="w-full p-2 border rounded text-sm"
-            />
+            >
+              {match.holes === 6 && (
+                <>
+                  <option value="1-6">Holes 1-6</option>
+                  <option value="7-12">Holes 7-12</option>
+                  <option value="13-18">Holes 13-18</option>
+                </>
+              )}
+              {match.holes === 9 && (
+                <>
+                  <option value="1-9">Holes 1-9 (Front 9)</option>
+                  <option value="10-18">Holes 10-18 (Back 9)</option>
+                </>
+              )}
+            </select>
           </div>
-        </div>
+        )}
 
         <div>
           <label className="block text-xs font-medium mb-1">Points</label>
