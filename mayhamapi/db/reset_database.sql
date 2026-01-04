@@ -26,10 +26,10 @@ TRUNCATE TABLE users CASCADE;
 -- Note: Using UUID primary keys, so no sequences to reset
 -- Sample match formats data
 INSERT INTO match_formats (name, description, players_per_side, scoring_type) VALUES
-    ('Singles Match Play', 'One-on-one match play', 1, 'match_play'),
-    ('2v2 Scramble', 'Two-person team scramble format', 2, 'scramble'),
-    ('2v2 Best Ball', 'Two-person team best ball', 2, 'best_ball'),
-    ('2v2 Alternate Shot', 'Two-person alternate shot', 2, 'alternate_shot'),
-    ('High-Low', 'Best and worst score combination', 2, 'high_low'),
-    ('Shamble', 'Drive scramble, then individual play', 2, 'shamble')
+    ('Singles Match Play', 'One-on-one match play', 1, 'match_play', 'individual'),
+    ('2v2 Scramble', 'Two-person team scramble format', 2, 'scramble', 'team'),
+    ('2v2 Best Ball', 'Two-person team best ball', 2, 'best_ball', 'individual'),
+    ('2v2 Alternate Shot', 'Two-person alternate shot', 2, 'alternate_shot', 'team'),
+    ('High-Low', 'Best and worst score combination', 2, 'high_low', 'individual'),
+    ('Shamble', 'Drive scramble, then individual play', 2, 'shamble', 'team')
 ON CONFLICT (name) DO NOTHING;
