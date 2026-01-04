@@ -1043,6 +1043,7 @@ const TournamentInfoStep = ({ tournament, setTournament, userGroups, onGroupSele
               type="date"
               value={tournament.end_date}
               onChange={(e) => setTournament({ ...tournament, end_date: e.target.value })}
+              min={tournament.start_date || undefined}
               className="w-full p-3 border rounded-lg"
             />
           </div>

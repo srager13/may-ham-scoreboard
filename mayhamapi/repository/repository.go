@@ -1606,7 +1606,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 func (r *Repository) CreateGolfCourseHole(hole *models.GolfCourseHole) error {
 	query := `
 		INSERT INTO golf_course_holes (tee_id, hole_number, par, yards, handicap)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (tee_id, hole_number) DO UPDATE SET
 			par = EXCLUDED.par,
 			yards = EXCLUDED.yards,
