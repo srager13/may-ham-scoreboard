@@ -363,11 +363,33 @@ const LiveMatchCard = ({ match }: { match: Match }) => {
 
       <div className="space-y-2 mb-3">
         <div className="flex items-center justify-between">
-          <div className="font-medium">{match.team1?.name}</div>
+          <div>
+            <div className="font-medium">{match.team1?.name}</div>
+            {match.players && match.players.length > 0 && (
+              <div className="text-xs text-gray-500">
+                {match.players
+                  .filter(p => p.team_id === match.team1_id)
+                  .sort((a, b) => a.player_order - b.player_order)
+                  .map(p => p.user?.name)
+                  .join(' & ')}
+              </div>
+            )}
+          </div>
           <div className="font-bold">{match.team1_points}</div>
         </div>
         <div className="flex items-center justify-between">
-          <div className="font-medium">{match.team2?.name}</div>
+          <div>
+            <div className="font-medium">{match.team2?.name}</div>
+            {match.players && match.players.length > 0 && (
+              <div className="text-xs text-gray-500">
+                {match.players
+                  .filter(p => p.team_id === match.team2_id)
+                  .sort((a, b) => a.player_order - b.player_order)
+                  .map(p => p.user?.name)
+                  .join(' & ')}
+              </div>
+            )}
+          </div>
           <div className="font-bold">{match.team2_points}</div>
         </div>
       </div>
@@ -562,6 +584,16 @@ const CompactMatchResult = ({ match }: { match: MatchWithResults }) => {
             ></div>
             <div className="text-xs font-semibold text-gray-900">{match.team1?.name}</div>
           </div>
+          {/* Team 1 Players */}
+          {match.players && match.players.length > 0 && (
+            <div className="text-xs text-gray-500 mb-1">
+              {match.players
+                .filter(p => p.team_id === match.team1_id)
+                .sort((a, b) => a.player_order - b.player_order)
+                .map(p => p.user?.name)
+                .join(' & ')}
+            </div>
+          )}
           <div className="text-xl font-bold" style={{ color: match.team1?.color }}>
             {match.team1_points.toFixed(1)}
           </div>
@@ -590,6 +622,16 @@ const CompactMatchResult = ({ match }: { match: MatchWithResults }) => {
             ></div>
             <div className="text-xs font-semibold text-gray-900">{match.team2?.name}</div>
           </div>
+          {/* Team 2 Players */}
+          {match.players && match.players.length > 0 && (
+            <div className="text-xs text-gray-500 mb-1">
+              {match.players
+                .filter(p => p.team_id === match.team2_id)
+                .sort((a, b) => a.player_order - b.player_order)
+                .map(p => p.user?.name)
+                .join(' & ')}
+            </div>
+          )}
           <div className="text-xl font-bold" style={{ color: match.team2?.color }}>
             {match.team2_points.toFixed(1)}
           </div>

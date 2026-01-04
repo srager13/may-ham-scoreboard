@@ -503,23 +503,11 @@ func (h *TournamentHandler) GetTeamMembers(c *gin.Context) {
 }
 
 // GET /api/v1/matches/:match_id/players
-// DEPRECATED: Use /api/v1/pairings/:pairing_id/players instead
 func (h *TournamentHandler) GetMatchPlayers(c *gin.Context) {
 	matchID := c.Param("match_id")
 
-	// Get match to find its pairing
-	match, err := h.repo.GetMatch(matchID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Match not found"})
-		return
-	}
-
-	if match.PairingID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Match has no associated pairing"})
-		return
-	}
-
-	players, err := h.repo.GetPairingPlayers(match.PairingID)
+	// Get match players directly
+	players, err := h.repo.GetMatchPlayersByMatch(matchID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

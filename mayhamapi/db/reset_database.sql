@@ -5,6 +5,7 @@
 -- Most dependent tables first, working backwards to independent tables
 TRUNCATE TABLE hole_results CASCADE;
 TRUNCATE TABLE hole_scores CASCADE;
+TRUNCATE TABLE match_players CASCADE;
 TRUNCATE TABLE matches CASCADE;
 TRUNCATE TABLE pairing_players CASCADE;
 TRUNCATE TABLE pairings CASCADE;

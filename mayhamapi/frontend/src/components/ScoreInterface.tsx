@@ -619,10 +619,10 @@ const ScoreInterface: React.FC = () => {
                     <div className="text-xs text-gray-600 mb-2">
                       {(() => {
                         // Use actual match players if available
-                        if (match.match_players && match.match_players.length > 0) {
-                          const team1Players = match.match_players
+                        if (match.players && match.players.length > 0) {
+                          const team1Players = match.players
                             .filter(mp => mp.team_id === match.team1_id)
-                            .sort((a, b) => a.position - b.position);
+                            .sort((a, b) => a.player_order - b.player_order);
                           return team1Players.map(p => p.user?.name).join(' & ');
                         }
                         
@@ -679,10 +679,10 @@ const ScoreInterface: React.FC = () => {
                     <div className="text-xs text-gray-600 mb-2">
                       {(() => {
                         // Use actual match players if available
-                        if (match.match_players && match.match_players.length > 0) {
-                          const team2Players = match.match_players
+                        if (match.players && match.players.length > 0) {
+                          const team2Players = match.players
                             .filter(mp => mp.team_id === match.team2_id)
-                            .sort((a, b) => a.position - b.position);
+                            .sort((a, b) => a.player_order - b.player_order);
                           return team2Players.map(p => p.user?.name).join(' & ');
                         }
                         

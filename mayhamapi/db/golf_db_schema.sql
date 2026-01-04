@@ -189,6 +189,17 @@ CREATE TABLE IF NOT EXISTS matches (
     CHECK ((start_hole IS NULL AND end_hole IS NULL) OR (start_hole >= 1 AND end_hole <= 18 AND start_hole <= end_hole))
 );
 
+-- Match players (specific players participating in each match)
+CREATE TABLE IF NOT EXISTS match_players (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    match_id UUID REFERENCES matches(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id),
+    team_id UUID REFERENCES teams(id),
+    player_order INT, -- position within the match (1-4 for most formats)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(match_id, user_id)
+);
+
 -- Hole-by-hole scores
 CREATE TABLE IF NOT EXISTS hole_scores (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -246,6 +257,8 @@ CREATE INDEX IF NOT EXISTS idx_golf_course_holes_tee ON golf_course_holes(tee_id
 CREATE INDEX IF NOT EXISTS idx_matches_pairing ON matches(pairing_id);
 CREATE INDEX IF NOT EXISTS idx_matches_round ON matches(round_id);
 CREATE INDEX IF NOT EXISTS idx_matches_hole_range ON matches(start_hole, end_hole) WHERE start_hole IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_match_players_match ON match_players(match_id);
+CREATE INDEX IF NOT EXISTS idx_match_players_user ON match_players(user_id);
 CREATE INDEX IF NOT EXISTS idx_hole_scores_pairing ON hole_scores(pairing_id, hole_number);
 CREATE INDEX IF NOT EXISTS idx_hole_scores_stableford ON hole_scores(stableford_points) WHERE stableford_points IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_hole_results_match ON hole_results(match_id);

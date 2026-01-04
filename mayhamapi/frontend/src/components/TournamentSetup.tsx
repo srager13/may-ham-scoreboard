@@ -508,15 +508,35 @@ const TournamentSetup = () => {
                 player_order: p.player_order
               }));
 
-            const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => ({
-              team1_id: createdTeams[0].id,
-              team2_id: createdTeams[1].id,
-              match_format_id: match.format_id,
-              holes: match.holes,
-              start_hole: match.start_hole,
-              end_hole: match.end_hole,
-              points_available: match.points_available
-            }));
+            const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => {
+              // Collect user IDs for this match from team1_players and team2_players indices
+              const playerUserIds: string[] = [];
+              if (match.team1_players && Array.isArray(match.team1_players)) {
+                match.team1_players.forEach(playerIdx => {
+                  if (pairing.players && pairing.players[playerIdx]) {
+                    playerUserIds.push(pairing.players[playerIdx].user_id);
+                  }
+                });
+              }
+              if (match.team2_players && Array.isArray(match.team2_players)) {
+                match.team2_players.forEach(playerIdx => {
+                  if (pairing.players && pairing.players[playerIdx]) {
+                    playerUserIds.push(pairing.players[playerIdx].user_id);
+                  }
+                });
+              }
+
+              return {
+                team1_id: createdTeams[0].id,
+                team2_id: createdTeams[1].id,
+                match_format_id: match.format_id,
+                holes: match.holes,
+                start_hole: match.start_hole,
+                end_hole: match.end_hole,
+                points_available: match.points_available,
+                player_user_ids: playerUserIds.length > 0 ? playerUserIds : undefined
+              };
+            });
 
             // Convert tee_time (HH:MM) to full RFC3339 timestamp in UTC
             let fullTeeTime: string | undefined;
@@ -603,15 +623,35 @@ const TournamentSetup = () => {
                 };
               });
 
-            const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => ({
-              team1_id: createdTeams[0].id,
-              team2_id: createdTeams[1].id,
-              match_format_id: match.format_id,
-              holes: match.holes,
-              start_hole: match.start_hole,
-              end_hole: match.end_hole,
-              points_available: match.points_available
-            }));
+            const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => {
+              // Collect user IDs for this match from team1_players and team2_players indices
+              const playerUserIds: string[] = [];
+              if (match.team1_players && Array.isArray(match.team1_players)) {
+                match.team1_players.forEach(playerIdx => {
+                  if (pairing.players && pairing.players[playerIdx]) {
+                    playerUserIds.push(pairing.players[playerIdx].user_id);
+                  }
+                });
+              }
+              if (match.team2_players && Array.isArray(match.team2_players)) {
+                match.team2_players.forEach(playerIdx => {
+                  if (pairing.players && pairing.players[playerIdx]) {
+                    playerUserIds.push(pairing.players[playerIdx].user_id);
+                  }
+                });
+              }
+
+              return {
+                team1_id: createdTeams[0].id,
+                team2_id: createdTeams[1].id,
+                match_format_id: match.format_id,
+                holes: match.holes,
+                start_hole: match.start_hole,
+                end_hole: match.end_hole,
+                points_available: match.points_available,
+                player_user_ids: playerUserIds.length > 0 ? playerUserIds : undefined
+              };
+            });
 
             // Convert tee_time (HH:MM) to full RFC3339 timestamp in UTC
             let fullTeeTime: string | undefined;

@@ -221,6 +221,18 @@ type Match struct {
 	Team2   *Team              `json:"team2,omitempty"`
 	Format  *MatchFormatEntity `json:"format,omitempty"`
 	Pairing *Pairing           `json:"pairing,omitempty"`
+	Players []MatchPlayer      `json:"players,omitempty"`
+}
+
+type MatchPlayer struct {
+	ID          string    `json:"id" db:"id"`
+	MatchID     string    `json:"match_id" db:"match_id"`
+	UserID      string    `json:"user_id" db:"user_id"`
+	TeamID      string    `json:"team_id" db:"team_id"`
+	PlayerOrder int       `json:"player_order" db:"player_order"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	// Related data (not in DB table)
+	User *User `json:"user,omitempty"`
 }
 
 type Score struct {
@@ -306,6 +318,7 @@ type PairingMatchRequest struct {
 	StartHole       *int     `json:"start_hole,omitempty" binding:"omitempty,min=1,max=18"`
 	EndHole         *int     `json:"end_hole,omitempty" binding:"omitempty,min=1,max=18"`
 	PointsAvailable *float64 `json:"points_available,omitempty"`
+	PlayerUserIDs   []string `json:"player_user_ids,omitempty"` // Specific player user IDs for this match
 }
 
 type CreateMatchRequest struct {
@@ -316,6 +329,7 @@ type CreateMatchRequest struct {
 	StartHole       *int     `json:"start_hole,omitempty" binding:"omitempty,min=1,max=18"`
 	EndHole         *int     `json:"end_hole,omitempty" binding:"omitempty,min=1,max=18"`
 	PointsAvailable *float64 `json:"points_available,omitempty"`
+	PlayerUserIDs   []string `json:"player_user_ids,omitempty"` // Specific player user IDs for this match
 }
 
 type AddTeamMemberRequest struct {

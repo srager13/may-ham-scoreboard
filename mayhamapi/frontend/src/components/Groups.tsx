@@ -20,7 +20,7 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   // Add member form state
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [selectedUserRole, setSelectedUserRole] = useState('member');
   const [showAddMemberForm, setShowAddMemberForm] = useState(false);
 
@@ -106,23 +106,51 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUserId || !selectedGroup) return;
+    if (selectedUserIds.length === 0 || !selectedGroup) return;
 
     try {
-      const newMember = await apiClient.addGroupMember(selectedGroup.id, {
-        user_id: selectedUserId,
-        role: selectedUserRole,
-      });
+      setLoading(true);
+      // Loop through all selected users and add them to the group
+      for (const userId of selectedUserIds) {
+        try {
+          await apiClient.addGroupMember(selectedGroup.id, {
+            user_id: userId,
+            role: selectedUserRole,
+          });
+        } catch (err) {
+          console.error(`Failed to add user ${userId}:`, err);
+          // Continue with other users even if one fails
+        }
+      }
       
       // Reload group members
       await loadGroupMembers(selectedGroup.id);
-      setSelectedUserId('');
+      setSelectedUserIds([]);
       setSelectedUserRole('member');
       setShowAddMemberForm(false);
+      setError(null);
     } catch (err) {
-      setError('Failed to add group member');
+      setError('Failed to add group members');
       console.error(err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const toggleUserSelection = (userId: string) => {
+    setSelectedUserIds(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const selectAllUsers = () => {
+    setSelectedUserIds(availableUsers.map(u => u.id));
+  };
+
+  const deselectAllUsers = () => {
+    setSelectedUserIds([]);
   };
 
   const availableUsers = allUsers.filter(user => 
@@ -253,7 +281,7 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
                     onClick={() => setShowAddMemberForm(true)}
                     className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors"
                   >
-                    Add Member
+                    Add Members
                   </button>
                 )}
               </div>
@@ -261,29 +289,56 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
               {/* Add Member Form */}
               {showAddMemberForm && isGroupAdmin && (
                 <div className="mb-4 p-4 bg-gray-50 rounded-md">
-                  <h4 className="font-medium mb-3">Add Member</h4>
+                  <h4 className="font-medium mb-3">Add Members</h4>
                   <form onSubmit={handleAddMember} className="space-y-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        User
-                      </label>
-                      <select
-                        value={selectedUserId}
-                        onChange={(e) => setSelectedUserId(e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                        required
-                      >
-                        <option value="">Select a user</option>
-                        {availableUsers.map((user) => (
-                          <option key={user.id} value={user.id}>
-                            {user.name} ({user.email})
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Select Users ({selectedUserIds.length} selected)
+                        </label>
+                        <div className="space-x-2">
+                          <button
+                            type="button"
+                            onClick={selectAllUsers}
+                            className="text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            Select All
+                          </button>
+                          <button
+                            type="button"
+                            onClick={deselectAllUsers}
+                            className="text-xs text-gray-600 hover:text-gray-800"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md p-2 space-y-1">
+                        {availableUsers.length === 0 ? (
+                          <p className="text-sm text-gray-500 p-2">All users are already members</p>
+                        ) : (
+                          availableUsers.map((user) => (
+                            <label
+                              key={user.id}
+                              className="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedUserIds.includes(user.id)}
+                                onChange={() => toggleUserSelection(user.id)}
+                                className="mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                              />
+                              <span className="text-sm">
+                                {user.name} <span className="text-gray-500">({user.email})</span>
+                              </span>
+                            </label>
+                          ))
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Role
+                        Role for Selected Users
                       </label>
                       <select
                         value={selectedUserRole}
@@ -297,13 +352,17 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
                     <div className="flex space-x-2">
                       <button
                         type="submit"
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                        disabled={selectedUserIds.length === 0 || loading}
+                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Add Member
+                        {loading ? 'Adding...' : `Add ${selectedUserIds.length} Member${selectedUserIds.length !== 1 ? 's' : ''}`}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setShowAddMemberForm(false)}
+                        onClick={() => {
+                          setShowAddMemberForm(false);
+                          setSelectedUserIds([]);
+                        }}
                         className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition-colors"
                       >
                         Cancel

@@ -86,6 +86,7 @@ export interface Match {
   team2?: Team;
   format?: MatchFormat;
   pairing?: Pairing;
+  players?: MatchPlayer[];
   created_at: string;
 }
 
@@ -117,7 +118,7 @@ export interface MatchPlayer {
   match_id: string;
   user_id: string;
   team_id: string;
-  position: number;
+  player_order: number;
   user?: User;
 }
 
@@ -318,6 +319,7 @@ export interface PairingMatchRequest {
   start_hole?: number; // First hole of match (1-18)
   end_hole?: number;   // Last hole of match (1-18)
   points_available?: number;
+  player_user_ids?: string[]; // Specific player user IDs for this match
 }
 
 export interface SubmitScoresRequest {

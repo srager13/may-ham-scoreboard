@@ -466,6 +466,42 @@ func (r *Repository) CreateMatchForPairing(pairingID, roundID string, matchNumbe
 		return nil, fmt.Errorf("failed to create match: %w", err)
 	}
 
+	// Auto-assign players from pairing to this match
+	pairingPlayers, err := r.GetPairingPlayers(pairingID)
+	if err != nil {
+		fmt.Printf("Warning: failed to get pairing players for match %s: %v\n", match.ID, err)
+	} else {
+		// If specific player user IDs were provided, only assign those players
+		// Otherwise, assign all pairing players (legacy behavior)
+		playersToAssign := pairingPlayers
+		if req.PlayerUserIDs != nil && len(req.PlayerUserIDs) > 0 {
+			// Filter to only the specified players
+			playerIDMap := make(map[string]bool)
+			for _, userID := range req.PlayerUserIDs {
+				playerIDMap[userID] = true
+			}
+			playersToAssign = []models.PairingPlayer{}
+			for _, pp := range pairingPlayers {
+				if playerIDMap[pp.UserID] {
+					playersToAssign = append(playersToAssign, pp)
+				}
+			}
+		}
+
+		// Create match_players entries for the selected players
+		for _, pp := range playersToAssign {
+			matchPlayer := &models.MatchPlayer{
+				MatchID:     match.ID,
+				UserID:      pp.UserID,
+				TeamID:      pp.TeamID,
+				PlayerOrder: pp.PlayerOrder,
+			}
+			if err := r.CreateMatchPlayer(matchPlayer); err != nil {
+				fmt.Printf("Warning: failed to create match player for match %s: %v\n", match.ID, err)
+			}
+		}
+	}
+
 	return &match, nil
 }
 
@@ -528,6 +564,11 @@ func (r *Repository) GetMatch(id string) (*models.Match, error) {
 		}
 	}
 
+	// Load match players
+	if players, err := r.GetMatchPlayersByMatch(match.ID); err == nil {
+		match.Players = players
+	}
+
 	return &match, nil
 }
 
@@ -580,6 +621,11 @@ func (r *Repository) GetMatchesByRound(roundID string) ([]models.Match, error) {
 			}
 		}
 
+		// Load match players
+		if players, err := r.GetMatchPlayersByMatch(match.ID); err == nil {
+			match.Players = players
+		}
+
 		matches = append(matches, match)
 	}
 
@@ -618,6 +664,11 @@ func (r *Repository) GetMatchesByPairing(pairingID string) ([]models.Match, erro
 		// Load match format
 		if format, err := r.GetMatchFormat(match.MatchFormatID); err == nil {
 			match.Format = format
+		}
+
+		// Load match players
+		if players, err := r.GetMatchPlayersByMatch(match.ID); err == nil {
+			match.Players = players
 		}
 
 		matches = append(matches, match)
@@ -1036,9 +1087,10 @@ func (r *Repository) IsGroupAdmin(groupID, userID string) (bool, error) {
 	return count > 0, nil
 }
 
-// Match Players - DEPRECATED: Use PairingPlayers instead
-// These methods are kept for backward compatibility but should not be used in new code
-/*
+// ============================================
+// Match Player Repository Methods
+// ============================================
+
 func (r *Repository) CreateMatchPlayer(matchPlayer *models.MatchPlayer) error {
 	query := `
 		INSERT INTO match_players (match_id, user_id, team_id, player_order, created_at)
@@ -1046,7 +1098,7 @@ func (r *Repository) CreateMatchPlayer(matchPlayer *models.MatchPlayer) error {
 		RETURNING id, created_at
 	`
 
-	err := r.db.QueryRow(query, matchPlayer.MatchID, matchPlayer.UserID, matchPlayer.TeamID, matchPlayer.Position).Scan(
+	err := r.db.QueryRow(query, matchPlayer.MatchID, matchPlayer.UserID, matchPlayer.TeamID, matchPlayer.PlayerOrder).Scan(
 		&matchPlayer.ID, &matchPlayer.CreatedAt,
 	)
 	return err
@@ -1074,7 +1126,7 @@ func (r *Repository) GetMatchPlayersByMatch(matchID string) ([]models.MatchPlaye
 		var user models.User
 
 		err := rows.Scan(
-			&player.ID, &player.MatchID, &player.UserID, &player.TeamID, &player.Position, &player.CreatedAt,
+			&player.ID, &player.MatchID, &player.UserID, &player.TeamID, &player.PlayerOrder, &player.CreatedAt,
 			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 		)
 		if err != nil {
@@ -1088,50 +1140,9 @@ func (r *Repository) GetMatchPlayersByMatch(matchID string) ([]models.MatchPlaye
 	return players, nil
 }
 
-// Auto-assign team members to a match - DEPRECATED
-/*
-func (r *Repository) AutoAssignTeamMembers(matchID, team1ID, team2ID string) error {
-	// Get team1 members
-	team1Members, err := r.GetTeamMembersByTeam(team1ID)
-	if err != nil {
-		return fmt.Errorf("failed to get team1 members: %w", err)
-	}
-
-	// Get team2 members
-	team2Members, err := r.GetTeamMembersByTeam(team2ID)
-	if err != nil {
-		return fmt.Errorf("failed to get team2 members: %w", err)
-	}
-
-	// Assign team1 members
-	for i, member := range team1Members {
-		matchPlayer := &models.MatchPlayer{
-			MatchID:  matchID,
-			UserID:   member.UserID,
-			TeamID:   team1ID,
-			Position: i + 1,
-		}
-		if err := r.CreateMatchPlayer(matchPlayer); err != nil {
-			return fmt.Errorf("failed to assign team1 member: %w", err)
-		}
-	}
-
-	// Assign team2 members
-	for i, member := range team2Members {
-		matchPlayer := &models.MatchPlayer{
-			MatchID:  matchID,
-			UserID:   member.UserID,
-			TeamID:   team2ID,
-			Position: i + 1,
-		}
-		if err := r.CreateMatchPlayer(matchPlayer); err != nil {
-			return fmt.Errorf("failed to assign team2 member: %w", err)
-		}
-	}
-
-	return nil
-}
-*/
+// ============================================
+// Team Member Repository Methods
+// ============================================
 
 func (r *Repository) GetTeamMembersByTeam(teamID string) ([]models.TeamMember, error) {
 	query := `SELECT id, team_id, user_id, created_at FROM team_members WHERE team_id = $1`

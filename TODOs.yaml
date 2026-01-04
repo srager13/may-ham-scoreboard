@@ -1,8 +1,6 @@
 TODOs:
     - CURRENT:
-        - Match results displays on the Score Interface list everything only by teams. 
-          Show the actual players that are in each match.
-
+    
     - GENERAL:
         - Fix websocket
         - Add real admin page
