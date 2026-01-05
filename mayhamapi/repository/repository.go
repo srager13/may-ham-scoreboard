@@ -474,7 +474,7 @@ func (r *Repository) CreateMatchForPairing(pairingID, roundID string, matchNumbe
 		// If specific player user IDs were provided, only assign those players
 		// Otherwise, assign all pairing players (legacy behavior)
 		playersToAssign := pairingPlayers
-		if req.PlayerUserIDs != nil && len(req.PlayerUserIDs) > 0 {
+		if req.PlayerUserIDs != nil {
 			// Filter to only the specified players
 			playerIDMap := make(map[string]bool)
 			for _, userID := range req.PlayerUserIDs {

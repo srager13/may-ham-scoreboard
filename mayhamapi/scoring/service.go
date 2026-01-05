@@ -376,28 +376,20 @@ func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber 
 		return nil, fmt.Errorf("failed to get match format: %w", err)
 	}
 
-	// Group scores by team using actual team membership
+	// Group scores by team using match players
 	team1Scores := []int{}
 	team2Scores := []int{}
 
-	// Get team memberships for this match
-	team1Members, err := s.repo.GetTeamMembersByTeam(match.Team1ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get team1 members: %w", err)
-	}
-	team2Members, err := s.repo.GetTeamMembersByTeam(match.Team2ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get team2 members: %w", err)
-	}
-
-	// Create maps for quick lookup
+	// Create maps for quick lookup using match players
 	team1UserIDs := make(map[string]bool)
 	team2UserIDs := make(map[string]bool)
-	for _, member := range team1Members {
-		team1UserIDs[member.UserID] = true
-	}
-	for _, member := range team2Members {
-		team2UserIDs[member.UserID] = true
+	for _, player := range match.Players {
+		switch player.TeamID {
+		case match.Team1ID:
+			team1UserIDs[player.UserID] = true
+		case match.Team2ID:
+			team2UserIDs[player.UserID] = true
+		}
 	}
 
 	// Group scores by actual team membership
@@ -461,28 +453,20 @@ func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber 
 }
 
 func (s *ScoringService) calculateBestBallHole(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
-	// Group scores by team using actual team membership
+	// Group scores by team using match players
 	team1Scores := []int{}
 	team2Scores := []int{}
 
-	// Get team memberships for this match
-	team1Members, err := s.repo.GetTeamMembersByTeam(match.Team1ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get team1 members: %w", err)
-	}
-	team2Members, err := s.repo.GetTeamMembersByTeam(match.Team2ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get team2 members: %w", err)
-	}
-
-	// Create maps for quick lookup
+	// Create maps for quick lookup using match players
 	team1UserIDs := make(map[string]bool)
 	team2UserIDs := make(map[string]bool)
-	for _, member := range team1Members {
-		team1UserIDs[member.UserID] = true
-	}
-	for _, member := range team2Members {
-		team2UserIDs[member.UserID] = true
+	for _, player := range match.Players {
+		switch player.TeamID {
+		case match.Team1ID:
+			team1UserIDs[player.UserID] = true
+		case match.Team2ID:
+			team2UserIDs[player.UserID] = true
+		}
 	}
 
 	// Group scores by actual team membership
@@ -543,24 +527,16 @@ func (s *ScoringService) calculateScrambleHole(match *models.Match, holeNumber i
 	team1Scores := []int{}
 	team2Scores := []int{}
 
-	// Get team memberships for this match
-	team1Members, err := s.repo.GetTeamMembersByTeam(match.Team1ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get team1 members: %w", err)
-	}
-	team2Members, err := s.repo.GetTeamMembersByTeam(match.Team2ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get team2 members: %w", err)
-	}
-
-	// Create maps for quick lookup
+	// Create maps for quick lookup using match players
 	team1UserIDs := make(map[string]bool)
 	team2UserIDs := make(map[string]bool)
-	for _, member := range team1Members {
-		team1UserIDs[member.UserID] = true
-	}
-	for _, member := range team2Members {
-		team2UserIDs[member.UserID] = true
+	for _, player := range match.Players {
+		switch player.TeamID {
+		case match.Team1ID:
+			team1UserIDs[player.UserID] = true
+		case match.Team2ID:
+			team2UserIDs[player.UserID] = true
+		}
 	}
 
 	// Group scores by actual team membership
@@ -615,24 +591,16 @@ func (s *ScoringService) calculateHighLowHole(match *models.Match, holeNumber in
 	team1Scores := []int{}
 	team2Scores := []int{}
 
-	// Get team memberships for this match
-	team1Members, err := s.repo.GetTeamMembersByTeam(match.Team1ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get team1 members: %w", err)
-	}
-	team2Members, err := s.repo.GetTeamMembersByTeam(match.Team2ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get team2 members: %w", err)
-	}
-
-	// Create maps for quick lookup
+	// Create maps for quick lookup using match players
 	team1UserIDs := make(map[string]bool)
 	team2UserIDs := make(map[string]bool)
-	for _, member := range team1Members {
-		team1UserIDs[member.UserID] = true
-	}
-	for _, member := range team2Members {
-		team2UserIDs[member.UserID] = true
+	for _, player := range match.Players {
+		switch player.TeamID {
+		case match.Team1ID:
+			team1UserIDs[player.UserID] = true
+		case match.Team2ID:
+			team2UserIDs[player.UserID] = true
+		}
 	}
 
 	// Group scores by actual team membership

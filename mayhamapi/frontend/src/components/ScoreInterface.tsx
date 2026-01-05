@@ -711,91 +711,131 @@ const ScoreInterface: React.FC = () => {
                 )}
                 
                 {/* Player Score Rows */}
-                {(pairing.players || []).map((player, playerIdx) => {
-                  const isFirstInTeam = playerIdx === 0 || 
-                    pairing.players![playerIdx - 1].team_id !== player.team_id;
-                  
-                  // Calculate front 9, back 9, and total from stored scores
-                  const front9 = Array.from({ length: 9 }, (_, i) => i + 1)
-                    .reduce((sum, hole) => sum + (pairing.scores[hole]?.[player.user_id] || 0), 0);
-                  const back9 = Array.from({ length: 9 }, (_, i) => i + 10)
-                    .reduce((sum, hole) => sum + (pairing.scores[hole]?.[player.user_id] || 0), 0);
-                  const total = front9 + back9;
+                {(() => {
+                  // Group players by team for potential cell merging
+                  const playersByTeam = new Map<string, typeof pairing.players>();
+                  (pairing.players || []).forEach(player => {
+                    const teamId = player.team_id;
+                    if (!playersByTeam.has(teamId)) {
+                      playersByTeam.set(teamId, []);
+                    }
+                    playersByTeam.get(teamId)!.push(player);
+                  });
 
-                  return (
-                    <tr 
-                      key={player.user_id}
-                      className={`${isFirstInTeam ? 'border-t-2 border-gray-400' : ''}`}
-                    >
-                      <td className={`sticky left-0 z-10 px-3 py-2 text-left text-sm font-medium border-r-2 border-gray-800 bg-white`}>
-                        <div className="flex items-center">
-                          <div 
-                            className="w-3 h-3 rounded-full mr-2 flex-shrink-0" 
-                            style={{ backgroundColor: player.team?.color || '#999' }}
-                          />
-                          <span className="truncate">{player.user?.name || 'Unknown'}</span>
-                        </div>
-                      </td>
-                      {/* Front 9 scores */}
-                      {Array.from({ length: 9 }, (_, i) => {
-                        const holeNum = i + 1;
-                        const score = pairing.scores[holeNum]?.[player.user_id] || 0;
-                        const hole = pairing.holes?.find(h => h.hole_number === holeNum);
-                        const par = hole?.par || 0;
-                        const scoreToPar = score > 0 && par > 0 ? score - par : null;
-                        
-                        let bgColor = 'bg-white';
-                        if (scoreToPar !== null) {
-                          if (scoreToPar <= -2) bgColor = 'bg-yellow-200'; // Eagle or better
-                          else if (scoreToPar === -1) bgColor = 'bg-red-200'; // Birdie
-                          else if (scoreToPar === 1) bgColor = 'bg-blue-200'; // Bogey
-                          else if (scoreToPar >= 2) bgColor = 'bg-purple-200'; // Double bogey or worse
-                        }
-                        
-                        return (
-                          <td key={holeNum} className={`px-3 py-2 text-center border-r border-gray-300 ${bgColor}`}>
-                            <span className="text-sm font-semibold text-gray-900">
-                              {score > 0 ? score : '-'}
-                            </span>
-                          </td>
-                        );
-                      })}
-                      <td className="px-3 py-2 text-center font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50">
-                        {front9 > 0 ? front9 : '-'}
-                      </td>
-                      {/* Back 9 scores */}
-                      {Array.from({ length: 9 }, (_, i) => {
-                        const holeNum = i + 10;
-                        const score = pairing.scores[holeNum]?.[player.user_id] || 0;
-                        const hole = pairing.holes?.find(h => h.hole_number === holeNum);
-                        const par = hole?.par || 0;
-                        const scoreToPar = score > 0 && par > 0 ? score - par : null;
-                        
-                        let bgColor = 'bg-white';
-                        if (scoreToPar !== null) {
-                          if (scoreToPar <= -2) bgColor = 'bg-yellow-200'; // Eagle or better
-                          else if (scoreToPar === -1) bgColor = 'bg-red-200'; // Birdie
-                          else if (scoreToPar === 1) bgColor = 'bg-blue-200'; // Bogey
-                          else if (scoreToPar >= 2) bgColor = 'bg-purple-200'; // Double bogey or worse
-                        }
-                        
-                        return (
-                          <td key={holeNum} className={`px-3 py-2 text-center border-r border-gray-300 ${bgColor}`}>
-                            <span className="text-sm font-semibold text-gray-900">
-                              {score > 0 ? score : '-'}
-                            </span>
-                          </td>
-                        );
-                      })}
-                      <td className="px-3 py-2 text-center font-bold text-gray-900 bg-yellow-50 border-r-2 border-gray-800">
-                        {back9 > 0 ? back9 : '-'}
-                      </td>
-                      <td className="px-3 py-2 text-center font-bold text-lg text-gray-900 bg-green-100">
-                        {total > 0 ? total : '-'}
-                      </td>
-                    </tr>
-                  );
-                })}
+                  return (pairing.players || []).map((player, playerIdx) => {
+                    const isFirstInTeam = playerIdx === 0 || 
+                      pairing.players![playerIdx - 1].team_id !== player.team_id;
+                    
+                    // Get teammates for this player
+                    const teammates = playersByTeam.get(player.team_id) || [];
+                    const playerIndexInTeam = teammates.findIndex(p => p.user_id === player.user_id);
+                    const isFirstPlayerInTeam = playerIndexInTeam === 0;
+                    const teamSize = teammates.length;
+                    
+                    // Calculate front 9, back 9, and total from stored scores
+                    const front9 = Array.from({ length: 9 }, (_, i) => i + 1)
+                      .reduce((sum, hole) => sum + (pairing.scores[hole]?.[player.user_id] || 0), 0);
+                    const back9 = Array.from({ length: 9 }, (_, i) => i + 10)
+                      .reduce((sum, hole) => sum + (pairing.scores[hole]?.[player.user_id] || 0), 0);
+                    const total = front9 + back9;
+
+                    return (
+                      <tr 
+                        key={player.user_id}
+                        className={`${isFirstInTeam ? 'border-t-2 border-gray-400' : ''}`}
+                      >
+                        <td className={`sticky left-0 z-10 px-3 py-2 text-left text-sm font-medium border-r-2 border-gray-800 bg-white`}>
+                          <div className="flex items-center">
+                            <div 
+                              className="w-3 h-3 rounded-full mr-2 flex-shrink-0" 
+                              style={{ backgroundColor: player.team?.color || '#999' }}
+                            />
+                            <span className="truncate">{player.user?.name || 'Unknown'}</span>
+                          </div>
+                        </td>
+                        {/* Front 9 scores */}
+                        {Array.from({ length: 9 }, (_, i) => {
+                          const holeNum = i + 1;
+                          const match = getMatchForHole(pairing, holeNum);
+                          const isTeamFormat = match?.format?.score_input_type === 'team';
+                          const score = pairing.scores[holeNum]?.[player.user_id] || 0;
+                          const hole = pairing.holes?.find(h => h.hole_number === holeNum);
+                          const par = hole?.par || 0;
+                          const scoreToPar = score > 0 && par > 0 ? score - par : null;
+                          
+                          // For team formats, only render cell for first player in team (with rowspan)
+                          if (isTeamFormat && !isFirstPlayerInTeam) {
+                            return null; // Skip this cell, it's merged with the one above
+                          }
+                          
+                          let bgColor = 'bg-white';
+                          if (scoreToPar !== null) {
+                            if (scoreToPar <= -2) bgColor = 'bg-yellow-200'; // Eagle or better
+                            else if (scoreToPar === -1) bgColor = 'bg-red-200'; // Birdie
+                            else if (scoreToPar === 1) bgColor = 'bg-blue-200'; // Bogey
+                            else if (scoreToPar >= 2) bgColor = 'bg-purple-200'; // Double bogey or worse
+                          }
+                          
+                          return (
+                            <td 
+                              key={holeNum} 
+                              className={`px-3 py-2 text-center border-r border-gray-300 ${bgColor}`}
+                              rowSpan={isTeamFormat ? teamSize : 1}
+                            >
+                              <span className="text-sm font-semibold text-gray-900">
+                                {score > 0 ? score : '-'}
+                              </span>
+                            </td>
+                          );
+                        })}
+                        <td className="px-3 py-2 text-center font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50">
+                          {front9 > 0 ? front9 : '-'}
+                        </td>
+                        {/* Back 9 scores */}
+                        {Array.from({ length: 9 }, (_, i) => {
+                          const holeNum = i + 10;
+                          const match = getMatchForHole(pairing, holeNum);
+                          const isTeamFormat = match?.format?.score_input_type === 'team';
+                          const score = pairing.scores[holeNum]?.[player.user_id] || 0;
+                          const hole = pairing.holes?.find(h => h.hole_number === holeNum);
+                          const par = hole?.par || 0;
+                          const scoreToPar = score > 0 && par > 0 ? score - par : null;
+                          
+                          // For team formats, only render cell for first player in team (with rowspan)
+                          if (isTeamFormat && !isFirstPlayerInTeam) {
+                            return null; // Skip this cell, it's merged with the one above
+                          }
+                          
+                          let bgColor = 'bg-white';
+                          if (scoreToPar !== null) {
+                            if (scoreToPar <= -2) bgColor = 'bg-yellow-200'; // Eagle or better
+                            else if (scoreToPar === -1) bgColor = 'bg-red-200'; // Birdie
+                            else if (scoreToPar === 1) bgColor = 'bg-blue-200'; // Bogey
+                            else if (scoreToPar >= 2) bgColor = 'bg-purple-200'; // Double bogey or worse
+                          }
+                          
+                          return (
+                            <td 
+                              key={holeNum} 
+                              className={`px-3 py-2 text-center border-r border-gray-300 ${bgColor}`}
+                              rowSpan={isTeamFormat ? teamSize : 1}
+                            >
+                              <span className="text-sm font-semibold text-gray-900">
+                                {score > 0 ? score : '-'}
+                              </span>
+                            </td>
+                          );
+                        })}
+                        <td className="px-3 py-2 text-center font-bold text-gray-900 bg-yellow-50 border-r-2 border-gray-800">
+                          {back9 > 0 ? back9 : '-'}
+                        </td>
+                        <td className="px-3 py-2 text-center font-bold text-lg text-gray-900 bg-green-100">
+                          {total > 0 ? total : '-'}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>
@@ -1481,73 +1521,121 @@ const ScoreInterface: React.FC = () => {
                         )}
                         
                         {/* Player Score Rows */}
-                        {(selectedPairing.players || []).map((player, playerIdx) => {
-                          const isFirstInTeam = playerIdx === 0 || 
-                            selectedPairing.players![playerIdx - 1].team_id !== player.team_id;
-                          
-                          // Calculate front 9, back 9, and total
-                          const front9 = Array.from({ length: 9 }, (_, i) => i + 1)
-                            .reduce((sum, hole) => sum + (holeScores[hole]?.[player.user_id] || 0), 0);
-                          const back9 = Array.from({ length: 9 }, (_, i) => i + 10)
-                            .reduce((sum, hole) => sum + (holeScores[hole]?.[player.user_id] || 0), 0);
-                          const total = front9 + back9;
-                          
-                          return (
-                            <tr 
-                              key={player.user_id}
-                              className={isFirstInTeam && playerIdx > 0 ? 'border-t-2 border-gray-800' : ''}
-                            >
-                              <td className="sticky left-0 z-10 px-3 py-3 border-r-2 border-gray-800 bg-white">
-                                <div className="flex items-center">
-                                  <div
-                                    className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
-                                    style={{ backgroundColor: player.team?.color }}
-                                  ></div>
-                                  <span className="text-xs font-medium text-gray-900 whitespace-nowrap">
-                                    {player.user?.name}
-                                  </span>
-                                </div>
-                              </td>
-                              {/* Front 9 */}
-                              {Array.from({ length: 9 }, (_, i) => i + 1).map(hole => (
-                                <td key={hole} className="px-1 py-2 text-center border-r border-gray-300">
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="15"
-                                    value={holeScores[hole]?.[player.user_id] || ''}
-                                    onChange={(e) => handleScoreChange(hole, player.user_id, parseInt(e.target.value) || 0)}
-                                    className="w-full px-1 py-1 text-center text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                    placeholder="-"
-                                  />
+                        {(() => {
+                          // Group players by team for potential cell merging
+                          const playersByTeam = new Map<string, typeof selectedPairing.players>();
+                          (selectedPairing.players || []).forEach(player => {
+                            const teamId = player.team_id;
+                            if (!playersByTeam.has(teamId)) {
+                              playersByTeam.set(teamId, []);
+                            }
+                            playersByTeam.get(teamId)!.push(player);
+                          });
+
+                          return (selectedPairing.players || []).map((player, playerIdx) => {
+                            const isFirstInTeam = playerIdx === 0 || 
+                              selectedPairing.players![playerIdx - 1].team_id !== player.team_id;
+                            
+                            // Get teammates for this player
+                            const teammates = playersByTeam.get(player.team_id) || [];
+                            const playerIndexInTeam = teammates.findIndex(p => p.user_id === player.user_id);
+                            const isFirstPlayerInTeam = playerIndexInTeam === 0;
+                            const teamSize = teammates.length;
+                            
+                            // Calculate front 9, back 9, and total
+                            const front9 = Array.from({ length: 9 }, (_, i) => i + 1)
+                              .reduce((sum, hole) => sum + (holeScores[hole]?.[player.user_id] || 0), 0);
+                            const back9 = Array.from({ length: 9 }, (_, i) => i + 10)
+                              .reduce((sum, hole) => sum + (holeScores[hole]?.[player.user_id] || 0), 0);
+                            const total = front9 + back9;
+                            
+                            return (
+                              <tr 
+                                key={player.user_id}
+                                className={isFirstInTeam && playerIdx > 0 ? 'border-t-2 border-gray-800' : ''}
+                              >
+                                <td className="sticky left-0 z-10 px-3 py-3 border-r-2 border-gray-800 bg-white">
+                                  <div className="flex items-center">
+                                    <div
+                                      className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
+                                      style={{ backgroundColor: player.team?.color }}
+                                    ></div>
+                                    <span className="text-xs font-medium text-gray-900 whitespace-nowrap">
+                                      {player.user?.name}
+                                    </span>
+                                  </div>
                                 </td>
-                              ))}
-                              <td className="px-2 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50">
-                                {front9 > 0 ? front9 : '-'}
-                              </td>
-                              {/* Back 9 */}
-                              {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => (
-                                <td key={hole} className="px-1 py-2 text-center border-r border-gray-300">
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="15"
-                                    value={holeScores[hole]?.[player.user_id] || ''}
-                                    onChange={(e) => handleScoreChange(hole, player.user_id, parseInt(e.target.value) || 0)}
-                                    className="w-full px-1 py-1 text-center text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                    placeholder="-"
-                                  />
+                                {/* Front 9 */}
+                                {Array.from({ length: 9 }, (_, i) => i + 1).map(hole => {
+                                  const match = getMatchForHole(selectedPairing, hole);
+                                  const isTeamFormat = match?.format?.score_input_type === 'team';
+                                  
+                                  // For team formats, only render input for first player in team (with rowspan)
+                                  if (isTeamFormat && !isFirstPlayerInTeam) {
+                                    return null; // Skip this cell, it's merged with the one above
+                                  }
+                                  
+                                  return (
+                                    <td 
+                                      key={hole} 
+                                      className="px-1 py-2 text-center border-r border-gray-300"
+                                      rowSpan={isTeamFormat ? teamSize : 1}
+                                    >
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        max="15"
+                                        value={holeScores[hole]?.[player.user_id] || ''}
+                                        onChange={(e) => handleScoreChange(hole, player.user_id, parseInt(e.target.value) || 0)}
+                                        className="w-full px-1 py-1 text-center text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        placeholder="-"
+                                        title={isTeamFormat ? `Team ${player.team?.name} score` : `${player.user?.name}'s score`}
+                                      />
+                                    </td>
+                                  );
+                                })}
+                                <td className="px-2 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50">
+                                  {front9 > 0 ? front9 : '-'}
                                 </td>
-                              ))}
-                              <td className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-50">
-                                {back9 > 0 ? back9 : '-'}
-                              </td>
-                              <td className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-green-100">
-                                {total > 0 ? total : '-'}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                                {/* Back 9 */}
+                                {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => {
+                                  const match = getMatchForHole(selectedPairing, hole);
+                                  const isTeamFormat = match?.format?.score_input_type === 'team';
+                                  
+                                  // For team formats, only render input for first player in team (with rowspan)
+                                  if (isTeamFormat && !isFirstPlayerInTeam) {
+                                    return null; // Skip this cell, it's merged with the one above
+                                  }
+                                  
+                                  return (
+                                    <td 
+                                      key={hole} 
+                                      className="px-1 py-2 text-center border-r border-gray-300"
+                                      rowSpan={isTeamFormat ? teamSize : 1}
+                                    >
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        max="15"
+                                        value={holeScores[hole]?.[player.user_id] || ''}
+                                        onChange={(e) => handleScoreChange(hole, player.user_id, parseInt(e.target.value) || 0)}
+                                        className="w-full px-1 py-1 text-center text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        placeholder="-"
+                                        title={isTeamFormat ? `Team ${player.team?.name} score` : `${player.user?.name}'s score`}
+                                      />
+                                    </td>
+                                  );
+                                })}
+                                <td className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-50">
+                                  {back9 > 0 ? back9 : '-'}
+                                </td>
+                                <td className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-green-100">
+                                  {total > 0 ? total : '-'}
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
                       </tbody>
                     </table>
                   </div>
