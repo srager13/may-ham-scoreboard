@@ -1000,6 +1000,26 @@ const ScoreInterface: React.FC = () => {
                     {/* Team 1 Players */}
                     <div className="text-xs text-gray-600 mb-2">
                       {(() => {
+                        // For singles matches, show only the player for this match number
+                        if (match.format?.players_per_side === 1) {
+                          // Try to use actual match players if available
+                          if (match.players && match.players.length > 0) {
+                            const team1Players = match.players
+                              .filter(mp => mp.team_id === match.team1_id)
+                              .sort((a, b) => a.player_order - b.player_order);
+                            return team1Players[0]?.user?.name || '';
+                          }
+                          
+                          // Fallback: use pairing players
+                          const teamPlayers = (pairing.players || [])
+                            .filter(p => p.team_id === match.team1_id)
+                            .sort((a, b) => a.player_order - b.player_order);
+                          const playerIndex = (match.match_number - 1) % teamPlayers.length;
+                          const player = teamPlayers[playerIndex];
+                          return player?.user?.name || '';
+                        }
+                        
+                        // For team matches, show all team players
                         // Use actual match players if available
                         if (match.players && match.players.length > 0) {
                           const team1Players = match.players
@@ -1008,19 +1028,10 @@ const ScoreInterface: React.FC = () => {
                           return team1Players.map(p => p.user?.name).join(' & ');
                         }
                         
-                        // Fallback: use pairing players (for in-progress matches)
+                        // Fallback: use pairing players
                         const teamPlayers = (pairing.players || [])
                           .filter(p => p.team_id === match.team1_id)
                           .sort((a, b) => a.player_order - b.player_order);
-                        
-                        // For singles matches, show only the player for this match number
-                        if (match.format?.players_per_side === 1) {
-                          const playerIndex = (match.match_number - 1) % teamPlayers.length;
-                          const player = teamPlayers[playerIndex];
-                          return player?.user?.name || '';
-                        }
-                        
-                        // For team matches, show all team players
                         return teamPlayers.map(p => p.user?.name).join(' & ');
                       })()}
                     </div>
@@ -1060,6 +1071,26 @@ const ScoreInterface: React.FC = () => {
                     {/* Team 2 Players */}
                     <div className="text-xs text-gray-600 mb-2">
                       {(() => {
+                        // For singles matches, show only the player for this match number
+                        if (match.format?.players_per_side === 1) {
+                          // Try to use actual match players if available
+                          if (match.players && match.players.length > 0) {
+                            const team2Players = match.players
+                              .filter(mp => mp.team_id === match.team2_id)
+                              .sort((a, b) => a.player_order - b.player_order);
+                            return team2Players[0]?.user?.name || '';
+                          }
+                          
+                          // Fallback: use pairing players
+                          const teamPlayers = (pairing.players || [])
+                            .filter(p => p.team_id === match.team2_id)
+                            .sort((a, b) => a.player_order - b.player_order);
+                          const playerIndex = (match.match_number - 1) % teamPlayers.length;
+                          const player = teamPlayers[playerIndex];
+                          return player?.user?.name || '';
+                        }
+                        
+                        // For team matches, show all team players
                         // Use actual match players if available
                         if (match.players && match.players.length > 0) {
                           const team2Players = match.players
@@ -1068,19 +1099,10 @@ const ScoreInterface: React.FC = () => {
                           return team2Players.map(p => p.user?.name).join(' & ');
                         }
                         
-                        // Fallback: use pairing players (for in-progress matches)
+                        // Fallback: use pairing players
                         const teamPlayers = (pairing.players || [])
                           .filter(p => p.team_id === match.team2_id)
                           .sort((a, b) => a.player_order - b.player_order);
-                        
-                        // For singles matches, show only the player for this match number
-                        if (match.format?.players_per_side === 1) {
-                          const playerIndex = (match.match_number - 1) % teamPlayers.length;
-                          const player = teamPlayers[playerIndex];
-                          return player?.user?.name || '';
-                        }
-                        
-                        // For team matches, show all team players
                         return teamPlayers.map(p => p.user?.name).join(' & ');
                       })()}
                     </div>
