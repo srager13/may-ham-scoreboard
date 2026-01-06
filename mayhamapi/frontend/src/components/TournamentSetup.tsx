@@ -510,18 +510,21 @@ const TournamentSetup = () => {
 
             const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => {
               // Collect user IDs for this match from team1_players and team2_players indices
+              // Note: team1_players/team2_players contain indices into teams[].players, not pairing.players
               const playerUserIds: string[] = [];
               if (match.team1_players && Array.isArray(match.team1_players)) {
-                match.team1_players.forEach(playerIdx => {
-                  if (pairing.players && pairing.players[playerIdx]) {
-                    playerUserIds.push(pairing.players[playerIdx].user_id);
+                match.team1_players.forEach(teamPlayerIdx => {
+                  // teamPlayerIdx is an index into teams[0].players
+                  if (teams[0] && teams[0].players[teamPlayerIdx]) {
+                    playerUserIds.push(teams[0].players[teamPlayerIdx].id);
                   }
                 });
               }
               if (match.team2_players && Array.isArray(match.team2_players)) {
-                match.team2_players.forEach(playerIdx => {
-                  if (pairing.players && pairing.players[playerIdx]) {
-                    playerUserIds.push(pairing.players[playerIdx].user_id);
+                match.team2_players.forEach(teamPlayerIdx => {
+                  // teamPlayerIdx is an index into teams[1].players
+                  if (teams[1] && teams[1].players[teamPlayerIdx]) {
+                    playerUserIds.push(teams[1].players[teamPlayerIdx].id);
                   }
                 });
               }
@@ -625,18 +628,21 @@ const TournamentSetup = () => {
 
             const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => {
               // Collect user IDs for this match from team1_players and team2_players indices
+              // Note: team1_players/team2_players contain indices into teams[].players, not pairing.players
               const playerUserIds: string[] = [];
               if (match.team1_players && Array.isArray(match.team1_players)) {
-                match.team1_players.forEach(playerIdx => {
-                  if (pairing.players && pairing.players[playerIdx]) {
-                    playerUserIds.push(pairing.players[playerIdx].user_id);
+                match.team1_players.forEach(teamPlayerIdx => {
+                  // teamPlayerIdx is an index into teams[0].players
+                  if (teams[0] && teams[0].players[teamPlayerIdx]) {
+                    playerUserIds.push(teams[0].players[teamPlayerIdx].id);
                   }
                 });
               }
               if (match.team2_players && Array.isArray(match.team2_players)) {
-                match.team2_players.forEach(playerIdx => {
-                  if (pairing.players && pairing.players[playerIdx]) {
-                    playerUserIds.push(pairing.players[playerIdx].user_id);
+                match.team2_players.forEach(teamPlayerIdx => {
+                  // teamPlayerIdx is an index into teams[1].players
+                  if (teams[1] && teams[1].players[teamPlayerIdx]) {
+                    playerUserIds.push(teams[1].players[teamPlayerIdx].id);
                   }
                 });
               }

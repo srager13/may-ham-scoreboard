@@ -333,6 +333,75 @@ const ScoreInterface: React.FC = () => {
   const completePairing = async (pairingId: string) => {
     try {
       setError(null);
+      
+      // First, check if there are unsaved scores and submit them
+      const hasUnsavedScores = Object.values(holeScores).some(hole => 
+        Object.values(hole).filter(score => score > 0).length > 0
+      );
+      
+      if (hasUnsavedScores) {
+        console.log('Auto-submitting unsaved scores before completing pairing...');
+        setIsSubmitting(true);
+        
+        // Submit the scores (reusing submitHoleScores logic)
+        if (!selectedPairing) {
+          throw new Error('No pairing selected');
+        }
+
+        const validPlayerIds = new Set(selectedPairing.players?.map(p => p.user_id) || []);
+        
+        // Submit scores for each hole that has data
+        const holesToSubmit = Object.keys(holeScores)
+          .map(h => parseInt(h))
+          .filter(holeNum => {
+            const holeData = holeScores[holeNum];
+            return Object.values(holeData || {}).some(score => score > 0);
+          });
+
+        if (holesToSubmit.length > 0) {
+          for (const holeNum of holesToSubmit) {
+            const holeData = holeScores[holeNum];
+            
+            const scoresArray = Object.entries(holeData)
+              .filter(([userId, strokes]) => {
+                if (!userId || userId === '' || strokes === 0 || strokes === null || strokes === undefined) {
+                  return false;
+                }
+                if (!validPlayerIds.has(userId)) {
+                  console.error('ERROR: user_id not in pairing players:', userId);
+                  return false;
+                }
+                return true;
+              })
+              .map(([userId, strokes]) => ({
+                user_id: userId,
+                strokes: strokes
+              }));
+
+            if (scoresArray.length > 0) {
+              console.log(`Auto-submitting hole ${holeNum}:`, scoresArray);
+              await apiClient.submitPairingScores(selectedPairing.id, {
+                hole_number: holeNum,
+                scores: scoresArray
+              });
+            }
+          }
+          
+          // Update local state with submitted scores
+          setSelectedPairing(prev => ({
+            ...prev!,
+            scores: {
+              ...prev!.scores,
+              ...holeScores
+            }
+          }));
+          
+          console.log('Auto-submit completed successfully');
+        }
+        
+        setIsSubmitting(false);
+      }
+      
       // Update pairing status to completed
       await apiClient.updatePairingStatus(pairingId, 'completed');
       
@@ -352,6 +421,7 @@ const ScoreInterface: React.FC = () => {
     } catch (err) {
       console.error('Error completing pairing:', err);
       setError(err instanceof ApiError ? err.message : 'Failed to complete pairing');
+      setIsSubmitting(false);
     }
   };
 

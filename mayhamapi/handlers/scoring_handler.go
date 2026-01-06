@@ -36,7 +36,7 @@ func (h *ScoringHandler) SubmitScores(c *gin.Context) {
 	// Submit each score to the database
 	var submittedScores []models.Score
 	for _, holeScore := range req.Scores {
-		score, err := h.repo.SubmitScore(matchID, holeScore.UserID, req.HoleNumber, holeScore.Strokes)
+		score, err := h.repo.SubmitScoreByMatch(matchID, holeScore.UserID, req.HoleNumber, holeScore.Strokes)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -128,7 +128,7 @@ func (h *ScoringHandler) UpdateHoleScore(c *gin.Context) {
 	// Update scores for the specific hole
 	var updatedScores []models.Score
 	for _, holeScore := range req.Scores {
-		score, err := h.repo.SubmitScore(matchID, holeScore.UserID, holeNumber, holeScore.Strokes)
+		score, err := h.repo.SubmitScoreByMatch(matchID, holeScore.UserID, holeNumber, holeScore.Strokes)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
