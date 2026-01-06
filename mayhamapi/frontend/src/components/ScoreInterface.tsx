@@ -938,6 +938,14 @@ const ScoreInterface: React.FC = () => {
         </div>
 
         {pairing.matchResults.map((match, idx) => {
+          console.log(`[Match ${match.match_number}] match_players:`, match.match_players);
+          console.log(`[Match ${match.match_number}] Has match_players:`, !!match.match_players);
+          if (match.match_players) {
+            console.log(`[Match ${match.match_number}] match_players length:`, match.match_players.length);
+            console.log(`[Match ${match.match_number}] Team1 players:`, match.match_players.filter(mp => mp.team_id === match.team1_id).map(mp => mp.user?.name));
+            console.log(`[Match ${match.match_number}] Team2 players:`, match.match_players.filter(mp => mp.team_id === match.team2_id).map(mp => mp.user?.name));
+          }
+          
           const team1Won = match.team1_points > match.team2_points;
           const team2Won = match.team2_points > match.team1_points;
           const tied = match.team1_points === match.team2_points;
@@ -1003,8 +1011,8 @@ const ScoreInterface: React.FC = () => {
                         // For singles matches, show only the player for this match number
                         if (match.format?.players_per_side === 1) {
                           // Try to use actual match players if available
-                          if (match.players && match.players.length > 0) {
-                            const team1Players = match.players
+                          if (match.match_players && match.match_players.length > 0) {
+                            const team1Players = match.match_players
                               .filter(mp => mp.team_id === match.team1_id)
                               .sort((a, b) => a.player_order - b.player_order);
                             return team1Players[0]?.user?.name || '';
@@ -1021,8 +1029,8 @@ const ScoreInterface: React.FC = () => {
                         
                         // For team matches, show all team players
                         // Use actual match players if available
-                        if (match.players && match.players.length > 0) {
-                          const team1Players = match.players
+                        if (match.match_players && match.match_players.length > 0) {
+                          const team1Players = match.match_players
                             .filter(mp => mp.team_id === match.team1_id)
                             .sort((a, b) => a.player_order - b.player_order);
                           return team1Players.map(p => p.user?.name).join(' & ');
@@ -1074,8 +1082,8 @@ const ScoreInterface: React.FC = () => {
                         // For singles matches, show only the player for this match number
                         if (match.format?.players_per_side === 1) {
                           // Try to use actual match players if available
-                          if (match.players && match.players.length > 0) {
-                            const team2Players = match.players
+                          if (match.match_players && match.match_players.length > 0) {
+                            const team2Players = match.match_players
                               .filter(mp => mp.team_id === match.team2_id)
                               .sort((a, b) => a.player_order - b.player_order);
                             return team2Players[0]?.user?.name || '';
@@ -1092,8 +1100,8 @@ const ScoreInterface: React.FC = () => {
                         
                         // For team matches, show all team players
                         // Use actual match players if available
-                        if (match.players && match.players.length > 0) {
-                          const team2Players = match.players
+                        if (match.match_players && match.match_players.length > 0) {
+                          const team2Players = match.match_players
                             .filter(mp => mp.team_id === match.team2_id)
                             .sort((a, b) => a.player_order - b.player_order);
                           return team2Players.map(p => p.user?.name).join(' & ');

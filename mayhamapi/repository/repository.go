@@ -315,6 +315,7 @@ func (r *Repository) CreatePairing(roundID string, req *models.CreatePairingRequ
 			StartHole:       matchReq.StartHole,
 			EndHole:         matchReq.EndHole,
 			PointsAvailable: &pointsAvailable,
+			PlayerUserIDs:   matchReq.PlayerUserIDs, // Pass through specific player assignments
 		}
 		if _, err := r.CreateMatchForPairing(pairing.ID, roundID, i+1, matchCreateReq); err != nil {
 			return nil, fmt.Errorf("failed to create match for pairing: %w", err)
@@ -682,16 +683,34 @@ func (r *Repository) GetMatchesByPairing(pairingID string) ([]models.Match, erro
 // ============================================
 
 func (r *Repository) SubmitScore(pairingID, userID string, holeNumber, strokes int) (*models.Score, error) {
+	// Get tournament scoring method to determine if we need to calculate Stableford points
+	scoringMethod, err := r.getTournamentScoringMethodFromPairing(pairingID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tournament scoring method: %w", err)
+	}
+
+	var stablefordPoints *int
+	if scoringMethod == "stableford" {
+		// Calculate Stableford points
+		points, err := r.calculateStablefordPointsForScore(pairingID, userID, holeNumber, strokes)
+		if err != nil {
+			// Log error but don't fail - just don't set Stableford points
+			fmt.Printf("Warning: failed to calculate Stableford points: %v\n", err)
+		} else {
+			stablefordPoints = &points
+		}
+	}
+
 	query := `
-		INSERT INTO hole_scores (pairing_id, user_id, hole_number, strokes, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		INSERT INTO hole_scores (pairing_id, user_id, hole_number, strokes, stableford_points, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		ON CONFLICT (pairing_id, user_id, hole_number) 
-		DO UPDATE SET strokes = EXCLUDED.strokes, updated_at = CURRENT_TIMESTAMP
+		DO UPDATE SET strokes = EXCLUDED.strokes, stableford_points = EXCLUDED.stableford_points, updated_at = CURRENT_TIMESTAMP
 		RETURNING id, pairing_id, user_id, hole_number, strokes, stableford_points, created_at, updated_at
 	`
 
 	var score models.Score
-	err := r.db.QueryRow(query, pairingID, userID, holeNumber, strokes).Scan(
+	err = r.db.QueryRow(query, pairingID, userID, holeNumber, strokes, stablefordPoints).Scan(
 		&score.ID, &score.PairingID, &score.UserID, &score.HoleNumber,
 		&score.Strokes, &score.StablefordPoints, &score.CreatedAt, &score.UpdatedAt,
 	)
@@ -701,6 +720,62 @@ func (r *Repository) SubmitScore(pairingID, userID string, holeNumber, strokes i
 	}
 
 	return &score, nil
+}
+
+// Helper method to get tournament scoring method from a pairing
+func (r *Repository) getTournamentScoringMethodFromPairing(pairingID string) (string, error) {
+	query := `
+		SELECT t.scoring_method
+		FROM pairings p
+		JOIN rounds r ON p.round_id = r.id
+		JOIN tournaments t ON r.tournament_id = t.id
+		WHERE p.id = $1
+	`
+	var scoringMethod string
+	err := r.db.QueryRow(query, pairingID).Scan(&scoringMethod)
+	if err != nil {
+		return "", fmt.Errorf("failed to get scoring method: %w", err)
+	}
+	return scoringMethod, nil
+}
+
+// Helper method to calculate Stableford points for a score
+func (r *Repository) calculateStablefordPointsForScore(pairingID, userID string, holeNumber, strokes int) (int, error) {
+	// Get hole par from golf course tee
+	var holePar int
+	parQuery := `
+		SELECT gch.par
+		FROM pairings p
+		JOIN golf_course_tees gct ON p.golf_course_tee_id = gct.id
+		JOIN golf_course_holes gch ON gch.tee_id = gct.id
+		WHERE p.id = $1 AND gch.hole_number = $2
+	`
+	err := r.db.QueryRow(parQuery, pairingID, holeNumber).Scan(&holePar)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get hole par: %w", err)
+	}
+
+	// Calculate Stableford points based on gross score vs par
+	// Points: albatross(5), eagle(4), birdie(3), par(2), bogey(1), double bogey or worse(0)
+	scoreToPar := strokes - holePar
+
+	var points int
+	switch {
+	case scoreToPar <= -3:
+		points = 5 // Albatross or better
+	case scoreToPar == -2:
+		points = 4 // Eagle
+	case scoreToPar == -1:
+		points = 3 // Birdie
+	case scoreToPar == 0:
+		points = 2 // Par
+	case scoreToPar == 1:
+		points = 1 // Bogey
+	default:
+		points = 0 // Double bogey or worse
+	}
+
+	return points, nil
 }
 
 // Legacy method - submit score by matchID (will find pairing from match)
