@@ -11,33 +11,27 @@ TODOs:
     - LEADERBOARD:
         - Make it more obvious when a team has won
         - Implement individual statistics
+        - Show live matches
 
     - SCORING:
-        - make score entry look like a scorecard
-        - Fix scoring and leaderboard updates
         - Make scoring a separate page for each hole (?)
         - Check high-low scoring
 
     - GROUPS:
-        - bulk add members to group?
-        - maybe add buttons like teams?
 
     - TOURNAMENT SETUP:
         - refactor:
             - set matches for a round and auto-populate the pairings with the same matches
-        - matches - choose hole selection from drop-downs instead of entering hole numbers
         - set tee time to 10 minutes from previous pairing by default
 
-    - ADD GOLF COURSES:
-        - Add course name, location, etc. to Rounds
-        - Update submit score pages to include course information
+    - GOLF COURSES:
         
     - PRODUCTIONIZE:
-        - Remove passwords from repo and add gitignores
-        - Create a dev and prod database version
-        - Create dev and prod versions of the servers
+        - Remove passwords from repo and add gitignores   ***
+        - Create a dev and prod database version          ***
+        - Create dev and prod versions of the servers     ***
             - protect the api/server (firewall?)
-        - Create a release process
+        - Create a release process                        ***
         - Put load balancer in front of server?
         - Backup database to obj storage?
         - Better testing - end-to-end/integration testing?
