@@ -119,12 +119,17 @@ else
 fi
 
 # Step 8: Deploy backend
-log_info "Step 8: Deploying backend binary..."
+log_info "Step 8: Deploying backend binary and db schema..."
 cd "$PROJECT_ROOT"
 sudo cp "mayhamapi-${VERSION_TAG}" "$DEPLOY_DIR/backend/mayhamapi"
 sudo chown golftournament:golftournament "$DEPLOY_DIR/backend/mayhamapi"
 sudo chmod +x "$DEPLOY_DIR/backend/mayhamapi"
-log_success "Backend binary deployed"
+
+cd "$PROJECT_ROOT"
+mkdir "$DEPLOY_DIR/backend/mayhamapi/db"
+sudo cp "db/golf_db_schema.sql $DEPLOY_DIR/backend/mayhamapi/db/"
+sudo chown golftournament:golftournament "$DEPLOY_DIR/backend/mayhamapi/db/golf_db_schema.sql"
+log_success "Backend binary and DB schema deployed"
 
 # Step 9: Deploy frontend
 log_info "Step 9: Deploying frontend static files..."
