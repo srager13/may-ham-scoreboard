@@ -91,9 +91,16 @@ func setupRouter(
 	r.Use(middleware.Logger())
 	r.Use(middleware.RequestID())
 
-	// Serve static files
-	r.Static("/static", "./static")
-	r.StaticFile("/", "./static/index.html")
+	// Serve static files from root (assets, vite.svg, etc.)
+	// This must come before other routes
+	r.Static("/assets", "./static/assets")
+	r.StaticFile("/vite.svg", "./static/vite.svg")
+	r.StaticFile("/favicon.ico", "./static/favicon.ico")
+	
+	// Serve index.html at root
+	r.GET("/", func(c *gin.Context) {
+		c.File("./static/index.html")
+	})
 
 	// Handle client-side routing for SPA
 	r.NoRoute(func(c *gin.Context) {
