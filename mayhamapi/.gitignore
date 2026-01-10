@@ -1,4 +1,9 @@
 .env**
 mayhamapi
+mayhamapi-*
 tmp/
 static/
+*.key
+*.pem
+backups/
+*.backup

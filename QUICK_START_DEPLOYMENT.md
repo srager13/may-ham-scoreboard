@@ -112,7 +112,20 @@ npm run build
 
 ## 📝 Critical Security Updates
 
+1. **Cretate production database user**
 **BEFORE going to production, change these:**
+sudo -u postgres psql << 'EOF'
+-- Create prod user with password
+CREATE USER mayham_prod_user WITH PASSWORD 'CHANGE_ME';
+
+-- Grant privileges on production database
+GRANT CONNECT ON DATABASE mayham_prod TO mayham_prod_user;
+\c mayham_prod
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO mayham_prod_user;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO mayham_prod_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO mayham_prod_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO mayham_prod_user;
+EOF
 
 1. **Production Database Password:**
    ```bash
