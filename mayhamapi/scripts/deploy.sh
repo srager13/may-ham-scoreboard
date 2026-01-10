@@ -126,9 +126,8 @@ sudo chown golftournament:golftournament "$DEPLOY_DIR/backend/mayhamapi"
 sudo chmod +x "$DEPLOY_DIR/backend/mayhamapi"
 
 cd "$PROJECT_ROOT"
-sudo mkdir "$DEPLOY_DIR/backend/mayhamapi/db"
-sudo cp "db/golf_db_schema.sql $DEPLOY_DIR/backend/mayhamapi/db/"
-sudo chown golftournament:golftournament "$DEPLOY_DIR/backend/mayhamapi/db/golf_db_schema.sql"
+sudo cp "db/golf_db_schema.sql $DEPLOY_DIR/backend/db/golf_db_schema.sql"
+sudo chown -R golftournament:golftournament "$DEPLOY_DIR/backend/db"
 log_success "Backend binary and DB schema deployed"
 
 # Step 9: Deploy frontend

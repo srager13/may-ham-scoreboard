@@ -29,7 +29,7 @@ fi
 
 # Step 2: Create directories
 log_info "Step 2: Creating directories..."
-mkdir -p "$DEPLOY_DIR/backend"
+mkdir -p "$DEPLOY_DIR/backend/db"
 mkdir -p "$DEPLOY_DIR/logs"
 mkdir -p /var/log/golf-tournament
 mkdir -p /var/backups/golf-tournament/{daily,weekly,monthly,deployments}
