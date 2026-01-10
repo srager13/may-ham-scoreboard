@@ -18,8 +18,16 @@ import (
 
 func main() {
 	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using system environment variables")
+	// Check for ENV_FILE environment variable to support multiple environments
+	envFile := os.Getenv("ENV_FILE")
+	if envFile == "" {
+		envFile = ".env" // fallback to default
+	}
+
+	if err := godotenv.Load(envFile); err != nil {
+		log.Printf("No %s file found, using system environment variables\n", envFile)
+	} else {
+		log.Printf("Loaded environment from %s\n", envFile)
 	}
 
 	// Initialize database

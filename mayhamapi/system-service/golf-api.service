@@ -9,7 +9,8 @@
 
 [Unit]
 Description=Golf Tournament API Service
-After=network.target
+After=network.target postgresql.service
+Wants=postgresql.service
 StartLimitIntervalSec=0
 
 [Service]
@@ -17,13 +18,28 @@ Type=simple
 Restart=always
 RestartSec=10
 User=golftournament
+Group=golftournament
 WorkingDirectory=/opt/golf-tournament/backend
-ExecStart=/opt/golf-tournament/backend/golf-api
-Environment="PORT=8080"
-Environment="DATABASE_URL=postgresql://user:password@localhost/golf_db"
-Environment="JWT_SECRET=your-secret-key-here"
+EnvironmentFile=/opt/golf-tournament/backend/.env.production
+ExecStart=/opt/golf-tournament/backend/mayhamapi
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/golf-tournament /var/backups/golf-tournament
+RuntimeDirectory=golf-tournament
+RuntimeDirectoryMode=0755
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=1G
+
+# Logging
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=golf-api
 
 [Install]
 WantedBy=multi-user.target

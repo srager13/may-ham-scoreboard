@@ -1,18 +1,25 @@
 # Makefile for Golf Tournament API
 
-.PHONY: build run test test-integration test-unit clean dev
+.PHONY: build run test test-integration test-unit clean dev build-prod
+
+# Environment file (can be overridden: ENV_FILE=.env.production make run)
+ENV_FILE ?= .env.development
 
 # Build the application
 build:
 	go build -o mayhamapi
 
+# Build for production
+build-prod:
+	CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o mayhamapi
+
 # Run the application
 run: build
-	./mayhamapi
+	ENV_FILE=$(ENV_FILE) ./mayhamapi
 
 # Run development server with live reload (requires air: go install github.com/air-verse/air@latest)
 dev:
-	PATH=$$PATH:/root/go/bin air
+	ENV_FILE=$(ENV_FILE) PATH=$$PATH:/root/go/bin air
 
 # Run all tests
 test:

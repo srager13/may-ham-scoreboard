@@ -1,4 +1,13 @@
 .env
+.env.development
+.env.production
+.env.local
+.env.*.local
 mayhamapi
+mayhamapi-*
 tmp/
 static/
+*.key
+*.pem
+backups/
+*.backup
