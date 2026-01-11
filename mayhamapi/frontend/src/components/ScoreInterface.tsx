@@ -1632,15 +1632,114 @@ const ScoreInterface: React.FC = () => {
                             playersByTeam.get(teamId)!.push(player);
                           });
 
-                          return (selectedPairing.players || []).map((player, playerIdx) => {
+                          // Debug logging: Log team information
+                          console.log('=== SCORECARD DEBUG INFO ===');
+                          console.log('Pairing ID:', selectedPairing.id);
+                          playersByTeam.forEach((players, teamId) => {
+                            const team = players[0]?.team;
+                            console.log(`Team ${team?.name || teamId}:`, {
+                              teamId,
+                              teamName: team?.name,
+                              teamColor: team?.color,
+                              playerCount: players.length,
+                              players: players.map(p => p.user?.name)
+                            });
+                          });
+
+                          // Debug logging: Log format info for front 9 and back 9
+                          const front9Match = getMatchForHole(selectedPairing, 1);
+                          const back9Match = getMatchForHole(selectedPairing, 10);
+                          console.log('Front 9 (Holes 1-9):', {
+                            match: front9Match ? {
+                              id: front9Match.id,
+                              match_number: front9Match.match_number,
+                              start_hole: front9Match.start_hole,
+                              end_hole: front9Match.end_hole,
+                              format: front9Match.format ? {
+                                id: front9Match.format.id,
+                                name: front9Match.format.name,
+                                score_input_type: front9Match.format.score_input_type,
+                                scoring_type: front9Match.format.scoring_type
+                              } : null
+                            } : null,
+                            isTeamFormat: front9Match?.format?.score_input_type === 'team'
+                          });
+                          console.log('Back 9 (Holes 10-18):', {
+                            match: back9Match ? {
+                              id: back9Match.id,
+                              match_number: back9Match.match_number,
+                              start_hole: back9Match.start_hole,
+                              end_hole: back9Match.end_hole,
+                              format: back9Match.format ? {
+                                id: back9Match.format.id,
+                                name: back9Match.format.name,
+                                score_input_type: back9Match.format.score_input_type,
+                                scoring_type: back9Match.format.scoring_type
+                              } : null
+                            } : null,
+                            isTeamFormat: back9Match?.format?.score_input_type === 'team'
+                          });
+
+                          // Log all matches for this pairing
+                          console.log('All matches in pairing:', selectedPairing.matches?.map(m => ({
+                            id: m.id,
+                            match_number: m.match_number,
+                            start_hole: m.start_hole,
+                            end_hole: m.end_hole,
+                            format: m.format ? {
+                              name: m.format.name,
+                              score_input_type: m.format.score_input_type,
+                              scoring_type: m.format.scoring_type
+                            } : null
+                          })));
+                          console.log('===========================');
+
+                          // Sort players by team, then by player_order within each team
+                          // This ensures teammates are grouped together for proper rowspan handling
+                          const sortedPlayers = [...(selectedPairing.players || [])].sort((a, b) => {
+                            // First sort by team_id
+                            if (a.team_id !== b.team_id) {
+                              return a.team_id.localeCompare(b.team_id);
+                            }
+                            // Then by player_order within the same team
+                            return (a.player_order || 0) - (b.player_order || 0);
+                          });
+
+                          console.log('Original player order:', (selectedPairing.players || []).map((p, idx) => ({
+                            index: idx,
+                            name: p.user?.name,
+                            team: p.team?.name,
+                            teamId: p.team_id,
+                            playerOrder: p.player_order
+                          })));
+                          console.log('Sorted player order:', sortedPlayers.map((p, idx) => ({
+                            index: idx,
+                            name: p.user?.name,
+                            team: p.team?.name,
+                            teamId: p.team_id,
+                            playerOrder: p.player_order
+                          })));
+
+                          return sortedPlayers.map((player, playerIdx) => {
                             const isFirstInTeam = playerIdx === 0 || 
-                              selectedPairing.players![playerIdx - 1].team_id !== player.team_id;
+                              sortedPlayers[playerIdx - 1].team_id !== player.team_id;
                             
                             // Get teammates for this player
                             const teammates = playersByTeam.get(player.team_id) || [];
                             const playerIndexInTeam = teammates.findIndex(p => p.user_id === player.user_id);
                             const isFirstPlayerInTeam = playerIndexInTeam === 0;
                             const teamSize = teammates.length;
+                            
+                            // Debug logging for each player
+                            if (playerIdx === 0) {
+                              console.log(`[Player Row ${playerIdx}] ${player.user?.name}:`, {
+                                teamId: player.team_id,
+                                teamName: player.team?.name,
+                                isFirstPlayerInTeam,
+                                teamSize,
+                                teammates: teammates.map(t => t.user?.name)
+                              });
+                            }
                             
                             // Calculate front 9, back 9, and total
                             const front9 = Array.from({ length: 9 }, (_, i) => i + 1)
@@ -1670,6 +1769,19 @@ const ScoreInterface: React.FC = () => {
                                   const match = getMatchForHole(selectedPairing, hole);
                                   const isTeamFormat = match?.format?.score_input_type === 'team';
                                   
+                                  // Debug logging for front 9 holes (only for first player, first hole)
+                                  if (playerIdx === 0 && hole === 1) {
+                                    console.log(`[Front 9 Holes] Hole ${hole}:`, {
+                                      matchId: match?.id,
+                                      matchNumber: match?.match_number,
+                                      startHole: match?.start_hole,
+                                      endHole: match?.end_hole,
+                                      formatName: match?.format?.name,
+                                      scoreInputType: match?.format?.score_input_type,
+                                      isTeamFormat
+                                    });
+                                  }
+                                  
                                   // For team formats, only render input for first player in team (with rowspan)
                                   if (isTeamFormat && !isFirstPlayerInTeam) {
                                     return null; // Skip this cell, it's merged with the one above
@@ -1694,14 +1806,49 @@ const ScoreInterface: React.FC = () => {
                                     </td>
                                   );
                                 })}
-                                <td className="px-2 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50">
-                                  {front9 > 0 ? front9 : '-'}
-                                </td>
+                                {/* Check if front 9 uses team format to determine if "Out" column should have rowspan */}
+                                {(() => {
+                                  // Check if any hole in front 9 uses team format
+                                  const front9Match = getMatchForHole(selectedPairing, 1);
+                                  const front9IsTeamFormat = front9Match?.format?.score_input_type === 'team';
+                                  
+                                  // Debug logging for "Out" column
+                                  if (playerIdx === 0) {
+                                    console.log(`[Out Column] Player: ${player.user?.name}, isFirstPlayerInTeam: ${isFirstPlayerInTeam}, front9IsTeamFormat: ${front9IsTeamFormat}, teamSize: ${teamSize}, willRender: ${!(front9IsTeamFormat && !isFirstPlayerInTeam)}`);
+                                  }
+                                  
+                                  // For team formats, only render "Out" column for first player in team (with rowspan)
+                                  if (front9IsTeamFormat && !isFirstPlayerInTeam) {
+                                    return null; // Skip this cell, it's merged with the one above
+                                  }
+                                  
+                                  return (
+                                    <td 
+                                      className="px-2 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50"
+                                      rowSpan={front9IsTeamFormat ? teamSize : 1}
+                                    >
+                                      {front9 > 0 ? front9 : '-'}
+                                    </td>
+                                  );
+                                })()}
                                 {/* Back 9 */}
                                 {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => {
                                   const match = getMatchForHole(selectedPairing, hole);
                                   const isTeamFormat = match?.format?.score_input_type === 'team';
                                   
+                                  // Debug logging for back 9 holes (only for first player, first hole)
+                                  if (playerIdx === 0 && hole === 10) {
+                                    console.log(`[Back 9 Holes] Hole ${hole}:`, {
+                                      matchId: match?.id,
+                                      matchNumber: match?.match_number,
+                                      startHole: match?.start_hole,
+                                      endHole: match?.end_hole,
+                                      formatName: match?.format?.name,
+                                      scoreInputType: match?.format?.score_input_type,
+                                      isTeamFormat
+                                    });
+                                  }
+                                  
                                   // For team formats, only render input for first player in team (with rowspan)
                                   if (isTeamFormat && !isFirstPlayerInTeam) {
                                     return null; // Skip this cell, it's merged with the one above
@@ -1726,12 +1873,56 @@ const ScoreInterface: React.FC = () => {
                                     </td>
                                   );
                                 })}
-                                <td className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-50">
-                                  {back9 > 0 ? back9 : '-'}
-                                </td>
-                                <td className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-green-100">
-                                  {total > 0 ? total : '-'}
-                                </td>
+                                {/* Check if back 9 uses team format to determine if "In" column should have rowspan */}
+                                {(() => {
+                                  // Check if any hole in back 9 uses team format
+                                  const back9Match = getMatchForHole(selectedPairing, 10);
+                                  const back9IsTeamFormat = back9Match?.format?.score_input_type === 'team';
+                                  
+                                  // Debug logging for "In" column
+                                  if (playerIdx === 0) {
+                                    console.log(`[In Column] Player: ${player.user?.name}, isFirstPlayerInTeam: ${isFirstPlayerInTeam}, back9IsTeamFormat: ${back9IsTeamFormat}, teamSize: ${teamSize}, willRender: ${!(back9IsTeamFormat && !isFirstPlayerInTeam)}`);
+                                  }
+                                  
+                                  // For team formats, only render "In" column for first player in team (with rowspan)
+                                  if (back9IsTeamFormat && !isFirstPlayerInTeam) {
+                                    return null; // Skip this cell, it's merged with the one above
+                                  }
+                                  
+                                  return (
+                                    <td 
+                                      className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-50"
+                                      rowSpan={back9IsTeamFormat ? teamSize : 1}
+                                    >
+                                      {back9 > 0 ? back9 : '-'}
+                                    </td>
+                                  );
+                                })()}
+                                {/* Check if back 9 uses team format to determine if "Total" column should have rowspan */}
+                                {(() => {
+                                  // Check if any hole in back 9 uses team format
+                                  const back9Match = getMatchForHole(selectedPairing, 10);
+                                  const back9IsTeamFormat = back9Match?.format?.score_input_type === 'team';
+                                  
+                                  // Debug logging for "Total" column
+                                  if (playerIdx === 0) {
+                                    console.log(`[Total Column] Player: ${player.user?.name}, isFirstPlayerInTeam: ${isFirstPlayerInTeam}, back9IsTeamFormat: ${back9IsTeamFormat}, teamSize: ${teamSize}, willRender: ${!(back9IsTeamFormat && !isFirstPlayerInTeam)}`);
+                                  }
+                                  
+                                  // For team formats, only render "Total" column for first player in team (with rowspan)
+                                  if (back9IsTeamFormat && !isFirstPlayerInTeam) {
+                                    return null; // Skip this cell, it's merged with the one above
+                                  }
+                                  
+                                  return (
+                                    <td 
+                                      className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-green-100"
+                                      rowSpan={back9IsTeamFormat ? teamSize : 1}
+                                    >
+                                      {total > 0 ? total : '-'}
+                                    </td>
+                                  );
+                                })()}
                               </tr>
                             );
                           });
