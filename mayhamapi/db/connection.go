@@ -25,6 +25,8 @@ func NewConnection() (*DB, error) {
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		dbHost, dbPort, dbUser, dbPassword, dbName, sslMode)
 
+	log.Print(dsn)
+
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
@@ -50,7 +52,7 @@ func (db *DB) Close() error {
 
 func (db *DB) RunMigrations() error {
 	log.Println("Running database migrations...")
-	
+
 	migrationSQL, err := os.ReadFile("db/golf_db_schema.sql")
 	if err != nil {
 		return fmt.Errorf("failed to read migration file: %w", err)
@@ -65,6 +67,11 @@ func (db *DB) RunMigrations() error {
 }
 
 func getEnvWithDefault(key, defaultValue string) string {
+	if val, set := os.LookupEnv(key); !set {
+		log.Printf("%s is not set", key)
+	} else {
+		log.Printf("%s is set to %s", key, val)
+	}
 	if value := os.Getenv(key); value != "" {
 		return value
 	}

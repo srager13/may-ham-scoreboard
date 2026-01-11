@@ -1,0 +1,45 @@
+# ============================================
+# SYSTEMD SERVICE FILES (Linux - Recommended)
+# ============================================
+
+# File: /etc/systemd/system/golf-api-dev.service
+# Install as root: sudo cp golf-api-dev.service /etc/systemd/system/
+# Then enable: sudo systemctl enable golf-api-dev.service
+# Start service: sudo systemctl start golf-api-dev.service
+
+[Unit]
+Description=Golf Tournament API Service (DEV)
+After=network.target postgresql.service
+Wants=postgresql.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+User=golftournament-dev
+Group=golftournament-dev
+WorkingDirectory=/root/may-ham-scoreboard/mayhamapi
+EnvironmentFile=/root/may-ham-scoreboard/mayhamapi/.env.development
+ExecStart=/root/go/bin/air
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+# ProtectHome=true - DISABLED: dev services need access to /root/may-ham-scoreboard
+ReadWritePaths=/var/log/golf-tournament-dev /var/backups/golf-tournament-dev
+RuntimeDirectory=golf-tournament-dev
+RuntimeDirectoryMode=0755
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=1G
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=golf-api-dev
+
+[Install]
+WantedBy=multi-user.target

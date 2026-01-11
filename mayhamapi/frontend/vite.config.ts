@@ -9,8 +9,12 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    host: '0.0.0.0', // Listen on all interfaces for nginx proxy
+    port: 5173,
+    strictPort: true,
     allowedHosts: [
       'mayhamscoreboard.com',
+      'dev.mayhamscoreboard.com'
     ],
     proxy: {
       '/api': {

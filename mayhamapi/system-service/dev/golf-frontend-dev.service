@@ -1,0 +1,32 @@
+# File: /etc/systemd/system/golf-frontend-dev.service
+# Install as root: sudo cp golf-frontend-dev.service /etc/systemd/system/
+# Then enable: sudo systemctl enable golf-frontend-dev.service
+# Start service: sudo systemctl start golf-frontend-dev.service
+
+[Unit]
+Description=Golf Tournament Frontend Service (DEV)
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+User=golftournament-dev
+Group=golftournament-dev
+WorkingDirectory=/root/may-ham-scoreboard/mayhamapi/frontend
+EnvironmentFile=/root/may-ham-scoreboard/mayhamapi/.env.development
+ExecStart=/usr/bin/npm run dev
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+# ProtectHome=true - DISABLED: dev services need access to /root/may-ham-scoreboard
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=golf-frontend-dev
+
+[Install]
+WantedBy=multi-user.target

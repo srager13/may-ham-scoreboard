@@ -19,6 +19,7 @@ run: build
 
 # Run development server with live reload (requires air: go install github.com/air-verse/air@latest)
 dev:
+	@echo "ENV_FILE=$(ENV_FILE)"
 	ENV_FILE=$(ENV_FILE) PATH=$$PATH:/root/go/bin air
 
 # Run all tests

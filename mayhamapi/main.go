@@ -96,7 +96,7 @@ func setupRouter(
 	r.Static("/assets", "./static/assets")
 	r.StaticFile("/vite.svg", "./static/vite.svg")
 	r.StaticFile("/favicon.ico", "./static/favicon.ico")
-	
+
 	// Serve index.html at root
 	r.GET("/", func(c *gin.Context) {
 		c.File("./static/index.html")

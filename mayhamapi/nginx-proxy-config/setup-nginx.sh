@@ -11,9 +11,11 @@ echo "=============================="
 
 # Configuration
 DOMAIN="mayhamscoreboard.com"
+DEV_DOMAIN="dev.mayhamscoreboard.com"
 EMAIL="srager13@gmail.com"
-BACKEND_PORT=8080
-FRONTEND_PORT=5173
+BACKEND_PORT=8081
+BACKEND_DEV_PORT=8080
+FRONTEND_DEV_PORT=5173
 
 # Update domain in script
 read -p "Enter domain name (default: $DOMAIN): " domain_input
@@ -24,17 +26,18 @@ EMAIL="${email_input:-$EMAIL}"
 
 # Function to check if SSL certificate exists and is valid
 check_ssl_cert() {
-    if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    local domain=$1
+    if [ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]; then
         # Check if certificate is valid and not expiring soon (30 days)
-        if openssl x509 -checkend 2592000 -noout -in "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" >/dev/null 2>&1; then
-            echo "✅ Valid SSL certificate already exists for $DOMAIN"
+        if openssl x509 -checkend 2592000 -noout -in "/etc/letsencrypt/live/$domain/fullchain.pem" >/dev/null 2>&1; then
+            echo "✅ Valid SSL certificate already exists for $domain"
             return 0
         else
-            echo "⚠️  SSL certificate exists but expires soon or is invalid"
+            echo "⚠️  SSL certificate exists but expires soon or is invalid for $domain"
             return 1
         fi
     else
-        echo "❌ No SSL certificate found for $DOMAIN"
+        echo "❌ No SSL certificate found for $domain"
         return 1
     fi
 }
@@ -45,10 +48,12 @@ check_nginx_config() {
         return 1
     fi
     
-    # Check if our domain is in the config and SSL certificates are referenced
+    # Check if our domains are in the config and SSL certificates are referenced
     if grep -q "server_name $DOMAIN;" /etc/nginx/nginx.conf && \
-       grep -q "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" /etc/nginx/nginx.conf; then
-        echo "✅ Nginx configuration already correct for $DOMAIN"
+       grep -q "server_name $DEV_DOMAIN;" /etc/nginx/nginx.conf && \
+       grep -q "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" /etc/nginx/nginx.conf && \
+       grep -q "/etc/letsencrypt/live/$DEV_DOMAIN/fullchain.pem" /etc/nginx/nginx.conf; then
+        echo "✅ Nginx configuration already correct for $DOMAIN and $DEV_DOMAIN"
         return 0
     else
         echo "❌ Nginx configuration needs updating"
@@ -83,8 +88,17 @@ mkdir -p /var/www/certbot
 
 # Check if we need to get SSL certificate
 NEED_CERT=false
-if ! check_ssl_cert; then
+NEED_DEV_CERT=false
+
+if ! check_ssl_cert "$DOMAIN"; then
     NEED_CERT=true
+fi
+
+if ! check_ssl_cert "$DEV_DOMAIN"; then
+    NEED_DEV_CERT=true
+fi
+
+if [ "$NEED_CERT" = true ] || [ "$NEED_DEV_CERT" = true ]; then
     echo "=============================="
     echo "SSL certificate needed - setting up temporary config..."
     echo "=============================="
@@ -133,7 +147,7 @@ EOF
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
-    server_name $DOMAIN;
+    server_name $DOMAIN $DEV_DOMAIN;
 
     # Allow certbot challenges
     location /.well-known/acme-challenge/ {
@@ -149,6 +163,9 @@ server {
 }
 EOF
 
+    # Enable the site configuration
+    ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
     # Start nginx with basic config
     echo "Starting nginx with basic configuration..."
     nginx -t
@@ -160,17 +177,26 @@ EOF
 
     # Generate SSL certificate with Let's Encrypt
     echo "=============================="
-    echo "Generating SSL certificate..."
+    echo "Generating SSL certificates..."
     echo "=============================="
-    certbot certonly --webroot -w /var/www/certbot -d "$DOMAIN" -n --agree-tos --email "$EMAIL"
     
-    echo "✅ SSL certificate obtained successfully"
+    if [ "$NEED_CERT" = true ]; then
+        echo "Getting certificate for $DOMAIN..."
+        certbot certonly --webroot -w /var/www/certbot -d "$DOMAIN" -d "www.$DOMAIN" -n --agree-tos --email "$EMAIL"
+        echo "✅ SSL certificate obtained for $DOMAIN"
+    fi
+    
+    if [ "$NEED_DEV_CERT" = true ]; then
+        echo "Getting certificate for $DEV_DOMAIN..."
+        certbot certonly --webroot -w /var/www/certbot -d "$DEV_DOMAIN" -n --agree-tos --email "$EMAIL"
+        echo "✅ SSL certificate obtained for $DEV_DOMAIN"
+    fi
 else
-    echo "✅ SSL certificate already valid, skipping certificate generation"
+    echo "✅ All SSL certificates already valid, skipping certificate generation"
 fi
 
 # Check if we need to update nginx configuration
-if ! check_nginx_config || [ "$NEED_CERT" = true ]; then
+if ! check_nginx_config || [ "$NEED_CERT" = true ] || [ "$NEED_DEV_CERT" = true ]; then
     echo "=============================="
     echo "Setting up production nginx configuration..."
     echo "=============================="
@@ -178,232 +204,15 @@ if ! check_nginx_config || [ "$NEED_CERT" = true ]; then
     # Remove the sites-enabled default (since we're using nginx.conf directly)
     rm -f /etc/nginx/sites-enabled/default
 
-    # Create the production nginx.conf with SSL
-    cat > /etc/nginx/nginx.conf <<EOF
-# ============================================
-# NGINX PRODUCTION REVERSE PROXY CONFIGURATION
-# ============================================
-
-user www-data;
-worker_processes auto;
-pid /run/nginx.pid;
-error_log /var/log/nginx/error.log warn;
-
-events {
-    worker_connections 4096;
-    use epoll;
-    multi_accept on;
-}
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    # Logging
-    log_format main '\$remote_addr - \$remote_user [\$time_local] "\$request" '
-                    '\$status \$body_bytes_sent "\$http_referer" '
-                    '"\$http_user_agent" "\$http_x_forwarded_for"';
-
-    log_format api '\$remote_addr - \$remote_user [\$time_local] '
-                   '"\$request" \$status \$body_bytes_sent '
-                   'rt=\$request_time uct="\$upstream_connect_time" '
-                   'uht="\$upstream_header_time" urt="\$upstream_response_time"';
-
-    access_log /var/log/nginx/access.log main;
-
-    # Performance optimizations
-    sendfile on;
-    tcp_nopush on;
-    tcp_nodelay on;
-    keepalive_timeout 65;
-    types_hash_max_size 2048;
-    client_max_body_size 20M;
-
-    # Gzip compression
-    gzip on;
-    gzip_vary on;
-    gzip_proxied any;
-    gzip_comp_level 6;
-    gzip_types text/plain text/css text/xml text/javascript 
-               application/json application/javascript application/xml+rss 
-               application/rss+xml font/truetype font/opentype 
-               application/vnd.ms-fontobject image/svg+xml;
-
-    # Hide nginx version
-    server_tokens off;
-
-    # Rate limiting
-    limit_req_zone \$binary_remote_addr zone=general:10m rate=10r/s;
-    limit_req_zone \$binary_remote_addr zone=api:10m rate=100r/s;
-    limit_req_zone \$binary_remote_addr zone=auth:10m rate=5r/m;
-
-    # Upstream backend servers
-    upstream golf_api_backend {
-        least_conn;
-        server localhost:$BACKEND_PORT max_fails=3 fail_timeout=30s;
-        keepalive 32;
-    }
-
-    upstream golf_frontend {
-        server localhost:$FRONTEND_PORT max_fails=3 fail_timeout=30s;
-        keepalive 32;
-    }
-
-    # HTTP redirect to HTTPS
-    server {
-        listen 80 default_server;
-        listen [::]:80 default_server;
-        server_name $DOMAIN;
-
-        # Allow Let's Encrypt ACME challenges
-        location /.well-known/acme-challenge/ {
-            root /var/www/certbot;
-        }
-
-        # Redirect all other traffic to HTTPS
-        location / {
-            return 301 https://\$host\$request_uri;
-        }
-    }
-
-    # HTTPS server with SSL/TLS
-    server {
-        listen 443 ssl http2 default_server;
-        listen [::]:443 ssl http2 default_server;
-        server_name $DOMAIN;
-
-        # SSL Certificate paths
-        ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-
-        # SSL configuration (Mozilla recommended - modern)
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
-        ssl_prefer_server_ciphers off;
-
-        # SSL optimizations
-        ssl_session_timeout 1d;
-        ssl_session_cache shared:SSL:50m;
-        ssl_session_tickets off;
-
-        # HSTS (HTTP Strict Transport Security)
-        add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
-
-        # Security headers
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-XSS-Protection "1; mode=block" always;
-        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-        add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
-
-        # Logging
-        access_log /var/log/nginx/golf_access.log main;
-        error_log /var/log/nginx/golf_error.log warn;
-
-        # Root location
-        location / {
-            proxy_pass http://golf_frontend;
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$scheme;
-            proxy_redirect off;
-
-            # Timeouts
-            proxy_connect_timeout 60s;
-            proxy_send_timeout 60s;
-            proxy_read_timeout 60s;
-
-            # Caching for static assets
-            location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)\$ {
-                proxy_pass http://golf_frontend;
-                proxy_cache_valid 200 30d;
-                add_header Cache-Control "public, immutable";
-            }
-        }
-
-        # API endpoints
-        location /api/v1/ {
-            limit_req zone=api burst=200 nodelay;
-
-            access_log /var/log/nginx/golf_api_access.log api;
-
-            proxy_pass http://golf_api_backend;
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$scheme;
-
-            # API specific timeouts (longer for scoring operations)
-            proxy_connect_timeout 10s;
-            proxy_send_timeout 30s;
-            proxy_read_timeout 60s;
-
-            # HTTP/1.1 for better performance
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-
-            # Disable buffering for streaming
-            proxy_buffering off;
-            proxy_request_buffering off;
-        }
-
-        # WebSocket endpoint
-        location /ws/ {
-            proxy_pass http://golf_api_backend;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade \$http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$scheme;
-
-            # WebSocket timeouts (much longer)
-            proxy_connect_timeout 7d;
-            proxy_send_timeout 7d;
-            proxy_read_timeout 7d;
-
-            # Disable buffering for WebSocket
-            proxy_buffering off;
-            proxy_request_buffering off;
-        }
-
-        # Health check endpoint (internal only)
-        location /health {
-            access_log off;
-            proxy_pass http://golf_api_backend;
-            proxy_set_header Host \$host;
-        }
-
-        # Deny access to sensitive files
-        location ~ /\. {
-            deny all;
-            access_log off;
-            log_not_found off;
-        }
-
-        location ~ ~\$ {
-            deny all;
-            access_log off;
-            log_not_found off;
-        }
-
-        # Deny access to config files
-        location ~ \.(conf|yml|yaml|ini|env)\$ {
-            deny all;
-            access_log off;
-            log_not_found off;
-        }
-
-        # Handle frontend routing (SPA)
-        error_page 404 =200 /index.html;
-    }
-
-    # Include additional configuration files
-    include /etc/nginx/conf.d/*.conf;
-}
-EOF
+    # Copy the production nginx.conf from the repository
+    if [ -f "./nginx.conf" ]; then
+        echo "Using nginx.conf from current directory..."
+        cp ./nginx.conf /etc/nginx/nginx.conf
+    else
+        echo "ERROR: nginx.conf not found in current directory!"
+        echo "Please run this script from the nginx-proxy-config directory"
+        exit 1
+    fi
 
     # Test nginx configuration
     echo "=============================="
@@ -427,6 +236,9 @@ mkdir -p /var/log/nginx
 touch /var/log/nginx/golf_access.log
 touch /var/log/nginx/golf_api_access.log
 touch /var/log/nginx/golf_error.log
+touch /var/log/nginx/golf_dev_access.log
+touch /var/log/nginx/golf_dev_api_access.log
+touch /var/log/nginx/golf_dev_error.log
 
 # Set proper permissions
 chown -R www-data:www-data /var/log/nginx
@@ -439,16 +251,23 @@ if [ ! -f "/usr/local/bin/nginx-health-check.sh" ]; then
     cat > /usr/local/bin/nginx-health-check.sh <<'EOFSCRIPT'
 #!/bin/bash
 
-# Check if backend is running
-BACKEND_HEALTHY=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
-FRONTEND_HEALTHY=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/)
+# Check if production backend is running
+BACKEND_PROD_HEALTHY=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/health)
+# Check if dev backend is running
+BACKEND_DEV_HEALTHY=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
+# Check if dev frontend is running
+FRONTEND_DEV_HEALTHY=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/)
 
-if [ "$BACKEND_HEALTHY" != "200" ]; then
-    echo "WARNING: Backend health check failed (HTTP $BACKEND_HEALTHY)"
+if [ "$BACKEND_PROD_HEALTHY" != "200" ]; then
+    echo "WARNING: Production backend health check failed (HTTP $BACKEND_PROD_HEALTHY)"
 fi
 
-if [ "$FRONTEND_HEALTHY" != "200" ]; then
-    echo "WARNING: Frontend health check failed (HTTP $FRONTEND_HEALTHY)"
+if [ "$BACKEND_DEV_HEALTHY" != "200" ]; then
+    echo "WARNING: Dev backend health check failed (HTTP $BACKEND_DEV_HEALTHY)"
+fi
+
+if [ "$FRONTEND_DEV_HEALTHY" != "200" ]; then
+    echo "WARNING: Dev frontend health check failed (HTTP $FRONTEND_DEV_HEALTHY)"
 fi
 
 NGINX_RUNNING=$(pgrep -c nginx)
@@ -478,7 +297,8 @@ fi
 echo ""
 echo "✅ Setup complete!"
 echo ""
-echo "Server is running at: https://$DOMAIN"
+echo "Production server: https://$DOMAIN"
+echo "Development server: https://$DEV_DOMAIN"
 echo ""
 echo "Useful commands:"
 echo "  nginx -t                          # Test configuration"
@@ -487,8 +307,8 @@ echo "  systemctl status nginx            # Check status"
 echo "  journalctl -u nginx -f            # View logs"
 echo "  tail -f /var/log/nginx/golf_*     # View app logs"
 echo ""
-echo "SSL Certificate:"
-echo "  Location: /etc/letsencrypt/live/$DOMAIN/"
-echo "  Valid until: $(certbot certificates 2>/dev/null | grep Expiry || echo 'Check certbot certificates')"
+echo "SSL Certificates:"
+echo "  Production: /etc/letsencrypt/live/$DOMAIN/"
+echo "  Development: /etc/letsencrypt/live/$DEV_DOMAIN/"
 echo "  Auto-renewal: Enabled (systemctl status certbot.timer)"
 echo ""
