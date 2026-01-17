@@ -608,6 +608,37 @@ const ScoreInterface: React.FC = () => {
     );
   }
 
+  // ============================================
+  // Scorecard Color Configuration
+  // ============================================
+  // Easily adjust these colors to change the entire scorecard appearance
+  const SCORECARD_COLORS = {
+    // Course info box text colors
+    courseInfoHeading: 'text-green-900',
+    courseInfoSubtext: 'text-green-700',
+    
+    // Par row styling
+    parRowBg: 'bg-yellow-50',
+    parRowHeaderBg: 'bg-yellow-50',
+    parOutInBg: 'bg-yellow-100',
+    parTotalBg: 'bg-green-200',
+    
+    // Out/In/Total column styling
+    outBg: 'bg-yellow-50',
+    inBg: 'bg-yellow-50',
+    totalBg: 'bg-green-100',
+    
+    // Yardage row styling
+    yardageOutInBg: 'bg-yellow-50',
+    yardageTotalBg: 'bg-green-100',
+    
+    // Status row styling
+    statusRowBg: 'bg-blue-50',
+    statusRowHeaderBg: 'bg-blue-50',
+    statusRowHeaderText: 'text-blue-900',
+    statusOutInBg: 'bg-blue-50',
+  };
+
   // Component to display match results for completed pairings
   const MatchResultsDisplay = ({ pairing }: { pairing: PairingWithScores }) => {
     if (!pairing.matchResults || pairing.matchResults.length === 0) {
@@ -700,16 +731,16 @@ const ScoreInterface: React.FC = () => {
             <h3 className="text-lg font-semibold text-gray-900">Final Scorecard</h3>
             {pairing.round?.golf_course && (
               <div className="mt-2">
-                <p className="text-sm font-medium text-green-900">
+                <p className={`text-sm font-medium ${SCORECARD_COLORS.courseInfoHeading}`}>
                   {pairing.round.golf_course.course_name}
                 </p>
                 {pairing.round.golf_course.city && pairing.round.golf_course.state && (
-                  <p className="text-xs text-green-700">
+                  <p className={`text-xs ${SCORECARD_COLORS.courseInfoSubtext}`}>
                     {pairing.round.golf_course.city}, {pairing.round.golf_course.state}
                   </p>
                 )}
                 {pairing.tee && (
-                  <p className="text-xs text-green-700 mt-1">
+                  <p className={`text-xs ${SCORECARD_COLORS.courseInfoSubtext} mt-1`}>
                     {pairing.tee.tee_name} Tees
                     {pairing.tee.total_yards && ` - ${pairing.tee.total_yards} yards`}
                     {pairing.tee.course_rating && pairing.tee.slope_rating && 
@@ -732,7 +763,7 @@ const ScoreInterface: React.FC = () => {
                       {hole}
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50 min-w-[60px]">
+                  <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg} min-w-[60px]`}>
                     Out
                   </th>
                   {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => (
@@ -740,10 +771,10 @@ const ScoreInterface: React.FC = () => {
                       {hole}
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-50 min-w-[60px] border-r-2 border-gray-800">
+                  <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.inBg} min-w-[60px] border-r-2 border-gray-800`}>
                     In
                   </th>
-                  <th className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-green-100 min-w-[60px]">
+                  <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.totalBg} min-w-[60px]`}>
                     Total
                   </th>
                 </tr>
@@ -763,7 +794,7 @@ const ScoreInterface: React.FC = () => {
                         </td>
                       );
                     })}
-                    <td className="px-3 py-2 text-center text-sm font-semibold text-gray-900 border-r-2 border-gray-800 bg-yellow-50">
+                    <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.yardageOutInBg}`}>
                       {pairing.holes.filter(h => h.hole_number >= 1 && h.hole_number <= 9)
                         .reduce((sum, h) => sum + (h.yards || 0), 0) || '-'}
                     </td>
@@ -775,11 +806,11 @@ const ScoreInterface: React.FC = () => {
                         </td>
                       );
                     })}
-                    <td className="px-3 py-2 text-center text-sm font-semibold text-gray-900 bg-yellow-50 border-r-2 border-gray-800">
+                    <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 ${SCORECARD_COLORS.yardageOutInBg} border-r-2 border-gray-800`}>
                       {pairing.holes.filter(h => h.hole_number >= 10 && h.hole_number <= 18)
                         .reduce((sum, h) => sum + (h.yards || 0), 0) || '-'}
                     </td>
-                    <td className="px-3 py-2 text-center text-sm font-semibold text-gray-900 bg-green-100">
+                    <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 ${SCORECARD_COLORS.yardageTotalBg}`}>
                       {pairing.tee?.total_yards || '-'}
                     </td>
                   </tr>
@@ -787,8 +818,8 @@ const ScoreInterface: React.FC = () => {
                 
                 {/* Par Row */}
                 {pairing.holes && pairing.holes.length > 0 && (
-                  <tr className="bg-yellow-50">
-                    <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-yellow-50">
+                  <tr className={SCORECARD_COLORS.parRowBg}>
+                    <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 ${SCORECARD_COLORS.parRowHeaderBg}`}>
                       Par
                     </td>
                     {Array.from({ length: 9 }, (_, i) => {
@@ -799,7 +830,7 @@ const ScoreInterface: React.FC = () => {
                         </td>
                       );
                     })}
-                    <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-100">
+                    <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.parOutInBg}`}>
                       {pairing.holes.filter(h => h.hole_number >= 1 && h.hole_number <= 9)
                         .reduce((sum, h) => sum + (h.par || 0), 0) || '-'}
                     </td>
@@ -811,11 +842,11 @@ const ScoreInterface: React.FC = () => {
                         </td>
                       );
                     })}
-                    <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-100 border-r-2 border-gray-800">
+                    <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.parOutInBg} border-r-2 border-gray-800`}>
                       {pairing.holes.filter(h => h.hole_number >= 10 && h.hole_number <= 18)
                         .reduce((sum, h) => sum + (h.par || 0), 0) || '-'}
                     </td>
-                    <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-green-200">
+                    <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.parTotalBg}`}>
                       {pairing.tee?.par_total || '-'}
                     </td>
                   </tr>
@@ -835,7 +866,7 @@ const ScoreInterface: React.FC = () => {
                         </td>
                       );
                     })}
-                    <td className="px-3 py-2 border-r-2 border-gray-800 bg-yellow-50"></td>
+                    <td className={`px-3 py-2 border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg}`}></td>
                     {Array.from({ length: 9 }, (_, i) => {
                       const hole = pairing.holes?.find(h => h.hole_number === i + 10);
                       return (
@@ -844,8 +875,8 @@ const ScoreInterface: React.FC = () => {
                         </td>
                       );
                     })}
-                    <td className="px-3 py-2 bg-yellow-50 border-r-2 border-gray-800"></td>
-                    <td className="px-3 py-2 bg-green-100"></td>
+                    <td className={`px-3 py-2 ${SCORECARD_COLORS.inBg} border-r-2 border-gray-800`}></td>
+                    <td className={`px-3 py-2 ${SCORECARD_COLORS.totalBg}`}></td>
                   </tr>
                 )}
                 
@@ -951,7 +982,7 @@ const ScoreInterface: React.FC = () => {
                             </td>
                           );
                         })}
-                        <td className="px-3 py-2 text-center font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50">
+                        <td className={`px-3 py-2 text-center font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg}`}>
                           {front9 > 0 ? front9 : '-'}
                         </td>
                         {/* Back 9 scores */}
@@ -1013,10 +1044,10 @@ const ScoreInterface: React.FC = () => {
                             </td>
                           );
                         })}
-                        <td className="px-3 py-2 text-center font-bold text-gray-900 bg-yellow-50 border-r-2 border-gray-800">
+                        <td className={`px-3 py-2 text-center font-bold text-gray-900 ${SCORECARD_COLORS.inBg} border-r-2 border-gray-800`}>
                           {back9 > 0 ? back9 : '-'}
                         </td>
-                        <td className="px-3 py-2 text-center font-bold text-lg text-gray-900 bg-green-100">
+                        <td className={`px-3 py-2 text-center font-bold text-lg text-gray-900 ${SCORECARD_COLORS.totalBg}`}>
                           {total > 0 ? total : '-'}
                         </td>
                       </tr>
@@ -1025,8 +1056,8 @@ const ScoreInterface: React.FC = () => {
                 })()}
                 
                 {/* Status Row - Shows match status (TIED or {x}UP) */}
-                <tr className="bg-blue-50 border-t-2 border-gray-400">
-                  <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-blue-900 uppercase border-r-2 border-gray-800 bg-blue-50">
+                <tr className={`${SCORECARD_COLORS.statusRowBg} border-t-2 border-gray-400`}>
+                  <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold ${SCORECARD_COLORS.statusRowHeaderText} uppercase border-r-2 border-gray-800 ${SCORECARD_COLORS.statusRowHeaderBg}`}>
                     Status
                   </td>
                   {/* Front 9 status */}
@@ -1065,7 +1096,7 @@ const ScoreInterface: React.FC = () => {
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2 border-r-2 border-gray-800 bg-yellow-50"></td>
+                  <td className={`px-3 py-2 border-r-2 border-gray-800 ${SCORECARD_COLORS.statusOutInBg}`}></td>
                   {/* Back 9 status */}
                   {Array.from({ length: 9 }, (_, i) => {
                     const holeNum = i + 10;
@@ -1102,8 +1133,8 @@ const ScoreInterface: React.FC = () => {
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2 bg-yellow-50 border-r-2 border-gray-800"></td>
-                  <td className="px-3 py-2 bg-green-100"></td>
+                  <td className={`px-3 py-2 ${SCORECARD_COLORS.statusOutInBg} border-r-2 border-gray-800`}></td>
+                  <td className={`px-3 py-2 ${SCORECARD_COLORS.totalBg}`}></td>
                 </tr>
               </tbody>
             </table>
