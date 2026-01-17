@@ -855,10 +855,15 @@ const ScoreInterface: React.FC = () => {
             )}
             
             {/* Player Score Rows */}
+            {/* Player Score Rows - One row per player, merged cells for team scoring */}
             {(pairing.players || []).map((player, playerIdx) => {
               const playerScores = mode === 'entry' ? holeScores : pairing.scores;
               const isTeam1 = player.team_id === pairing.matchResults?.[0]?.team1_id;
               const teamColor = isTeam1 ? pairing.matchResults?.[0]?.team1?.color : pairing.matchResults?.[0]?.team2?.color;
+              
+              // Get all teammates on this player's team
+              const teamPlayers = (pairing.players || []).filter(p => p.team_id === player.team_id);
+              const isFirstPlayerOnTeam = teamPlayers[0]?.id === player.id;
 
               return (
                 <tr key={player.id} className={playerIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
@@ -868,7 +873,16 @@ const ScoreInterface: React.FC = () => {
                   {/* Front 9 scores (holes 1-9) */}
                   {Array.from({ length: 9 }, (_, i) => {
                     const holeNum = i + 1;
-                    const score = playerScores?.[holeNum]?.[player.user_id];
+                    const match = getMatchForHole(pairing, holeNum);
+                    const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                    
+                    // For team scoring, use first player's ID as score key; otherwise use current player
+                    const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                    const score = playerScores?.[holeNum]?.[scoreKey];
+                    
+                    // Only render input for first player on team (for team scoring), or all players (individual scoring)
+                    const shouldRenderInput = !isTeamScoring || isFirstPlayerOnTeam;
+                    
                     const hasWon = mode === 'display' && didTeamWinHole(holeNum, player.team_id);
 
                     return (
@@ -877,13 +891,13 @@ const ScoreInterface: React.FC = () => {
                         className="px-3 py-2 text-center text-xs border-r border-gray-300"
                         style={hasWon && teamColor ? { backgroundColor: `${teamColor}4D` } : {}}
                       >
-                        {mode === 'entry' ? (
+                        {mode === 'entry' && shouldRenderInput ? (
                           <input
                             type="number"
                             min="0"
                             max="15"
                             value={score || ''}
-                            onChange={(e) => onScoreChange?.(holeNum, player.user_id, parseInt(e.target.value) || 0)}
+                            onChange={(e) => onScoreChange?.(holeNum, scoreKey || player.user_id, parseInt(e.target.value) || 0)}
                             className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs"
                           />
                         ) : (
@@ -894,12 +908,25 @@ const ScoreInterface: React.FC = () => {
                   })}
                   {/* Out total */}
                   <td className={`px-3 py-2 text-center font-semibold border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg}`}>
-                    {Array.from({ length: 9 }, (_, i) => playerScores?.[i + 1]?.[player.user_id] || 0).reduce((a, b) => a + b, 0)}
+                    {Array.from({ length: 9 }, (_, i) => {
+                      const holeNum = i + 1;
+                      const match = getMatchForHole(pairing, holeNum);
+                      const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                      const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                      return playerScores?.[holeNum]?.[scoreKey] || 0;
+                    }).reduce((a, b) => a + b, 0)}
                   </td>
                   {/* Back 9 scores (holes 10-18) */}
                   {Array.from({ length: 9 }, (_, i) => {
                     const holeNum = i + 10;
-                    const score = playerScores?.[holeNum]?.[player.user_id];
+                    const match = getMatchForHole(pairing, holeNum);
+                    const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                    
+                    const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                    const score = playerScores?.[holeNum]?.[scoreKey];
+                    
+                    const shouldRenderInput = !isTeamScoring || isFirstPlayerOnTeam;
+                    
                     const hasWon = mode === 'display' && didTeamWinHole(holeNum, player.team_id);
 
                     return (
@@ -908,13 +935,13 @@ const ScoreInterface: React.FC = () => {
                         className="px-3 py-2 text-center text-xs border-r border-gray-300"
                         style={hasWon && teamColor ? { backgroundColor: `${teamColor}4D` } : {}}
                       >
-                        {mode === 'entry' ? (
+                        {mode === 'entry' && shouldRenderInput ? (
                           <input
                             type="number"
                             min="0"
                             max="15"
                             value={score || ''}
-                            onChange={(e) => onScoreChange?.(holeNum, player.user_id, parseInt(e.target.value) || 0)}
+                            onChange={(e) => onScoreChange?.(holeNum, scoreKey || player.user_id, parseInt(e.target.value) || 0)}
                             className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs"
                           />
                         ) : (
@@ -925,11 +952,23 @@ const ScoreInterface: React.FC = () => {
                   })}
                   {/* In total */}
                   <td className={`px-3 py-2 text-center font-semibold border-r-2 border-gray-800 ${SCORECARD_COLORS.inBg}`}>
-                    {Array.from({ length: 9 }, (_, i) => playerScores?.[i + 10]?.[player.user_id] || 0).reduce((a, b) => a + b, 0)}
+                    {Array.from({ length: 9 }, (_, i) => {
+                      const holeNum = i + 10;
+                      const match = getMatchForHole(pairing, holeNum);
+                      const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                      const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                      return playerScores?.[holeNum]?.[scoreKey] || 0;
+                    }).reduce((a, b) => a + b, 0)}
                   </td>
                   {/* Total */}
                   <td className={`px-3 py-2 text-center font-bold ${SCORECARD_COLORS.totalBg}`}>
-                    {Array.from({ length: 18 }, (_, i) => playerScores?.[i + 1]?.[player.user_id] || 0).reduce((a, b) => a + b, 0)}
+                    {Array.from({ length: 18 }, (_, i) => {
+                      const holeNum = i + 1;
+                      const match = getMatchForHole(pairing, holeNum);
+                      const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                      const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                      return playerScores?.[holeNum]?.[scoreKey] || 0;
+                    }).reduce((a, b) => a + b, 0)}
                   </td>
                 </tr>
               );
