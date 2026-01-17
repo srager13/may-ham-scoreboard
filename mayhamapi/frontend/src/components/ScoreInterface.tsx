@@ -855,125 +855,197 @@ const ScoreInterface: React.FC = () => {
               </tr>
             )}
             
-            {/* Player Score Rows */}
             {/* Player Score Rows - One row per player, merged cells for team scoring */}
-            {(pairing.players || []).map((player, playerIdx) => {
-              const playerScores = mode === 'entry' ? holeScores : pairing.scores;
-              const isTeam1 = player.team_id === pairing.matchResults?.[0]?.team1_id;
-              const teamColor = isTeam1 ? pairing.matchResults?.[0]?.team1?.color : pairing.matchResults?.[0]?.team2?.color;
-              
-              // Get all teammates on this player's team
-              const teamPlayers = (pairing.players || []).filter(p => p.team_id === player.team_id);
-              const isFirstPlayerOnTeam = teamPlayers[0]?.id === player.id;
+            {(() => {
+              // Sort players by team, then by player_order
+              const sortedPlayers = [...(pairing.players || [])].sort((a, b) => {
+                if (a.team_id !== b.team_id) {
+                  return a.team_id.localeCompare(b.team_id);
+                }
+                return (a.player_order || 0) - (b.player_order || 0);
+              });
 
-              return (
-                <tr key={player.id} className={playerIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 ${playerIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                    {player.user?.name || 'Player'}
-                  </td>
-                  {/* Front 9 scores (holes 1-9) */}
-                  {Array.from({ length: 9 }, (_, i) => {
-                    const holeNum = i + 1;
-                    const match = getMatchForHole(pairing, holeNum);
-                    const isTeamScoring = match?.format?.score_input_type === 'team' || false;
-                    
-                    // For team scoring, use first player's ID as score key; otherwise use current player
-                    const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
-                    const score = playerScores?.[holeNum]?.[scoreKey];
-                    
-                    // Only render input for first player on team (for team scoring), or all players (individual scoring)
-                    const shouldRenderInput = !isTeamScoring || isFirstPlayerOnTeam;
-                    
-                    const hasWon = mode === 'display' && didTeamWinHole(holeNum, player.team_id);
+              return sortedPlayers.map((player, playerIdx) => {
+                const playerScores = mode === 'entry' ? holeScores : pairing.scores;
+                const isTeam1 = player.team_id === pairing.matchResults?.[0]?.team1_id;
+                const teamColor = isTeam1 ? pairing.matchResults?.[0]?.team1?.color : pairing.matchResults?.[0]?.team2?.color;
+                
+                // Get all teammates on this player's team
+                const teamPlayers = (pairing.players || []).filter(p => p.team_id === player.team_id);
+                const isFirstPlayerOnTeam = teamPlayers[0]?.id === player.id;
+                const teamSize = teamPlayers.length;
+                const isFirstInTeam = playerIdx === 0 || sortedPlayers[playerIdx - 1].team_id !== player.team_id;
 
-                    return (
-                      <td
-                        key={holeNum}
-                        className="px-3 py-2 text-center text-xs border-r border-gray-300"
-                        style={hasWon && teamColor ? { backgroundColor: `${teamColor}4D` } : {}}
-                      >
-                        {mode === 'entry' && shouldRenderInput ? (
-                          <input
-                            type="number"
-                            min="0"
-                            max="15"
-                            value={score || ''}
-                            onChange={(e) => onScoreChange?.(holeNum, scoreKey || player.user_id, parseInt(e.target.value) || 0)}
-                            className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs"
-                          />
-                        ) : (
-                          <span className="font-semibold">{score || '—'}</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                  {/* Out total */}
-                  <td className={`px-3 py-2 text-center font-semibold border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg}`}>
+                return (
+                  <tr 
+                    key={player.id}
+                    className={`${playerIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${isFirstInTeam && playerIdx > 0 ? 'border-t-2 border-gray-800' : ''}`}
+                  >
+                    <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 ${playerIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                      {player.user?.name || 'Player'}
+                    </td>
+                    {/* Front 9 scores (holes 1-9) */}
                     {Array.from({ length: 9 }, (_, i) => {
                       const holeNum = i + 1;
                       const match = getMatchForHole(pairing, holeNum);
                       const isTeamScoring = match?.format?.score_input_type === 'team' || false;
-                      const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
-                      return playerScores?.[holeNum]?.[scoreKey] || 0;
-                    }).reduce((a, b) => a + b, 0)}
-                  </td>
-                  {/* Back 9 scores (holes 10-18) */}
-                  {Array.from({ length: 9 }, (_, i) => {
-                    const holeNum = i + 10;
-                    const match = getMatchForHole(pairing, holeNum);
-                    const isTeamScoring = match?.format?.score_input_type === 'team' || false;
-                    
-                    const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
-                    const score = playerScores?.[holeNum]?.[scoreKey];
-                    
-                    const shouldRenderInput = !isTeamScoring || isFirstPlayerOnTeam;
-                    
-                    const hasWon = mode === 'display' && didTeamWinHole(holeNum, player.team_id);
+                      
+                      // For team scoring, skip rendering for non-first teammates (return null)
+                      if (isTeamScoring && !isFirstPlayerOnTeam) {
+                        return null;
+                      }
 
-                    return (
-                      <td
-                        key={holeNum}
-                        className="px-3 py-2 text-center text-xs border-r border-gray-300"
-                        style={hasWon && teamColor ? { backgroundColor: `${teamColor}4D` } : {}}
-                      >
-                        {mode === 'entry' && shouldRenderInput ? (
-                          <input
-                            type="number"
-                            min="0"
-                            max="15"
-                            value={score || ''}
-                            onChange={(e) => onScoreChange?.(holeNum, scoreKey || player.user_id, parseInt(e.target.value) || 0)}
-                            className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs"
-                          />
-                        ) : (
-                          <span className="font-semibold">{score || '—'}</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                  {/* In total */}
-                  <td className={`px-3 py-2 text-center font-semibold border-r-2 border-gray-800 ${SCORECARD_COLORS.inBg}`}>
+                      // For team scoring, use first player's ID; otherwise use current player
+                      const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                      const score = playerScores?.[holeNum]?.[scoreKey];
+                      
+                      const hasWon = mode === 'display' && didTeamWinHole(holeNum, player.team_id);
+
+                      return (
+                        <td
+                          key={holeNum}
+                          className="px-3 py-2 text-center text-xs border-r border-gray-300"
+                          rowSpan={isTeamScoring ? teamSize : 1}
+                          style={hasWon && teamColor ? { backgroundColor: `${teamColor}4D` } : {}}
+                        >
+                          {mode === 'entry' ? (
+                            <input
+                              type="number"
+                              min="0"
+                              max="15"
+                              value={score || ''}
+                              onChange={(e) => onScoreChange?.(holeNum, scoreKey || player.user_id, parseInt(e.target.value) || 0)}
+                              className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs"
+                            />
+                          ) : (
+                            <span className="font-semibold">{score || '—'}</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    {/* Out total */}
+                    {(() => {
+                      const front9Match = getMatchForHole(pairing, 1);
+                      const front9IsTeamScoring = front9Match?.format?.score_input_type === 'team' || false;
+                      
+                      // Skip for non-first teammates in team format
+                      if (front9IsTeamScoring && !isFirstPlayerOnTeam) {
+                        return null;
+                      }
+
+                      const outTotal = Array.from({ length: 9 }, (_, i) => {
+                        const holeNum = i + 1;
+                        const match = getMatchForHole(pairing, holeNum);
+                        const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                        const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                        return playerScores?.[holeNum]?.[scoreKey] || 0;
+                      }).reduce((a, b) => a + b, 0);
+
+                      return (
+                        <td 
+                          className={`px-3 py-2 text-center font-semibold border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg}`}
+                          rowSpan={front9IsTeamScoring ? teamSize : 1}
+                        >
+                          {outTotal}
+                        </td>
+                      );
+                    })()}
+                    {/* Back 9 scores (holes 10-18) */}
                     {Array.from({ length: 9 }, (_, i) => {
                       const holeNum = i + 10;
                       const match = getMatchForHole(pairing, holeNum);
                       const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                      
+                      // Skip rendering for non-first teammates in team format
+                      if (isTeamScoring && !isFirstPlayerOnTeam) {
+                        return null;
+                      }
+
                       const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
-                      return playerScores?.[holeNum]?.[scoreKey] || 0;
-                    }).reduce((a, b) => a + b, 0)}
-                  </td>
-                  {/* Total */}
-                  <td className={`px-3 py-2 text-center font-bold ${SCORECARD_COLORS.totalBg}`}>
-                    {Array.from({ length: 18 }, (_, i) => {
-                      const holeNum = i + 1;
-                      const match = getMatchForHole(pairing, holeNum);
-                      const isTeamScoring = match?.format?.score_input_type === 'team' || false;
-                      const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
-                      return playerScores?.[holeNum]?.[scoreKey] || 0;
-                    }).reduce((a, b) => a + b, 0)}
-                  </td>
-                </tr>
-              );
-            })}
+                      const score = playerScores?.[holeNum]?.[scoreKey];
+                      
+                      const hasWon = mode === 'display' && didTeamWinHole(holeNum, player.team_id);
+
+                      return (
+                        <td
+                          key={holeNum}
+                          className="px-3 py-2 text-center text-xs border-r border-gray-300"
+                          rowSpan={isTeamScoring ? teamSize : 1}
+                          style={hasWon && teamColor ? { backgroundColor: `${teamColor}4D` } : {}}
+                        >
+                          {mode === 'entry' ? (
+                            <input
+                              type="number"
+                              min="0"
+                              max="15"
+                              value={score || ''}
+                              onChange={(e) => onScoreChange?.(holeNum, scoreKey || player.user_id, parseInt(e.target.value) || 0)}
+                              className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs"
+                            />
+                          ) : (
+                            <span className="font-semibold">{score || '—'}</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    {/* In total */}
+                    {(() => {
+                      const back9Match = getMatchForHole(pairing, 10);
+                      const back9IsTeamScoring = back9Match?.format?.score_input_type === 'team' || false;
+                      
+                      // Skip for non-first teammates in team format
+                      if (back9IsTeamScoring && !isFirstPlayerOnTeam) {
+                        return null;
+                      }
+
+                      const inTotal = Array.from({ length: 9 }, (_, i) => {
+                        const holeNum = i + 10;
+                        const match = getMatchForHole(pairing, holeNum);
+                        const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                        const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                        return playerScores?.[holeNum]?.[scoreKey] || 0;
+                      }).reduce((a, b) => a + b, 0);
+
+                      return (
+                        <td 
+                          className={`px-3 py-2 text-center font-semibold border-r-2 border-gray-800 ${SCORECARD_COLORS.inBg}`}
+                          rowSpan={back9IsTeamScoring ? teamSize : 1}
+                        >
+                          {inTotal}
+                        </td>
+                      );
+                    })()}
+                    {/* Total */}
+                    {(() => {
+                      const back9Match = getMatchForHole(pairing, 10);
+                      const back9IsTeamScoring = back9Match?.format?.score_input_type === 'team' || false;
+                      
+                      // Skip for non-first teammates in team format
+                      if (back9IsTeamScoring && !isFirstPlayerOnTeam) {
+                        return null;
+                      }
+
+                      const total = Array.from({ length: 18 }, (_, i) => {
+                        const holeNum = i + 1;
+                        const match = getMatchForHole(pairing, holeNum);
+                        const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                        const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                        return playerScores?.[holeNum]?.[scoreKey] || 0;
+                      }).reduce((a, b) => a + b, 0);
+
+                      return (
+                        <td 
+                          className={`px-3 py-2 text-center font-bold ${SCORECARD_COLORS.totalBg}`}
+                          rowSpan={back9IsTeamScoring ? teamSize : 1}
+                        >
+                          {total}
+                        </td>
+                      );
+                    })()}
+                  </tr>
+                );
+              });
+            })()}
             
             {/* Status Row - Shows match status (TIED or {x}UP) - display mode only */}
             {mode === 'display' && pairing.matchResults && (
