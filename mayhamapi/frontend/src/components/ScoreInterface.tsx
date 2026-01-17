@@ -707,8 +707,30 @@ const ScoreInterface: React.FC = () => {
     };
 
     return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y-2 divide-gray-800 bg-white text-xs">
+      <>
+        {/* Golf Course Information Box */}
+        {pairing.round?.golf_course && (
+          <div className="bg-gradient-to-r from-green-50 to-green-100 px-6 py-4 border-b-2 border-gray-300 mb-4 rounded-t-lg">
+            <p className={`text-sm font-medium ${SCORECARD_COLORS.courseInfoHeading}`}>
+              {pairing.round.golf_course.course_name}
+            </p>
+            {pairing.round.golf_course.city && pairing.round.golf_course.state && (
+              <p className={`text-xs ${SCORECARD_COLORS.courseInfoSubtext}`}>
+                {pairing.round.golf_course.city}, {pairing.round.golf_course.state}
+              </p>
+            )}
+            {pairing.tee && (
+              <p className={`text-xs ${SCORECARD_COLORS.courseInfoSubtext} mt-1`}>
+                {pairing.tee.tee_name} Tees
+                {pairing.tee.total_yards && ` - ${pairing.tee.total_yards} yards`}
+                {pairing.tee.course_rating && pairing.tee.slope_rating && 
+                  ` - Rating: ${pairing.tee.course_rating}/${pairing.tee.slope_rating}`}
+              </p>
+            )}
+          </div>
+        )}
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y-2 divide-gray-800 bg-white text-xs">
           <thead className="bg-gray-100">
             <tr>
               <th className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase border-r-2 border-gray-800 bg-gray-100">
@@ -990,7 +1012,8 @@ const ScoreInterface: React.FC = () => {
             )}
           </tbody>
         </table>
-      </div>
+        </div>
+      </>
     );
   };
 
@@ -1084,34 +1107,12 @@ const ScoreInterface: React.FC = () => {
         <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">
           <div className="bg-gradient-to-r from-green-50 to-green-100 px-6 py-4 border-b-2 border-gray-300">
             <h3 className="text-lg font-semibold text-gray-900">Final Scorecard</h3>
-            {pairing.round?.golf_course && (
-              <div className="mt-2">
-                <p className={`text-sm font-medium ${SCORECARD_COLORS.courseInfoHeading}`}>
-                  {pairing.round.golf_course.course_name}
-                </p>
-                {pairing.round.golf_course.city && pairing.round.golf_course.state && (
-                  <p className={`text-xs ${SCORECARD_COLORS.courseInfoSubtext}`}>
-                    {pairing.round.golf_course.city}, {pairing.round.golf_course.state}
-                  </p>
-                )}
-                {pairing.tee && (
-                  <p className={`text-xs ${SCORECARD_COLORS.courseInfoSubtext} mt-1`}>
-                    {pairing.tee.tee_name} Tees
-                    {pairing.tee.total_yards && ` - ${pairing.tee.total_yards} yards`}
-                    {pairing.tee.course_rating && pairing.tee.slope_rating && 
-                      ` - Rating: ${pairing.tee.course_rating}/${pairing.tee.slope_rating}`}
-                  </p>
-                )}
-              </div>
-            )}
           </div>
           
-          <div className="overflow-x-auto">
-            <ScorecardTable 
-              mode="display"
-              pairing={pairing}
-            />
-          </div>
+          <ScorecardTable 
+            mode="display"
+            pairing={pairing}
+          />
           
           {/* Score Legend */}
           <div className="bg-gray-50 px-6 py-3 border-t-2 border-gray-300">
@@ -1646,51 +1647,6 @@ const ScoreInterface: React.FC = () => {
 
           {selectedPairing.status === 'in_progress' && (
             <>
-              <div className="mb-6">
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    Pairing {selectedPairing.pairing_number} Scorecard
-                  </h3>
-                  {selectedPairing.round?.golf_course && (
-                    <div className="bg-green-50 border-2 border-green-600 rounded-lg p-3 mb-3">
-                      <div className="text-center">
-                        <h4 className="text-lg font-bold text-green-900">
-                          {selectedPairing.round.golf_course.course_name}
-                        </h4>
-                        {selectedPairing.round.golf_course.city && selectedPairing.round.golf_course.state && (
-                          <p className="text-sm text-green-700">
-                            {selectedPairing.round.golf_course.city}, {selectedPairing.round.golf_course.state}
-                          </p>
-                        )}
-                        {selectedPairing.tee && (
-                          <p className="text-sm text-green-700 mt-1">
-                            <strong>{selectedPairing.tee.tee_name} Tees</strong>
-                            {selectedPairing.tee.total_yards && ` - ${selectedPairing.tee.total_yards} yards`}
-                            {selectedPairing.tee.course_rating && selectedPairing.tee.slope_rating && 
-                              ` - Rating: ${selectedPairing.tee.course_rating}/${selectedPairing.tee.slope_rating}`}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {selectedPairing.matches && selectedPairing.matches.length > 0 && (
-                    <p className="text-xs text-gray-500 mb-2">
-                      {selectedPairing.matches.map((m, idx) => {
-                        const holeRange = m.start_hole && m.end_hole 
-                          ? `Holes ${m.start_hole}-${m.end_hole}`
-                          : `${m.holes} holes`;
-                        return (
-                          <span key={idx} className="mr-3">
-                            {m.format?.name || 'Match'}: {holeRange}
-                          </span>
-                        );
-                      })}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-
               {/* Full Scorecard Table - Entry Mode */}
               <ScorecardTable 
                 mode="entry"
