@@ -68,10 +68,11 @@ const ScoreInterface: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const tournamentList = await apiClient.getUserTournaments();
+      const response = await apiClient.getUserTournaments();
+      const tournamentList = Array.isArray(response) ? response : (response || []);
       setTournaments(tournamentList);
       
-      if (tournamentList.length > 0) {
+      if (tournamentList && tournamentList.length > 0) {
         setSelectedTournamentId(tournamentList[0].id);
       } else {
         setError('You are not a member of any tournaments. Ask an admin to add you to a tournament team.');
@@ -92,7 +93,7 @@ const ScoreInterface: React.FC = () => {
       setError(null);
       
       const roundsResponse = await apiClient.getTournamentRounds(selectedTournamentId);
-      const rounds = Array.isArray(roundsResponse) ? roundsResponse : [];
+      const rounds = Array.isArray(roundsResponse) ? roundsResponse : (roundsResponse || []);
       
       const allPairings: PairingWithScores[] = [];
       
@@ -545,13 +546,13 @@ const ScoreInterface: React.FC = () => {
       <div className="flex items-center justify-center h-64">
         <RefreshCw className="h-8 w-8 animate-spin text-gray-500" />
         <span className="ml-2 text-gray-500">
-          {tournaments.length === 0 ? 'Loading tournaments...' : 'Loading pairings...'}
+          {!tournaments || tournaments.length === 0 ? 'Loading tournaments...' : 'Loading pairings...'}
         </span>
       </div>
     );
   }
 
-  if (error || tournaments.length === 0) {
+  if (error || !tournaments || tournaments.length === 0) {
     return (
       <div className="text-center py-12">
         <Target className="h-16 w-16 text-gray-400 mx-auto mb-4" />
