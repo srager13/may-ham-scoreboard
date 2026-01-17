@@ -882,7 +882,15 @@ const ScoreInterface: React.FC = () => {
                     className={`${playerIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${isFirstInTeam && playerIdx > 0 ? 'border-t-2 border-gray-800' : ''}`}
                   >
                     <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 ${playerIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                      {player.user?.name || 'Player'}
+                      <div className="flex items-center">
+                        <div
+                          className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
+                          style={{ backgroundColor: player.team?.color }}
+                        ></div>
+                        <span className="text-xs font-medium text-gray-900 whitespace-nowrap">
+                          {player.user?.name || 'Player'}
+                        </span>
+                      </div>
                     </td>
                     {/* Front 9 scores (holes 1-9) */}
                     {Array.from({ length: 9 }, (_, i) => {
