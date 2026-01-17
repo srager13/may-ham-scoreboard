@@ -838,23 +838,41 @@ const ScoreInterface: React.FC = () => {
                             return null; // Skip this cell, it's merged with the one above
                           }
                           
-                          let bgColor = 'bg-white';
+                          // Determine shape based on score to par
+                          let shapeClass = '';
                           if (scoreToPar !== null) {
-                            if (scoreToPar <= -2) bgColor = 'bg-yellow-200'; // Eagle or better
-                            else if (scoreToPar === -1) bgColor = 'bg-red-200'; // Birdie
-                            else if (scoreToPar === 1) bgColor = 'bg-blue-200'; // Bogey
-                            else if (scoreToPar >= 2) bgColor = 'bg-purple-200'; // Double bogey or worse
+                            if (scoreToPar <= -1) {
+                              // Under par: circle
+                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 rounded-full border-2 border-gray-900';
+                            } else if (scoreToPar === 1) {
+                              // Bogey: square
+                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900';
+                            } else if (scoreToPar >= 2) {
+                              // Double bogey or worse: double box
+                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900 relative';
+                            }
                           }
                           
                           return (
                             <td 
                               key={holeNum} 
-                              className={`px-3 py-2 text-center border-r border-gray-300 ${bgColor}`}
+                              className="px-3 py-2 text-center border-r border-gray-300 bg-white"
                               rowSpan={isTeamFormat ? teamSize : 1}
                             >
-                              <span className="text-sm font-semibold text-gray-900">
-                                {score > 0 ? score : '-'}
-                              </span>
+                              {scoreToPar !== null && shapeClass ? (
+                                <span className={shapeClass}>
+                                  {scoreToPar >= 2 && (
+                                    <span className="absolute inset-0 border border-gray-900 m-0.5"></span>
+                                  )}
+                                  <span className="text-sm font-semibold text-gray-900 relative z-10">
+                                    {score}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="text-sm font-semibold text-gray-900">
+                                  {score > 0 ? score : '-'}
+                                </span>
+                              )}
                             </td>
                           );
                         })}
@@ -876,23 +894,41 @@ const ScoreInterface: React.FC = () => {
                             return null; // Skip this cell, it's merged with the one above
                           }
                           
-                          let bgColor = 'bg-white';
+                          // Determine shape based on score to par
+                          let shapeClass = '';
                           if (scoreToPar !== null) {
-                            if (scoreToPar <= -2) bgColor = 'bg-yellow-200'; // Eagle or better
-                            else if (scoreToPar === -1) bgColor = 'bg-red-200'; // Birdie
-                            else if (scoreToPar === 1) bgColor = 'bg-blue-200'; // Bogey
-                            else if (scoreToPar >= 2) bgColor = 'bg-purple-200'; // Double bogey or worse
+                            if (scoreToPar <= -1) {
+                              // Under par: circle
+                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 rounded-full border-2 border-gray-900';
+                            } else if (scoreToPar === 1) {
+                              // Bogey: square
+                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900';
+                            } else if (scoreToPar >= 2) {
+                              // Double bogey or worse: double box
+                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900 relative';
+                            }
                           }
                           
                           return (
                             <td 
                               key={holeNum} 
-                              className={`px-3 py-2 text-center border-r border-gray-300 ${bgColor}`}
+                              className="px-3 py-2 text-center border-r border-gray-300 bg-white"
                               rowSpan={isTeamFormat ? teamSize : 1}
                             >
-                              <span className="text-sm font-semibold text-gray-900">
-                                {score > 0 ? score : '-'}
-                              </span>
+                              {scoreToPar !== null && shapeClass ? (
+                                <span className={shapeClass}>
+                                  {scoreToPar >= 2 && (
+                                    <span className="absolute inset-0 border border-gray-900 m-0.5"></span>
+                                  )}
+                                  <span className="text-sm font-semibold text-gray-900 relative z-10">
+                                    {score}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="text-sm font-semibold text-gray-900">
+                                  {score > 0 ? score : '-'}
+                                </span>
+                              )}
                             </td>
                           );
                         })}
@@ -914,23 +950,19 @@ const ScoreInterface: React.FC = () => {
           <div className="bg-gray-50 px-6 py-3 border-t-2 border-gray-300">
             <div className="flex items-center justify-center gap-6 text-xs">
               <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-yellow-200 border border-gray-400"></div>
-                <span>Eagle or better</span>
+                <div className="w-4 h-4 rounded-full border-2 border-gray-900 flex items-center justify-center">
+                  <span className="text-[8px] font-semibold">-</span>
+                </div>
+                <span>Under par (Eagle/Birdie)</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-red-200 border border-gray-400"></div>
-                <span>Birdie</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-white border border-gray-400"></div>
-                <span>Par</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-blue-200 border border-gray-400"></div>
+                <div className="w-4 h-4 border-2 border-gray-900"></div>
                 <span>Bogey</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-purple-200 border border-gray-400"></div>
+                <div className="w-4 h-4 border-2 border-gray-900 relative">
+                  <div className="absolute inset-0 border border-gray-900 m-0.5"></div>
+                </div>
                 <span>Double bogey+</span>
               </div>
             </div>
@@ -1827,8 +1859,8 @@ const ScoreInterface: React.FC = () => {
                                       className="px-2 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50"
                                       rowSpan={front9IsTeamFormat ? teamSize : 1}
                                     >
-                                      {front9 > 0 ? front9 : '-'}
-                                    </td>
+                                  {front9 > 0 ? front9 : '-'}
+                                </td>
                                   );
                                 })()}
                                 {/* Back 9 */}
@@ -1894,8 +1926,8 @@ const ScoreInterface: React.FC = () => {
                                       className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-50"
                                       rowSpan={back9IsTeamFormat ? teamSize : 1}
                                     >
-                                      {back9 > 0 ? back9 : '-'}
-                                    </td>
+                                  {back9 > 0 ? back9 : '-'}
+                                </td>
                                   );
                                 })()}
                                 {/* Check if back 9 uses team format to determine if "Total" column should have rowspan */}
@@ -1919,8 +1951,8 @@ const ScoreInterface: React.FC = () => {
                                       className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-green-100"
                                       rowSpan={back9IsTeamFormat ? teamSize : 1}
                                     >
-                                      {total > 0 ? total : '-'}
-                                    </td>
+                                  {total > 0 ? total : '-'}
+                                </td>
                                   );
                                 })()}
                               </tr>
