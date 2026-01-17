@@ -618,6 +618,24 @@ const ScoreInterface: React.FC = () => {
       );
     }
 
+    // Helper function to check if a player's team won a specific hole
+    const didTeamWinHole = (holeNumber: number, teamId: string): boolean => {
+      // Find which match covers this hole
+      const match = getMatchForHole(pairing, holeNumber);
+      if (!match) return false;
+
+      // Find the match result that corresponds to this match
+      const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
+      if (!matchResult?.hole_results) return false;
+
+      // Find the hole result for this hole
+      const holeResult = matchResult.hole_results.find(hr => hr.hole_number === holeNumber);
+      if (!holeResult) return false;
+
+      // Check if this team won (winner_team_id matches and is not null)
+      return holeResult.winner_team_id === teamId && holeResult.winner_team_id !== null && holeResult.winner_team_id !== undefined;
+    };
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-center mb-6">
@@ -853,26 +871,34 @@ const ScoreInterface: React.FC = () => {
                             }
                           }
                           
+                          // Check if this player's team won this hole
+                          const teamWonHole = didTeamWinHole(holeNum, player.team_id);
+
                           return (
                             <td 
                               key={holeNum} 
                               className="px-3 py-2 text-center border-r border-gray-300 bg-white"
                               rowSpan={isTeamFormat ? teamSize : 1}
                             >
-                              {scoreToPar !== null && shapeClass ? (
-                                <span className={shapeClass}>
-                                  {scoreToPar >= 2 && (
-                                    <span className="absolute inset-0 border border-gray-900 m-0.5"></span>
-                                  )}
-                                  <span className="text-sm font-semibold text-gray-900 relative z-10">
-                                    {score}
+                              <div className="flex flex-col items-center gap-0.5">
+                                {scoreToPar !== null && shapeClass ? (
+                                  <span className={shapeClass}>
+                                    {scoreToPar >= 2 && (
+                                      <span className="absolute inset-0 border border-gray-900 m-0.5"></span>
+                                    )}
+                                    <span className="text-sm font-semibold text-gray-900 relative z-10">
+                                      {score}
+                                    </span>
                                   </span>
-                                </span>
-                              ) : (
-                                <span className="text-sm font-semibold text-gray-900">
-                                  {score > 0 ? score : '-'}
-                                </span>
-                              )}
+                                ) : (
+                                  <span className="text-sm font-semibold text-gray-900">
+                                    {score > 0 ? score : '-'}
+                                  </span>
+                                )}
+                                {teamWonHole && (
+                                  <CheckCircle className="h-3 w-3 text-green-600" />
+                                )}
+                              </div>
                             </td>
                           );
                         })}
@@ -909,26 +935,34 @@ const ScoreInterface: React.FC = () => {
                             }
                           }
                           
+                          // Check if this player's team won this hole
+                          const teamWonHole = didTeamWinHole(holeNum, player.team_id);
+
                           return (
                             <td 
                               key={holeNum} 
                               className="px-3 py-2 text-center border-r border-gray-300 bg-white"
                               rowSpan={isTeamFormat ? teamSize : 1}
                             >
-                              {scoreToPar !== null && shapeClass ? (
-                                <span className={shapeClass}>
-                                  {scoreToPar >= 2 && (
-                                    <span className="absolute inset-0 border border-gray-900 m-0.5"></span>
-                                  )}
-                                  <span className="text-sm font-semibold text-gray-900 relative z-10">
-                                    {score}
+                              <div className="flex flex-col items-center gap-0.5">
+                                {scoreToPar !== null && shapeClass ? (
+                                  <span className={shapeClass}>
+                                    {scoreToPar >= 2 && (
+                                      <span className="absolute inset-0 border border-gray-900 m-0.5"></span>
+                                    )}
+                                    <span className="text-sm font-semibold text-gray-900 relative z-10">
+                                      {score}
+                                    </span>
                                   </span>
-                                </span>
-                              ) : (
-                                <span className="text-sm font-semibold text-gray-900">
-                                  {score > 0 ? score : '-'}
-                                </span>
-                              )}
+                                ) : (
+                                  <span className="text-sm font-semibold text-gray-900">
+                                    {score > 0 ? score : '-'}
+                                  </span>
+                                )}
+                                {teamWonHole && (
+                                  <CheckCircle className="h-3 w-3 text-green-600" />
+                                )}
+                              </div>
                             </td>
                           );
                         })}
