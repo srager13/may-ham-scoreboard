@@ -710,7 +710,7 @@ const ScoreInterface: React.FC = () => {
       <>
         {/* Golf Course Information Box */}
         {pairing.round?.golf_course && (
-          <div className="bg-gradient-to-r from-green-50 to-green-100 px-6 py-4 border-b-2 border-gray-300 mb-4 rounded-t-lg">
+          <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b-2 border-gray-300 mb-4 rounded-t-lg">
             <p className={`text-sm font-medium ${SCORECARD_COLORS.courseInfoHeading}`}>
               {pairing.round.golf_course.course_name}
             </p>
@@ -1105,7 +1105,7 @@ const ScoreInterface: React.FC = () => {
 
         {/* Scorecard Display */}
         <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">
-          <div className="bg-gradient-to-r from-green-50 to-green-100 px-6 py-4 border-b-2 border-gray-300">
+          <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b-2 border-gray-300">
             <h3 className="text-lg font-semibold text-gray-900">Final Scorecard</h3>
           </div>
           
@@ -1648,12 +1648,17 @@ const ScoreInterface: React.FC = () => {
           {selectedPairing.status === 'in_progress' && (
             <>
               {/* Full Scorecard Table - Entry Mode */}
-              <ScorecardTable 
-                mode="entry"
-                pairing={selectedPairing}
-                holeScores={holeScores}
-                onScoreChange={handleScoreChange}
-              />
+              <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">
+                <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b-2 border-gray-300">
+                  <h3 className="text-lg font-semibold text-gray-900">Pairing {selectedPairing.pairing_number} Scorecard</h3>
+                </div>
+                <ScorecardTable 
+                  mode="entry"
+                  pairing={selectedPairing}
+                  holeScores={holeScores}
+                  onScoreChange={handleScoreChange}
+                />
+              </div>
 
               {/* Submit Button */}
               <div className="flex justify-between items-center pt-4 border-t border-gray-200">
