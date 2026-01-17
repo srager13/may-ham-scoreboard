@@ -23,6 +23,8 @@ TODOs:
         - refactor:
             - set matches for a round and auto-populate the pairings with the same matches
         - set tee time to 10 minutes from previous pairing by default
+        - update existing tournament should update current tournament, not create a new one
+            (loses any matches/scores/results already entered)
 
     - GOLF COURSES:
         

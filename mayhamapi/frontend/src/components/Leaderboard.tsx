@@ -237,7 +237,7 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
 
         {/* Leaderboard Content */}
         {view === 'team' ? (
-          <TeamStandings teams={data.team_standings} />
+          <TeamStandings teams={data.team_standings} totalAvailablePoints={data.total_available_points} />
         ) : (
           <div className="bg-white rounded-lg shadow-lg p-8 text-center">
             <h3 className="text-xl font-semibold text-gray-600 mb-4">Individual Standings</h3>
@@ -284,11 +284,21 @@ const TeamScoreBanner = ({ teams, totalAvailablePoints }: { teams: TeamStanding[
   const leader = sortedTeams[0];
   const trailer = sortedTeams[1];
   const pointDifference = leader.points_won - trailer.points_won;
+  const leaderHasWon = leader.points_won >= pointsNeededToWin;
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
       <div className="flex items-center justify-between">
         <div className="flex-1 text-center">
+          {leaderHasWon && (
+            <div className="mb-3">
+              <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 rounded-full shadow-lg">
+                <Trophy className="h-5 w-5 text-white mr-2" />
+                <span className="text-lg font-bold text-white">TOURNAMENT CHAMPION</span>
+                <Trophy className="h-5 w-5 text-white ml-2" />
+              </div>
+            </div>
+          )}
           <div
             className="text-6xl font-bold mb-2"
             style={{ color: leader.team.color }}
@@ -299,11 +309,16 @@ const TeamScoreBanner = ({ teams, totalAvailablePoints }: { teams: TeamStanding[
           <div className="text-sm text-gray-600">
             {leader.matches_won}W - {leader.matches_lost}L - {leader.matches_tied}T
           </div>
+          {leaderHasWon && (
+            <div className="mt-2 text-sm font-semibold text-green-600">
+              ✓ Won with {leader.points_won.toFixed(1)} points (needed {pointsNeededToWin})
+            </div>
+          )}
         </div>
 
         <div className="px-8">
           <div className="text-center mb-4">
-            <Trophy size={48} className="text-yellow-500 mx-auto" />
+            <Trophy size={48} className={leaderHasWon ? "text-yellow-500 mx-auto animate-pulse" : "text-yellow-500 mx-auto"} />
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-gray-900">
@@ -313,7 +328,12 @@ const TeamScoreBanner = ({ teams, totalAvailablePoints }: { teams: TeamStanding[
           </div>
           <div className="text-center mt-4 pt-4 border-t border-gray-200">
             <div className="text-sm text-gray-600 mb-1">Points needed to win</div>
-            <div className="text-2xl font-bold text-gray-900">{pointsNeededToWin}</div>
+            <div className={`text-2xl font-bold ${leaderHasWon ? 'text-green-600' : 'text-gray-900'}`}>
+              {pointsNeededToWin}
+            </div>
+            {leaderHasWon && (
+              <div className="text-xs text-green-600 mt-1 font-semibold">✓ Achieved!</div>
+            )}
           </div>
         </div>
 
@@ -645,8 +665,12 @@ const CompactMatchResult = ({ match }: { match: MatchWithResults }) => {
 };
 
 // Team Standings Component
-const TeamStandings = ({ teams }: { teams: TeamStanding[] }) => {
+const TeamStandings = ({ teams, totalAvailablePoints }: { teams: TeamStanding[], totalAvailablePoints: number }) => {
   const sortedTeams = [...teams].sort((a, b) => b.points_won - a.points_won);
+  
+  // Calculate points needed to win (need more than half)
+  const halfPoints = totalAvailablePoints / 2;
+  const pointsNeededToWin = halfPoints % 1 === 0 ? halfPoints + 0.5 : Math.ceil(halfPoints);
 
   return (
     <div className="bg-white rounded-lg shadow-lg overflow-hidden">
@@ -678,54 +702,78 @@ const TeamStandings = ({ teams }: { teams: TeamStanding[] }) => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {sortedTeams.map((team, index) => (
-              <tr key={team.team.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    {index === 0 && <Trophy size={20} className="text-yellow-500 mr-2" />}
-                    <span className="text-2xl font-bold text-gray-400">
-                      {index + 1}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div
-                      className="w-4 h-4 rounded-full mr-3"
-                      style={{ backgroundColor: team.team.color }}
-                    ></div>
-                    <div className="text-lg font-semibold">{team.team.name}</div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div className="text-3xl font-bold" style={{ color: team.team.color }}>
-                    {team.points_won.toFixed(1)}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div className="text-sm">
-                    <div className="font-semibold">
-                      {team.matches_won}-{team.matches_lost}-{team.matches_tied}
+            {sortedTeams.map((team, index) => {
+              const teamHasWon = team.points_won >= pointsNeededToWin;
+              return (
+                <tr 
+                  key={team.team.id} 
+                  className={`hover:bg-gray-50 ${teamHasWon ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border-l-4 border-yellow-500' : ''}`}
+                >
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      {index === 0 && <Trophy size={20} className="text-yellow-500 mr-2" />}
+                      {teamHasWon && index !== 0 && (
+                        <CheckCircle size={20} className="text-green-600 mr-2" />
+                      )}
+                      <span className={`text-2xl font-bold ${teamHasWon ? 'text-yellow-700' : 'text-gray-400'}`}>
+                        {index + 1}
+                      </span>
                     </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div className="text-lg font-semibold text-green-600">
-                    {team.holes_won}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div className="text-lg font-semibold text-red-600">
-                    {team.holes_lost}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div className="text-lg font-semibold text-gray-600">
-                    {team.holes_tied}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div
+                        className="w-4 h-4 rounded-full mr-3"
+                        style={{ backgroundColor: team.team.color }}
+                      ></div>
+                      <div className="flex items-center gap-2">
+                        <div className={`text-lg font-semibold ${teamHasWon ? 'text-yellow-800' : ''}`}>
+                          {team.team.name}
+                        </div>
+                        {teamHasWon && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-yellow-400 to-yellow-500 text-white">
+                            <Trophy className="h-3 w-3 mr-1" />
+                            WINNER
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className={`text-3xl font-bold ${teamHasWon ? 'text-yellow-700' : ''}`} style={{ color: teamHasWon ? undefined : team.team.color }}>
+                      {team.points_won.toFixed(1)}
+                    </div>
+                    {teamHasWon && (
+                      <div className="text-xs text-green-600 font-semibold mt-1">
+                        ✓ Won (needed {pointsNeededToWin})
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-sm">
+                      <div className="font-semibold">
+                        {team.matches_won}-{team.matches_lost}-{team.matches_tied}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-lg font-semibold text-green-600">
+                      {team.holes_won}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-lg font-semibold text-red-600">
+                      {team.holes_lost}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-lg font-semibold text-gray-600">
+                      {team.holes_tied}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
