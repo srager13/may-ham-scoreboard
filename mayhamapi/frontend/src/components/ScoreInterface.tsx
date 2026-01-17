@@ -636,6 +636,57 @@ const ScoreInterface: React.FC = () => {
       return holeResult.winner_team_id === teamId && holeResult.winner_team_id !== null && holeResult.winner_team_id !== undefined;
     };
 
+    // Helper function to calculate points for a team in a hole range
+    const calculateTeamPointsInRange = (team1Id: string, team2Id: string, startHole: number, endHole: number) => {
+      let team1Points = 0;
+      let team2Points = 0;
+
+      for (let h = startHole; h <= endHole; h++) {
+        const match = getMatchForHole(pairing, h);
+        if (!match) continue;
+
+        const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
+        if (!matchResult?.hole_results) continue;
+
+        const holeResult = matchResult.hole_results.find(hr => hr.hole_number === h);
+        if (!holeResult) continue;
+
+        team1Points += holeResult.team1_points || 0;
+        team2Points += holeResult.team2_points || 0;
+      }
+
+      return { team1Points, team2Points };
+    };
+
+    // Component for diagonal split cell showing points
+    const DiagonalPointsCell = ({ team1Points, team2Points, team1Color, team2Color }: { team1Points: number; team2Points: number; team1Color?: string; team2Color?: string }) => {
+      return (
+        <div className="relative w-full h-16 flex items-center justify-center overflow-hidden">
+          {/* SVG with diagonal line and triangles */}
+          <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+            {/* Top-left triangle (Team 1) */}
+            <polygon points="0,0 100,0 0,100" fill={team1Color || '#999'} opacity="0.3" />
+            {/* Bottom-right triangle (Team 2) */}
+            <polygon points="100,0 100,100 0,100" fill={team2Color || '#999'} opacity="0.3" />
+            {/* Diagonal line */}
+            <line x1="0" y1="100" x2="100" y2="0" stroke="#333" strokeWidth="1" />
+          </svg>
+
+          {/* Text content */}
+          <div className="relative z-10 flex items-center justify-between w-full h-full px-2">
+            {/* Team 1 points (top-left) */}
+            <div className="absolute top-1 left-1 text-xs font-bold text-gray-900">
+              {team1Points.toFixed(1)} pts
+            </div>
+            {/* Team 2 points (bottom-right) */}
+            <div className="absolute bottom-1 right-1 text-xs font-bold text-gray-900">
+              {team2Points.toFixed(1)} pts
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-center mb-6">
@@ -972,6 +1023,88 @@ const ScoreInterface: React.FC = () => {
                     );
                   });
                 })()}
+                
+                {/* Status Row - Shows match status (TIED or {x}UP) */}
+                <tr className="bg-blue-50 border-t-2 border-gray-400">
+                  <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-blue-900 uppercase border-r-2 border-gray-800 bg-blue-50">
+                    Status
+                  </td>
+                  {/* Front 9 status */}
+                  {Array.from({ length: 9 }, (_, i) => {
+                    const holeNum = i + 1;
+                    
+                    // Calculate holes won by each team up to this hole (front 9)
+                    let team1HolesWon = 0;
+                    let team2HolesWon = 0;
+                    
+                    for (let h = 1; h <= holeNum; h++) {
+                      if (didTeamWinHole(h, pairing.matchResults?.[0]?.team1_id!)) {
+                        team1HolesWon++;
+                      } else if (didTeamWinHole(h, pairing.matchResults?.[0]?.team2_id!)) {
+                        team2HolesWon++;
+                      }
+                    }
+                    
+                    const diff = Math.abs(team1HolesWon - team2HolesWon);
+                    const team1Leading = team1HolesWon > team2HolesWon;
+                    const team2Leading = team2HolesWon > team1HolesWon;
+                    const isTied = team1HolesWon === team2HolesWon;
+                    
+                    const statusText = isTied ? 'TIED' : team1Leading ? `${diff}UP` : `${diff}UP`;
+                    const statusColor = team1Leading ? pairing.matchResults?.[0]?.team1?.color : team2Leading ? pairing.matchResults?.[0]?.team2?.color : undefined;
+                    
+                    return (
+                      <td 
+                        key={`status-${holeNum}`}
+                        className="px-3 py-2 text-center border-r border-gray-300 font-bold"
+                        style={statusColor && !isTied ? { backgroundColor: statusColor, opacity: 0.3 } : { backgroundColor: 'white' }}
+                      >
+                        <span className={`text-xs font-bold ${isTied ? 'text-gray-600' : 'text-gray-900'}`}>
+                          {statusText}
+                        </span>
+                      </td>
+                    );
+                  })}
+                  <td className="px-3 py-2 border-r-2 border-gray-800 bg-yellow-50"></td>
+                  {/* Back 9 status */}
+                  {Array.from({ length: 9 }, (_, i) => {
+                    const holeNum = i + 10;
+                    
+                    // Calculate holes won by each team up to this hole (all holes)
+                    let team1HolesWon = 0;
+                    let team2HolesWon = 0;
+                    
+                    for (let h = 1; h <= holeNum; h++) {
+                      if (didTeamWinHole(h, pairing.matchResults?.[0]?.team1_id!)) {
+                        team1HolesWon++;
+                      } else if (didTeamWinHole(h, pairing.matchResults?.[0]?.team2_id!)) {
+                        team2HolesWon++;
+                      }
+                    }
+                    
+                    const diff = Math.abs(team1HolesWon - team2HolesWon);
+                    const team1Leading = team1HolesWon > team2HolesWon;
+                    const team2Leading = team2HolesWon > team1HolesWon;
+                    const isTied = team1HolesWon === team2HolesWon;
+                    
+                    const statusText = isTied ? 'TIED' : team1Leading ? `${diff}UP` : `${diff}UP`;
+                    const statusColor = team1Leading ? pairing.matchResults?.[0]?.team1?.color : team2Leading ? pairing.matchResults?.[0]?.team2?.color : undefined;
+                    
+                    return (
+                      <td 
+                        key={`status-${holeNum}`}
+                        className="px-3 py-2 text-center border-r border-gray-300 font-bold"
+                        style={statusColor && !isTied ? { backgroundColor: statusColor, opacity: 0.3 } : { backgroundColor: 'white' }}
+                      >
+                        <span className={`text-xs font-bold ${isTied ? 'text-gray-600' : 'text-gray-900'}`}>
+                          {statusText}
+                        </span>
+                      </td>
+                    );
+                  })}
+                  <td className="px-3 py-2 bg-yellow-50 border-r-2 border-gray-800"></td>
+                  <td className="px-3 py-2 bg-green-100"></td>
+                </tr>
               </tbody>
             </table>
           </div>
