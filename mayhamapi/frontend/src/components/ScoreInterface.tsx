@@ -640,6 +640,360 @@ const ScoreInterface: React.FC = () => {
     statusOutInBg: 'bg-gray-100',
   };
 
+  // ============================================
+  // Reusable Scorecard Table Component
+  // ============================================
+  // Shared scorecard rendering for both entry and display modes
+  interface ScorecardTableProps {
+    pairing: PairingWithScores;
+    mode: 'entry' | 'display';
+    holeScores?: Record<number, Record<string, number>>;
+    onScoreChange?: (holeNumber: number, playerId: string, score: number) => void;
+  }
+
+  const ScorecardTable: React.FC<ScorecardTableProps> = ({ 
+    pairing, 
+    mode, 
+    holeScores = {}, 
+    onScoreChange 
+  }) => {
+    // Component for diagonal split cell showing points (display mode only)
+    const DiagonalPointsCell = ({ team1Points, team2Points, team1Color, team2Color }: { team1Points: number; team2Points: number; team1Color?: string; team2Color?: string }) => {
+      return (
+        <div className="relative w-full h-16 flex items-center justify-center overflow-hidden">
+          <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <polygon points="0,0 100,0 0,100" fill={team1Color || '#999'} opacity="0.3" />
+            <polygon points="100,0 100,100 0,100" fill={team2Color || '#999'} opacity="0.3" />
+            <line x1="0" y1="100" x2="100" y2="0" stroke="#333" strokeWidth="1" />
+          </svg>
+          <div className="relative z-10 flex items-center justify-between w-full h-full px-2">
+            <div className="absolute top-1 left-1 text-xs font-bold text-gray-900">
+              {team1Points.toFixed(1)} pts
+            </div>
+            <div className="absolute bottom-1 right-1 text-xs font-bold text-gray-900">
+              {team2Points.toFixed(1)} pts
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // Helper to check if team won hole (display mode)
+    const didTeamWinHole = (holeNumber: number, teamId: string): boolean => {
+      const match = getMatchForHole(pairing, holeNumber);
+      if (!match) return false;
+      const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
+      if (!matchResult?.hole_results) return false;
+      const holeResult = matchResult.hole_results.find(hr => hr.hole_number === holeNumber);
+      if (!holeResult) return false;
+      return holeResult.winner_team_id === teamId && holeResult.winner_team_id !== null && holeResult.winner_team_id !== undefined;
+    };
+
+    // Helper to calculate points in range (display mode)
+    const calculateTeamPointsInRange = (team1Id: string, team2Id: string, startHole: number, endHole: number) => {
+      let team1Points = 0;
+      let team2Points = 0;
+      for (let h = startHole; h <= endHole; h++) {
+        const match = getMatchForHole(pairing, h);
+        if (!match) continue;
+        const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
+        if (!matchResult?.hole_results) continue;
+        const holeResult = matchResult.hole_results.find(hr => hr.hole_number === h);
+        if (!holeResult) continue;
+        team1Points += holeResult.team1_points || 0;
+        team2Points += holeResult.team2_points || 0;
+      }
+      return { team1Points, team2Points };
+    };
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y-2 divide-gray-800 bg-white text-xs">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase border-r-2 border-gray-800 bg-gray-100">
+                Hole
+              </th>
+              {Array.from({ length: 9 }, (_, i) => i + 1).map(hole => (
+                <th key={hole} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300 min-w-[50px]">
+                  {hole}
+                </th>
+              ))}
+              <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg} min-w-[60px]`}>
+                Out
+              </th>
+              {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => (
+                <th key={hole} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300 min-w-[50px]">
+                  {hole}
+                </th>
+              ))}
+              <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.inBg} min-w-[60px] border-r-2 border-gray-800`}>
+                In
+              </th>
+              <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.totalBg} min-w-[60px]`}>
+                Total
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y-2 divide-gray-800">
+            {/* Yardage Row */}
+            {pairing.holes && pairing.holes.length > 0 && (
+              <tr className="bg-gray-50">
+                <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-gray-50">
+                  Yardage
+                </td>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const hole = pairing.holes?.find(h => h.hole_number === i + 1);
+                  return (
+                    <td key={i + 1} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
+                      {hole?.yards || '—'}
+                    </td>
+                  );
+                })}
+                <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.yardageOutInBg}`}>
+                  {pairing.holes?.slice(0, 9).reduce((sum, h) => sum + (h.yards || 0), 0)}
+                </td>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const hole = pairing.holes?.find(h => h.hole_number === i + 10);
+                  return (
+                    <td key={i + 10} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
+                      {hole?.yards || '—'}
+                    </td>
+                  );
+                })}
+                <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 ${SCORECARD_COLORS.yardageOutInBg} border-r-2 border-gray-800`}>
+                  {pairing.holes?.slice(9, 18).reduce((sum, h) => sum + (h.yards || 0), 0)}
+                </td>
+                <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 ${SCORECARD_COLORS.yardageTotalBg}`}>
+                  {pairing.holes?.reduce((sum, h) => sum + (h.yards || 0), 0)}
+                </td>
+              </tr>
+            )}
+            
+            {/* Par Row */}
+            {pairing.holes && pairing.holes.length > 0 && (
+              <tr className={SCORECARD_COLORS.parRowBg}>
+                <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 ${SCORECARD_COLORS.parRowHeaderBg}`}>
+                  Par
+                </td>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const hole = pairing.holes?.find(h => h.hole_number === i + 1);
+                  return (
+                    <td key={i + 1} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300">
+                      {hole?.par || '—'}
+                    </td>
+                  );
+                })}
+                <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.parOutInBg}`}>
+                  {pairing.holes?.slice(0, 9).reduce((sum, h) => sum + (h.par || 0), 0)}
+                </td>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const hole = pairing.holes?.find(h => h.hole_number === i + 10);
+                  return (
+                    <td key={i + 10} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300">
+                      {hole?.par || '—'}
+                    </td>
+                  );
+                })}
+                <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.parOutInBg}`}>
+                  {pairing.holes?.slice(9, 18).reduce((sum, h) => sum + (h.par || 0), 0)}
+                </td>
+                <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.parTotalBg}`}>
+                  {pairing.holes?.reduce((sum, h) => sum + (h.par || 0), 0)}
+                </td>
+              </tr>
+            )}
+            
+            {/* Handicap Row */}
+            {pairing.holes && pairing.holes.length > 0 && pairing.holes.some(h => h.handicap) && (
+              <tr className="bg-gray-50">
+                <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-gray-50">
+                  HCP
+                </td>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const hole = pairing.holes?.find(h => h.hole_number === i + 1);
+                  return (
+                    <td key={i + 1} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
+                      {hole?.handicap || '—'}
+                    </td>
+                  );
+                })}
+                <td className={`px-3 py-2 text-center text-xs text-gray-600 border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg}`}></td>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const hole = pairing.holes?.find(h => h.hole_number === i + 10);
+                  return (
+                    <td key={i + 10} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
+                      {hole?.handicap || '—'}
+                    </td>
+                  );
+                })}
+                <td className={`px-3 py-2 text-center text-xs text-gray-600 border-r-2 border-gray-800 ${SCORECARD_COLORS.inBg}`}></td>
+                <td className={`px-3 py-2 text-center text-xs text-gray-600 ${SCORECARD_COLORS.totalBg}`}></td>
+              </tr>
+            )}
+            
+            {/* Player Score Rows */}
+            {(pairing.players || []).map((player, playerIdx) => {
+              const playerScores = mode === 'entry' ? holeScores : pairing.scores;
+              const isTeam1 = player.team_id === pairing.matchResults?.[0]?.team1_id;
+              const teamColor = isTeam1 ? pairing.matchResults?.[0]?.team1?.color : pairing.matchResults?.[0]?.team2?.color;
+
+              return (
+                <tr key={player.id} className={playerIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 ${playerIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                    {player.user?.name || 'Player'}
+                  </td>
+                  {/* Front 9 scores (holes 1-9) */}
+                  {Array.from({ length: 9 }, (_, i) => {
+                    const holeNum = i + 1;
+                    const score = playerScores?.[holeNum]?.[player.user_id];
+                    const hasWon = mode === 'display' && didTeamWinHole(holeNum, player.team_id);
+
+                    return (
+                      <td
+                        key={holeNum}
+                        className="px-3 py-2 text-center text-xs border-r border-gray-300"
+                        style={hasWon && teamColor ? { backgroundColor: `${teamColor}4D` } : {}}
+                      >
+                        {mode === 'entry' ? (
+                          <input
+                            type="number"
+                            min="0"
+                            max="15"
+                            value={score || ''}
+                            onChange={(e) => onScoreChange?.(holeNum, player.user_id, parseInt(e.target.value) || 0)}
+                            className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs"
+                          />
+                        ) : (
+                          <span className="font-semibold">{score || '—'}</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                  {/* Out total */}
+                  <td className={`px-3 py-2 text-center font-semibold border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg}`}>
+                    {Array.from({ length: 9 }, (_, i) => playerScores?.[i + 1]?.[player.user_id] || 0).reduce((a, b) => a + b, 0)}
+                  </td>
+                  {/* Back 9 scores (holes 10-18) */}
+                  {Array.from({ length: 9 }, (_, i) => {
+                    const holeNum = i + 10;
+                    const score = playerScores?.[holeNum]?.[player.user_id];
+                    const hasWon = mode === 'display' && didTeamWinHole(holeNum, player.team_id);
+
+                    return (
+                      <td
+                        key={holeNum}
+                        className="px-3 py-2 text-center text-xs border-r border-gray-300"
+                        style={hasWon && teamColor ? { backgroundColor: `${teamColor}4D` } : {}}
+                      >
+                        {mode === 'entry' ? (
+                          <input
+                            type="number"
+                            min="0"
+                            max="15"
+                            value={score || ''}
+                            onChange={(e) => onScoreChange?.(holeNum, player.user_id, parseInt(e.target.value) || 0)}
+                            className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs"
+                          />
+                        ) : (
+                          <span className="font-semibold">{score || '—'}</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                  {/* In total */}
+                  <td className={`px-3 py-2 text-center font-semibold border-r-2 border-gray-800 ${SCORECARD_COLORS.inBg}`}>
+                    {Array.from({ length: 9 }, (_, i) => playerScores?.[i + 10]?.[player.user_id] || 0).reduce((a, b) => a + b, 0)}
+                  </td>
+                  {/* Total */}
+                  <td className={`px-3 py-2 text-center font-bold ${SCORECARD_COLORS.totalBg}`}>
+                    {Array.from({ length: 18 }, (_, i) => playerScores?.[i + 1]?.[player.user_id] || 0).reduce((a, b) => a + b, 0)}
+                  </td>
+                </tr>
+              );
+            })}
+            
+            {/* Status Row - Shows match status (TIED or {x}UP) - display mode only */}
+            {mode === 'display' && pairing.matchResults && (
+              <tr className={`${SCORECARD_COLORS.statusRowBg} border-t-2 border-gray-400`}>
+                <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold ${SCORECARD_COLORS.statusRowHeaderText} uppercase border-r-2 border-gray-800 ${SCORECARD_COLORS.statusRowHeaderBg}`}>
+                  Status
+                </td>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const holeNum = i + 1;
+                  const match = getMatchForHole(pairing, holeNum);
+                  if (!match) return <td key={holeNum}></td>;
+                  const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
+                  if (!matchResult?.hole_results) return <td key={holeNum}></td>;
+                  const holeResult = matchResult.hole_results.find(hr => hr.hole_number === holeNum);
+                  if (!holeResult) return <td key={holeNum}></td>;
+
+                  const team1Won = holeResult.team1_points > holeResult.team2_points;
+                  const team2Won = holeResult.team2_points > holeResult.team1_points;
+                  let statusText = 'TIED';
+                  let winningTeamColor = undefined;
+
+                  if (team1Won) {
+                    statusText = 'TEAM 1';
+                    winningTeamColor = matchResult.team1?.color;
+                  } else if (team2Won) {
+                    statusText = 'TEAM 2';
+                    winningTeamColor = matchResult.team2?.color;
+                  }
+
+                  return (
+                    <td
+                      key={holeNum}
+                      className="px-3 py-2 text-center text-xs font-bold border-r border-gray-300"
+                      style={winningTeamColor ? { backgroundColor: `${winningTeamColor}4D` } : {}}
+                    >
+                      {statusText}
+                    </td>
+                  );
+                })}
+                <td className={`px-3 py-2 border-r-2 border-gray-800 ${SCORECARD_COLORS.statusOutInBg}`}></td>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const holeNum = i + 10;
+                  const match = getMatchForHole(pairing, holeNum);
+                  if (!match) return <td key={holeNum}></td>;
+                  const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
+                  if (!matchResult?.hole_results) return <td key={holeNum}></td>;
+                  const holeResult = matchResult.hole_results.find(hr => hr.hole_number === holeNum);
+                  if (!holeResult) return <td key={holeNum}></td>;
+
+                  const team1Won = holeResult.team1_points > holeResult.team2_points;
+                  const team2Won = holeResult.team2_points > holeResult.team1_points;
+                  let statusText = 'TIED';
+                  let winningTeamColor = undefined;
+
+                  if (team1Won) {
+                    statusText = 'TEAM 1';
+                    winningTeamColor = matchResult.team1?.color;
+                  } else if (team2Won) {
+                    statusText = 'TEAM 2';
+                    winningTeamColor = matchResult.team2?.color;
+                  }
+
+                  return (
+                    <td
+                      key={holeNum}
+                      className="px-3 py-2 text-center text-xs font-bold border-r border-gray-300"
+                      style={winningTeamColor ? { backgroundColor: `${winningTeamColor}4D` } : {}}
+                    >
+                      {statusText}
+                    </td>
+                  );
+                })}
+                <td className={`px-3 py-2 ${SCORECARD_COLORS.statusOutInBg} border-r-2 border-gray-800`}></td>
+                <td className={`px-3 py-2 ${SCORECARD_COLORS.totalBg}`}></td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   // Component to display match results for completed pairings
   const MatchResultsDisplay = ({ pairing }: { pairing: PairingWithScores }) => {
     if (!pairing.matchResults || pairing.matchResults.length === 0) {
@@ -753,392 +1107,10 @@ const ScoreInterface: React.FC = () => {
           </div>
           
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y-2 divide-gray-800 bg-white text-xs">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase border-r-2 border-gray-800 bg-gray-100">
-                    Hole
-                  </th>
-                  {Array.from({ length: 9 }, (_, i) => i + 1).map(hole => (
-                    <th key={hole} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300 min-w-[50px]">
-                      {hole}
-                    </th>
-                  ))}
-                  <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg} min-w-[60px]`}>
-                    Out
-                  </th>
-                  {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => (
-                    <th key={hole} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300 min-w-[50px]">
-                      {hole}
-                    </th>
-                  ))}
-                  <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.inBg} min-w-[60px] border-r-2 border-gray-800`}>
-                    In
-                  </th>
-                  <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.totalBg} min-w-[60px]`}>
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y-2 divide-gray-800">
-                {/* Yardage Row */}
-                {pairing.holes && pairing.holes.length > 0 && (
-                  <tr className="bg-gray-50">
-                    <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-gray-50">
-                      Yardage
-                    </td>
-                    {Array.from({ length: 9 }, (_, i) => {
-                      const hole = pairing.holes?.find(h => h.hole_number === i + 1);
-                      return (
-                        <td key={i + 1} className="px-3 py-2 text-center text-sm text-gray-700 border-r border-gray-300">
-                          {hole?.yards || '-'}
-                        </td>
-                      );
-                    })}
-                    <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.yardageOutInBg}`}>
-                      {pairing.holes.filter(h => h.hole_number >= 1 && h.hole_number <= 9)
-                        .reduce((sum, h) => sum + (h.yards || 0), 0) || '-'}
-                    </td>
-                    {Array.from({ length: 9 }, (_, i) => {
-                      const hole = pairing.holes?.find(h => h.hole_number === i + 10);
-                      return (
-                        <td key={i + 10} className="px-3 py-2 text-center text-sm text-gray-700 border-r border-gray-300">
-                          {hole?.yards || '-'}
-                        </td>
-                      );
-                    })}
-                    <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 ${SCORECARD_COLORS.yardageOutInBg} border-r-2 border-gray-800`}>
-                      {pairing.holes.filter(h => h.hole_number >= 10 && h.hole_number <= 18)
-                        .reduce((sum, h) => sum + (h.yards || 0), 0) || '-'}
-                    </td>
-                    <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 ${SCORECARD_COLORS.yardageTotalBg}`}>
-                      {pairing.tee?.total_yards || '-'}
-                    </td>
-                  </tr>
-                )}
-                
-                {/* Par Row */}
-                {pairing.holes && pairing.holes.length > 0 && (
-                  <tr className={SCORECARD_COLORS.parRowBg}>
-                    <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 ${SCORECARD_COLORS.parRowHeaderBg}`}>
-                      Par
-                    </td>
-                    {Array.from({ length: 9 }, (_, i) => {
-                      const hole = pairing.holes?.find(h => h.hole_number === i + 1);
-                      return (
-                        <td key={i + 1} className="px-3 py-2 text-center text-sm font-semibold text-gray-900 border-r border-gray-300">
-                          {hole?.par || '-'}
-                        </td>
-                      );
-                    })}
-                    <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.parOutInBg}`}>
-                      {pairing.holes.filter(h => h.hole_number >= 1 && h.hole_number <= 9)
-                        .reduce((sum, h) => sum + (h.par || 0), 0) || '-'}
-                    </td>
-                    {Array.from({ length: 9 }, (_, i) => {
-                      const hole = pairing.holes?.find(h => h.hole_number === i + 10);
-                      return (
-                        <td key={i + 10} className="px-3 py-2 text-center text-sm font-semibold text-gray-900 border-r border-gray-300">
-                          {hole?.par || '-'}
-                        </td>
-                      );
-                    })}
-                    <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.parOutInBg} border-r-2 border-gray-800`}>
-                      {pairing.holes.filter(h => h.hole_number >= 10 && h.hole_number <= 18)
-                        .reduce((sum, h) => sum + (h.par || 0), 0) || '-'}
-                    </td>
-                    <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.parTotalBg}`}>
-                      {pairing.tee?.par_total || '-'}
-                    </td>
-                  </tr>
-                )}
-                
-                {/* Handicap Row */}
-                {pairing.holes && pairing.holes.length > 0 && pairing.holes.some(h => h.handicap) && (
-                  <tr className="bg-gray-50">
-                    <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-gray-50">
-                      Handicap
-                    </td>
-                    {Array.from({ length: 9 }, (_, i) => {
-                      const hole = pairing.holes?.find(h => h.hole_number === i + 1);
-                      return (
-                        <td key={i + 1} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
-                          {hole?.handicap || '-'}
-                        </td>
-                      );
-                    })}
-                    <td className={`px-3 py-2 border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg}`}></td>
-                    {Array.from({ length: 9 }, (_, i) => {
-                      const hole = pairing.holes?.find(h => h.hole_number === i + 10);
-                      return (
-                        <td key={i + 10} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
-                          {hole?.handicap || '-'}
-                        </td>
-                      );
-                    })}
-                    <td className={`px-3 py-2 ${SCORECARD_COLORS.inBg} border-r-2 border-gray-800`}></td>
-                    <td className={`px-3 py-2 ${SCORECARD_COLORS.totalBg}`}></td>
-                  </tr>
-                )}
-                
-                {/* Player Score Rows */}
-                {(() => {
-                  // Group players by team for potential cell merging
-                  const playersByTeam = new Map<string, typeof pairing.players>();
-                  (pairing.players || []).forEach(player => {
-                    const teamId = player.team_id;
-                    if (!playersByTeam.has(teamId)) {
-                      playersByTeam.set(teamId, []);
-                    }
-                    playersByTeam.get(teamId)!.push(player);
-                  });
-
-                  return (pairing.players || []).map((player, playerIdx) => {
-                    const isFirstInTeam = playerIdx === 0 || 
-                      pairing.players![playerIdx - 1].team_id !== player.team_id;
-                    
-                    // Get teammates for this player
-                    const teammates = playersByTeam.get(player.team_id) || [];
-                    const playerIndexInTeam = teammates.findIndex(p => p.user_id === player.user_id);
-                    const isFirstPlayerInTeam = playerIndexInTeam === 0;
-                    const teamSize = teammates.length;
-                    
-                    // Calculate front 9, back 9, and total from stored scores
-                    const front9 = Array.from({ length: 9 }, (_, i) => i + 1)
-                      .reduce((sum, hole) => sum + (pairing.scores[hole]?.[player.user_id] || 0), 0);
-                    const back9 = Array.from({ length: 9 }, (_, i) => i + 10)
-                      .reduce((sum, hole) => sum + (pairing.scores[hole]?.[player.user_id] || 0), 0);
-                    const total = front9 + back9;
-
-                    return (
-                      <tr 
-                        key={player.user_id}
-                        className={`${isFirstInTeam ? 'border-t-2 border-gray-400' : ''}`}
-                      >
-                        <td className={`sticky left-0 z-10 px-3 py-2 text-left text-sm font-medium border-r-2 border-gray-800 bg-white`}>
-                          <div className="flex items-center">
-                            <div 
-                              className="w-3 h-3 rounded-full mr-2 flex-shrink-0" 
-                              style={{ backgroundColor: player.team?.color || '#999' }}
-                            />
-                            <span className="truncate">{player.user?.name || 'Unknown'}</span>
-                          </div>
-                        </td>
-                        {/* Front 9 scores */}
-                        {Array.from({ length: 9 }, (_, i) => {
-                          const holeNum = i + 1;
-                          const match = getMatchForHole(pairing, holeNum);
-                          const isTeamFormat = match?.format?.score_input_type === 'team';
-                          const score = pairing.scores[holeNum]?.[player.user_id] || 0;
-                          const hole = pairing.holes?.find(h => h.hole_number === holeNum);
-                          const par = hole?.par || 0;
-                          const scoreToPar = score > 0 && par > 0 ? score - par : null;
-                          
-                          // For team formats, only render cell for first player in team (with rowspan)
-                          if (isTeamFormat && !isFirstPlayerInTeam) {
-                            return null; // Skip this cell, it's merged with the one above
-                          }
-                          
-                          // Determine shape based on score to par
-                          let shapeClass = '';
-                          if (scoreToPar !== null) {
-                            if (scoreToPar <= -1) {
-                              // Under par: circle
-                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 rounded-full border-2 border-gray-900';
-                            } else if (scoreToPar === 1) {
-                              // Bogey: square
-                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900';
-                            } else if (scoreToPar >= 2) {
-                              // Double bogey or worse: double box
-                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900 relative';
-                            }
-                          }
-                          
-                          // Check if this player's team won this hole
-                          const teamWonHole = didTeamWinHole(holeNum, player.team_id);
-
-                          return (
-                            <td 
-                              key={holeNum} 
-                              className="px-3 py-2 text-center border-r border-gray-300"
-                              style={teamWonHole && player.team?.color ? { backgroundColor: player.team.color, opacity: 0.3 } : { backgroundColor: 'white' }}
-                              rowSpan={isTeamFormat ? teamSize : 1}
-                            >
-                              <div className="flex flex-col items-center gap-0.5">
-                                {scoreToPar !== null && shapeClass ? (
-                                  <span className={shapeClass}>
-                                    {scoreToPar >= 2 && (
-                                      <span className="absolute inset-0 border border-gray-900 m-0.5"></span>
-                                    )}
-                                    <span className="text-sm font-semibold text-gray-900 relative z-10">
-                                      {score}
-                                    </span>
-                                  </span>
-                                ) : (
-                                  <span className="text-sm font-semibold text-gray-900">
-                                    {score > 0 ? score : '-'}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })}
-                        <td className={`px-3 py-2 text-center font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg}`}>
-                          {front9 > 0 ? front9 : '-'}
-                        </td>
-                        {/* Back 9 scores */}
-                        {Array.from({ length: 9 }, (_, i) => {
-                          const holeNum = i + 10;
-                          const match = getMatchForHole(pairing, holeNum);
-                          const isTeamFormat = match?.format?.score_input_type === 'team';
-                          const score = pairing.scores[holeNum]?.[player.user_id] || 0;
-                          const hole = pairing.holes?.find(h => h.hole_number === holeNum);
-                          const par = hole?.par || 0;
-                          const scoreToPar = score > 0 && par > 0 ? score - par : null;
-                          
-                          // For team formats, only render cell for first player in team (with rowspan)
-                          if (isTeamFormat && !isFirstPlayerInTeam) {
-                            return null; // Skip this cell, it's merged with the one above
-                          }
-                          
-                          // Determine shape based on score to par
-                          let shapeClass = '';
-                          if (scoreToPar !== null) {
-                            if (scoreToPar <= -1) {
-                              // Under par: circle
-                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 rounded-full border-2 border-gray-900';
-                            } else if (scoreToPar === 1) {
-                              // Bogey: square
-                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900';
-                            } else if (scoreToPar >= 2) {
-                              // Double bogey or worse: double box
-                              shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900 relative';
-                            }
-                          }
-                          
-                          // Check if this player's team won this hole
-                          const teamWonHole = didTeamWinHole(holeNum, player.team_id);
-
-                          return (
-                            <td 
-                              key={holeNum} 
-                              className="px-3 py-2 text-center border-r border-gray-300"
-                              style={teamWonHole && player.team?.color ? { backgroundColor: player.team.color, opacity: 0.3 } : { backgroundColor: 'white' }}
-                              rowSpan={isTeamFormat ? teamSize : 1}
-                            >
-                              <div className="flex flex-col items-center gap-0.5">
-                                {scoreToPar !== null && shapeClass ? (
-                                  <span className={shapeClass}>
-                                    {scoreToPar >= 2 && (
-                                      <span className="absolute inset-0 border border-gray-900 m-0.5"></span>
-                                    )}
-                                    <span className="text-sm font-semibold text-gray-900 relative z-10">
-                                      {score}
-                                    </span>
-                                  </span>
-                                ) : (
-                                  <span className="text-sm font-semibold text-gray-900">
-                                    {score > 0 ? score : '-'}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })}
-                        <td className={`px-3 py-2 text-center font-bold text-gray-900 ${SCORECARD_COLORS.inBg} border-r-2 border-gray-800`}>
-                          {back9 > 0 ? back9 : '-'}
-                        </td>
-                        <td className={`px-3 py-2 text-center font-bold text-lg text-gray-900 ${SCORECARD_COLORS.totalBg}`}>
-                          {total > 0 ? total : '-'}
-                        </td>
-                      </tr>
-                    );
-                  });
-                })()}
-                
-                {/* Status Row - Shows match status (TIED or {x}UP) */}
-                <tr className={`${SCORECARD_COLORS.statusRowBg} border-t-2 border-gray-400`}>
-                  <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold ${SCORECARD_COLORS.statusRowHeaderText} uppercase border-r-2 border-gray-800 ${SCORECARD_COLORS.statusRowHeaderBg}`}>
-                    Status
-                  </td>
-                  {/* Front 9 status */}
-                  {Array.from({ length: 9 }, (_, i) => {
-                    const holeNum = i + 1;
-                    
-                    // Calculate holes won by each team up to this hole (front 9)
-                    let team1HolesWon = 0;
-                    let team2HolesWon = 0;
-                    
-                    for (let h = 1; h <= holeNum; h++) {
-                      if (didTeamWinHole(h, pairing.matchResults?.[0]?.team1_id!)) {
-                        team1HolesWon++;
-                      } else if (didTeamWinHole(h, pairing.matchResults?.[0]?.team2_id!)) {
-                        team2HolesWon++;
-                      }
-                    }
-                    
-                    const diff = Math.abs(team1HolesWon - team2HolesWon);
-                    const team1Leading = team1HolesWon > team2HolesWon;
-                    const team2Leading = team2HolesWon > team1HolesWon;
-                    const isTied = team1HolesWon === team2HolesWon;
-                    
-                    const statusText = isTied ? 'TIED' : team1Leading ? `${diff}UP` : `${diff}UP`;
-                    const statusColor = team1Leading ? pairing.matchResults?.[0]?.team1?.color : team2Leading ? pairing.matchResults?.[0]?.team2?.color : undefined;
-                    
-                    return (
-                      <td 
-                        key={`status-${holeNum}`}
-                        className="px-3 py-2 text-center border-r border-gray-300 font-bold"
-                        style={statusColor && !isTied ? { backgroundColor: statusColor, opacity: 0.3 } : { backgroundColor: 'white' }}
-                      >
-                        <span className={`text-xs font-bold ${isTied ? 'text-gray-600' : 'text-gray-900'}`}>
-                          {statusText}
-                        </span>
-                      </td>
-                    );
-                  })}
-                  <td className={`px-3 py-2 border-r-2 border-gray-800 ${SCORECARD_COLORS.statusOutInBg}`}></td>
-                  {/* Back 9 status */}
-                  {Array.from({ length: 9 }, (_, i) => {
-                    const holeNum = i + 10;
-                    
-                    // Calculate holes won by each team up to this hole (all holes)
-                    let team1HolesWon = 0;
-                    let team2HolesWon = 0;
-                    
-                    for (let h = 1; h <= holeNum; h++) {
-                      if (didTeamWinHole(h, pairing.matchResults?.[0]?.team1_id!)) {
-                        team1HolesWon++;
-                      } else if (didTeamWinHole(h, pairing.matchResults?.[0]?.team2_id!)) {
-                        team2HolesWon++;
-                      }
-                    }
-                    
-                    const diff = Math.abs(team1HolesWon - team2HolesWon);
-                    const team1Leading = team1HolesWon > team2HolesWon;
-                    const team2Leading = team2HolesWon > team1HolesWon;
-                    const isTied = team1HolesWon === team2HolesWon;
-                    
-                    const statusText = isTied ? 'TIED' : team1Leading ? `${diff}UP` : `${diff}UP`;
-                    const statusColor = team1Leading ? pairing.matchResults?.[0]?.team1?.color : team2Leading ? pairing.matchResults?.[0]?.team2?.color : undefined;
-                    
-                    return (
-                      <td 
-                        key={`status-${holeNum}`}
-                        className="px-3 py-2 text-center border-r border-gray-300 font-bold"
-                        style={statusColor && !isTied ? { backgroundColor: statusColor, opacity: 0.3 } : { backgroundColor: 'white' }}
-                      >
-                        <span className={`text-xs font-bold ${isTied ? 'text-gray-600' : 'text-gray-900'}`}>
-                          {statusText}
-                        </span>
-                      </td>
-                    );
-                  })}
-                  <td className={`px-3 py-2 ${SCORECARD_COLORS.statusOutInBg} border-r-2 border-gray-800`}></td>
-                  <td className={`px-3 py-2 ${SCORECARD_COLORS.totalBg}`}></td>
-                </tr>
-              </tbody>
-            </table>
+            <ScorecardTable 
+              mode="display"
+              pairing={pairing}
+            />
           </div>
           
           {/* Score Legend */}
@@ -1719,447 +1691,13 @@ const ScoreInterface: React.FC = () => {
               </div>
 
 
-              {/* Full Scorecard Table */}
-              <div className="mb-6 overflow-x-auto">
-                <div className="inline-block min-w-full align-middle">
-                  <div className="overflow-hidden border-2 border-gray-800 rounded-lg">
-                    <table className="min-w-full divide-y-2 divide-gray-800 bg-white text-xs">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase border-r-2 border-gray-800 bg-gray-100">
-                            Hole
-                          </th>
-                          {Array.from({ length: 9 }, (_, i) => i + 1).map(hole => (
-                            <th key={hole} className="px-2 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300 min-w-[50px]">
-                              {hole}
-                            </th>
-                          ))}
-                          <th className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50 min-w-[60px]">
-                            Out
-                          </th>
-                          {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => (
-                            <th key={hole} className="px-2 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300 min-w-[50px]">
-                              {hole}
-                            </th>
-                          ))}
-                          <th className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-50 min-w-[60px]">
-                            In
-                          </th>
-                          <th className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-green-100 min-w-[60px]">
-                            Total
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y-2 divide-gray-800">
-                        {/* Yardage Row */}
-                        {selectedPairing.holes && selectedPairing.holes.length > 0 && (
-                          <tr className="bg-gray-50">
-                            <td className="sticky left-0 z-10 px-3 py-2 text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-gray-50">
-                              Yards
-                            </td>
-                            {Array.from({ length: 9 }, (_, i) => {
-                              const hole = selectedPairing.holes?.find(h => h.hole_number === i + 1);
-                              return (
-                                <td key={i + 1} className="px-2 py-2 text-center text-xs font-medium text-gray-900 border-r border-gray-300">
-                                  {hole?.yards || '-'}
-                                </td>
-                              );
-                            })}
-                            <td className="px-3 py-2 text-center text-xs font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50">
-                              {selectedPairing.holes.slice(0, 9).reduce((sum, h) => sum + (h.yards || 0), 0)}
-                            </td>
-                            {Array.from({ length: 9 }, (_, i) => {
-                              const hole = selectedPairing.holes?.find(h => h.hole_number === i + 10);
-                              return (
-                                <td key={i + 10} className="px-2 py-2 text-center text-xs font-medium text-gray-900 border-r border-gray-300">
-                                  {hole?.yards || '-'}
-                                </td>
-                              );
-                            })}
-                            <td className="px-3 py-2 text-center text-xs font-bold text-gray-900 bg-yellow-50">
-                              {selectedPairing.holes.slice(9, 18).reduce((sum, h) => sum + (h.yards || 0), 0)}
-                            </td>
-                            <td className="px-3 py-2 text-center text-xs font-bold text-gray-900 bg-green-100">
-                              {selectedPairing.tee?.total_yards || selectedPairing.holes.reduce((sum, h) => sum + (h.yards || 0), 0)}
-                            </td>
-                          </tr>
-                        )}
-                        
-                        {/* Par Row */}
-                        {selectedPairing.holes && selectedPairing.holes.length > 0 && (
-                          <tr className="bg-yellow-50">
-                            <td className="sticky left-0 z-10 px-3 py-2 text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-yellow-50">
-                              Par
-                            </td>
-                            {Array.from({ length: 9 }, (_, i) => {
-                              const hole = selectedPairing.holes?.find(h => h.hole_number === i + 1);
-                              return (
-                                <td key={i + 1} className="px-2 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300">
-                                  {hole?.par || '-'}
-                                </td>
-                              );
-                            })}
-                            <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-100">
-                              {selectedPairing.holes.slice(0, 9).reduce((sum, h) => sum + (h.par || 0), 0)}
-                            </td>
-                            {Array.from({ length: 9 }, (_, i) => {
-                              const hole = selectedPairing.holes?.find(h => h.hole_number === i + 10);
-                              return (
-                                <td key={i + 10} className="px-2 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300">
-                                  {hole?.par || '-'}
-                                </td>
-                              );
-                            })}
-                            <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-100">
-                              {selectedPairing.holes.slice(9, 18).reduce((sum, h) => sum + (h.par || 0), 0)}
-                            </td>
-                            <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 bg-green-200">
-                              {selectedPairing.tee?.par_total || selectedPairing.holes.reduce((sum, h) => sum + (h.par || 0), 0)}
-                            </td>
-                          </tr>
-                        )}
-                        
-                        {/* Handicap Row */}
-                        {selectedPairing.holes && selectedPairing.holes.length > 0 && selectedPairing.holes.some(h => h.handicap) && (
-                          <tr className="bg-gray-50">
-                            <td className="sticky left-0 z-10 px-3 py-2 text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-gray-50">
-                              Hdcp
-                            </td>
-                            {Array.from({ length: 9 }, (_, i) => {
-                              const hole = selectedPairing.holes?.find(h => h.hole_number === i + 1);
-                              return (
-                                <td key={i + 1} className="px-2 py-2 text-center text-xs font-medium text-gray-900 border-r border-gray-300">
-                                  {hole?.handicap || '-'}
-                                </td>
-                              );
-                            })}
-                            <td className="px-3 py-2 border-r-2 border-gray-800 bg-yellow-50"></td>
-                            {Array.from({ length: 9 }, (_, i) => {
-                              const hole = selectedPairing.holes?.find(h => h.hole_number === i + 10);
-                              return (
-                                <td key={i + 10} className="px-2 py-2 text-center text-xs font-medium text-gray-900 border-r border-gray-300">
-                                  {hole?.handicap || '-'}
-                                </td>
-                              );
-                            })}
-                            <td className="px-3 py-2 bg-yellow-50"></td>
-                            <td className="px-3 py-2 bg-green-100"></td>
-                          </tr>
-                        )}
-                        
-                        {/* Player Score Rows */}
-                        {(() => {
-                          // Group players by team for potential cell merging
-                          const playersByTeam = new Map<string, typeof selectedPairing.players>();
-                          (selectedPairing.players || []).forEach(player => {
-                            const teamId = player.team_id;
-                            if (!playersByTeam.has(teamId)) {
-                              playersByTeam.set(teamId, []);
-                            }
-                            playersByTeam.get(teamId)!.push(player);
-                          });
-
-                          // Debug logging: Log team information
-                          console.log('=== SCORECARD DEBUG INFO ===');
-                          console.log('Pairing ID:', selectedPairing.id);
-                          playersByTeam.forEach((players, teamId) => {
-                            const team = players[0]?.team;
-                            console.log(`Team ${team?.name || teamId}:`, {
-                              teamId,
-                              teamName: team?.name,
-                              teamColor: team?.color,
-                              playerCount: players.length,
-                              players: players.map(p => p.user?.name)
-                            });
-                          });
-
-                          // Debug logging: Log format info for front 9 and back 9
-                          const front9Match = getMatchForHole(selectedPairing, 1);
-                          const back9Match = getMatchForHole(selectedPairing, 10);
-                          console.log('Front 9 (Holes 1-9):', {
-                            match: front9Match ? {
-                              id: front9Match.id,
-                              match_number: front9Match.match_number,
-                              start_hole: front9Match.start_hole,
-                              end_hole: front9Match.end_hole,
-                              format: front9Match.format ? {
-                                id: front9Match.format.id,
-                                name: front9Match.format.name,
-                                score_input_type: front9Match.format.score_input_type,
-                                scoring_type: front9Match.format.scoring_type
-                              } : null
-                            } : null,
-                            isTeamFormat: front9Match?.format?.score_input_type === 'team'
-                          });
-                          console.log('Back 9 (Holes 10-18):', {
-                            match: back9Match ? {
-                              id: back9Match.id,
-                              match_number: back9Match.match_number,
-                              start_hole: back9Match.start_hole,
-                              end_hole: back9Match.end_hole,
-                              format: back9Match.format ? {
-                                id: back9Match.format.id,
-                                name: back9Match.format.name,
-                                score_input_type: back9Match.format.score_input_type,
-                                scoring_type: back9Match.format.scoring_type
-                              } : null
-                            } : null,
-                            isTeamFormat: back9Match?.format?.score_input_type === 'team'
-                          });
-
-                          // Log all matches for this pairing
-                          console.log('All matches in pairing:', selectedPairing.matches?.map(m => ({
-                            id: m.id,
-                            match_number: m.match_number,
-                            start_hole: m.start_hole,
-                            end_hole: m.end_hole,
-                            format: m.format ? {
-                              name: m.format.name,
-                              score_input_type: m.format.score_input_type,
-                              scoring_type: m.format.scoring_type
-                            } : null
-                          })));
-                          console.log('===========================');
-
-                          // Sort players by team, then by player_order within each team
-                          // This ensures teammates are grouped together for proper rowspan handling
-                          const sortedPlayers = [...(selectedPairing.players || [])].sort((a, b) => {
-                            // First sort by team_id
-                            if (a.team_id !== b.team_id) {
-                              return a.team_id.localeCompare(b.team_id);
-                            }
-                            // Then by player_order within the same team
-                            return (a.player_order || 0) - (b.player_order || 0);
-                          });
-
-                          console.log('Original player order:', (selectedPairing.players || []).map((p, idx) => ({
-                            index: idx,
-                            name: p.user?.name,
-                            team: p.team?.name,
-                            teamId: p.team_id,
-                            playerOrder: p.player_order
-                          })));
-                          console.log('Sorted player order:', sortedPlayers.map((p, idx) => ({
-                            index: idx,
-                            name: p.user?.name,
-                            team: p.team?.name,
-                            teamId: p.team_id,
-                            playerOrder: p.player_order
-                          })));
-
-                          return sortedPlayers.map((player, playerIdx) => {
-                            const isFirstInTeam = playerIdx === 0 || 
-                              sortedPlayers[playerIdx - 1].team_id !== player.team_id;
-                            
-                            // Get teammates for this player
-                            const teammates = playersByTeam.get(player.team_id) || [];
-                            const playerIndexInTeam = teammates.findIndex(p => p.user_id === player.user_id);
-                            const isFirstPlayerInTeam = playerIndexInTeam === 0;
-                            const teamSize = teammates.length;
-                            
-                            // Debug logging for each player
-                            if (playerIdx === 0) {
-                              console.log(`[Player Row ${playerIdx}] ${player.user?.name}:`, {
-                                teamId: player.team_id,
-                                teamName: player.team?.name,
-                                isFirstPlayerInTeam,
-                                teamSize,
-                                teammates: teammates.map(t => t.user?.name)
-                              });
-                            }
-                            
-                            // Calculate front 9, back 9, and total
-                            const front9 = Array.from({ length: 9 }, (_, i) => i + 1)
-                              .reduce((sum, hole) => sum + (holeScores[hole]?.[player.user_id] || 0), 0);
-                            const back9 = Array.from({ length: 9 }, (_, i) => i + 10)
-                              .reduce((sum, hole) => sum + (holeScores[hole]?.[player.user_id] || 0), 0);
-                            const total = front9 + back9;
-                            
-                            return (
-                              <tr 
-                                key={player.user_id}
-                                className={isFirstInTeam && playerIdx > 0 ? 'border-t-2 border-gray-800' : ''}
-                              >
-                                <td className="sticky left-0 z-10 px-3 py-3 border-r-2 border-gray-800 bg-white">
-                                  <div className="flex items-center">
-                                    <div
-                                      className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
-                                      style={{ backgroundColor: player.team?.color }}
-                                    ></div>
-                                    <span className="text-xs font-medium text-gray-900 whitespace-nowrap">
-                                      {player.user?.name}
-                                    </span>
-                                  </div>
-                                </td>
-                                {/* Front 9 */}
-                                {Array.from({ length: 9 }, (_, i) => i + 1).map(hole => {
-                                  const match = getMatchForHole(selectedPairing, hole);
-                                  const isTeamFormat = match?.format?.score_input_type === 'team';
-                                  
-                                  // Debug logging for front 9 holes (only for first player, first hole)
-                                  if (playerIdx === 0 && hole === 1) {
-                                    console.log(`[Front 9 Holes] Hole ${hole}:`, {
-                                      matchId: match?.id,
-                                      matchNumber: match?.match_number,
-                                      startHole: match?.start_hole,
-                                      endHole: match?.end_hole,
-                                      formatName: match?.format?.name,
-                                      scoreInputType: match?.format?.score_input_type,
-                                      isTeamFormat
-                                    });
-                                  }
-                                  
-                                  // For team formats, only render input for first player in team (with rowspan)
-                                  if (isTeamFormat && !isFirstPlayerInTeam) {
-                                    return null; // Skip this cell, it's merged with the one above
-                                  }
-                                  
-                                  return (
-                                    <td 
-                                      key={hole} 
-                                      className="px-1 py-2 text-center border-r border-gray-300"
-                                      rowSpan={isTeamFormat ? teamSize : 1}
-                                    >
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        max="15"
-                                        value={holeScores[hole]?.[player.user_id] || ''}
-                                        onChange={(e) => handleScoreChange(hole, player.user_id, parseInt(e.target.value) || 0)}
-                                        className="w-full px-1 py-1 text-center text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                        placeholder="-"
-                                        title={isTeamFormat ? `Team ${player.team?.name} score` : `${player.user?.name}'s score`}
-                                      />
-                                    </td>
-                                  );
-                                })}
-                                {/* Check if front 9 uses team format to determine if "Out" column should have rowspan */}
-                                {(() => {
-                                  // Check if any hole in front 9 uses team format
-                                  const front9Match = getMatchForHole(selectedPairing, 1);
-                                  const front9IsTeamFormat = front9Match?.format?.score_input_type === 'team';
-                                  
-                                  // Debug logging for "Out" column
-                                  if (playerIdx === 0) {
-                                    console.log(`[Out Column] Player: ${player.user?.name}, isFirstPlayerInTeam: ${isFirstPlayerInTeam}, front9IsTeamFormat: ${front9IsTeamFormat}, teamSize: ${teamSize}, willRender: ${!(front9IsTeamFormat && !isFirstPlayerInTeam)}`);
-                                  }
-                                  
-                                  // For team formats, only render "Out" column for first player in team (with rowspan)
-                                  if (front9IsTeamFormat && !isFirstPlayerInTeam) {
-                                    return null; // Skip this cell, it's merged with the one above
-                                  }
-                                  
-                                  return (
-                                    <td 
-                                      className="px-2 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 bg-yellow-50"
-                                      rowSpan={front9IsTeamFormat ? teamSize : 1}
-                                    >
-                                  {front9 > 0 ? front9 : '-'}
-                                </td>
-                                  );
-                                })()}
-                                {/* Back 9 */}
-                                {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => {
-                                  const match = getMatchForHole(selectedPairing, hole);
-                                  const isTeamFormat = match?.format?.score_input_type === 'team';
-                                  
-                                  // Debug logging for back 9 holes (only for first player, first hole)
-                                  if (playerIdx === 0 && hole === 10) {
-                                    console.log(`[Back 9 Holes] Hole ${hole}:`, {
-                                      matchId: match?.id,
-                                      matchNumber: match?.match_number,
-                                      startHole: match?.start_hole,
-                                      endHole: match?.end_hole,
-                                      formatName: match?.format?.name,
-                                      scoreInputType: match?.format?.score_input_type,
-                                      isTeamFormat
-                                    });
-                                  }
-                                  
-                                  // For team formats, only render input for first player in team (with rowspan)
-                                  if (isTeamFormat && !isFirstPlayerInTeam) {
-                                    return null; // Skip this cell, it's merged with the one above
-                                  }
-                                  
-                                  return (
-                                    <td 
-                                      key={hole} 
-                                      className="px-1 py-2 text-center border-r border-gray-300"
-                                      rowSpan={isTeamFormat ? teamSize : 1}
-                                    >
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        max="15"
-                                        value={holeScores[hole]?.[player.user_id] || ''}
-                                        onChange={(e) => handleScoreChange(hole, player.user_id, parseInt(e.target.value) || 0)}
-                                        className="w-full px-1 py-1 text-center text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                        placeholder="-"
-                                        title={isTeamFormat ? `Team ${player.team?.name} score` : `${player.user?.name}'s score`}
-                                      />
-                                    </td>
-                                  );
-                                })}
-                                {/* Check if back 9 uses team format to determine if "In" column should have rowspan */}
-                                {(() => {
-                                  // Check if any hole in back 9 uses team format
-                                  const back9Match = getMatchForHole(selectedPairing, 10);
-                                  const back9IsTeamFormat = back9Match?.format?.score_input_type === 'team';
-                                  
-                                  // Debug logging for "In" column
-                                  if (playerIdx === 0) {
-                                    console.log(`[In Column] Player: ${player.user?.name}, isFirstPlayerInTeam: ${isFirstPlayerInTeam}, back9IsTeamFormat: ${back9IsTeamFormat}, teamSize: ${teamSize}, willRender: ${!(back9IsTeamFormat && !isFirstPlayerInTeam)}`);
-                                  }
-                                  
-                                  // For team formats, only render "In" column for first player in team (with rowspan)
-                                  if (back9IsTeamFormat && !isFirstPlayerInTeam) {
-                                    return null; // Skip this cell, it's merged with the one above
-                                  }
-                                  
-                                  return (
-                                    <td 
-                                      className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-yellow-50"
-                                      rowSpan={back9IsTeamFormat ? teamSize : 1}
-                                    >
-                                  {back9 > 0 ? back9 : '-'}
-                                </td>
-                                  );
-                                })()}
-                                {/* Check if back 9 uses team format to determine if "Total" column should have rowspan */}
-                                {(() => {
-                                  // Check if any hole in back 9 uses team format
-                                  const back9Match = getMatchForHole(selectedPairing, 10);
-                                  const back9IsTeamFormat = back9Match?.format?.score_input_type === 'team';
-                                  
-                                  // Debug logging for "Total" column
-                                  if (playerIdx === 0) {
-                                    console.log(`[Total Column] Player: ${player.user?.name}, isFirstPlayerInTeam: ${isFirstPlayerInTeam}, back9IsTeamFormat: ${back9IsTeamFormat}, teamSize: ${teamSize}, willRender: ${!(back9IsTeamFormat && !isFirstPlayerInTeam)}`);
-                                  }
-                                  
-                                  // For team formats, only render "Total" column for first player in team (with rowspan)
-                                  if (back9IsTeamFormat && !isFirstPlayerInTeam) {
-                                    return null; // Skip this cell, it's merged with the one above
-                                  }
-                                  
-                                  return (
-                                    <td 
-                                      className="px-2 py-2 text-center text-sm font-bold text-gray-900 bg-green-100"
-                                      rowSpan={back9IsTeamFormat ? teamSize : 1}
-                                    >
-                                  {total > 0 ? total : '-'}
-                                </td>
-                                  );
-                                })()}
-                              </tr>
-                            );
-                          });
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
+              {/* Full Scorecard Table - Entry Mode */}
+              <ScorecardTable 
+                mode="entry"
+                pairing={selectedPairing}
+                holeScores={holeScores}
+                onScoreChange={handleScoreChange}
+              />
 
               {/* Submit Button */}
               <div className="flex justify-between items-center pt-4 border-t border-gray-200">
