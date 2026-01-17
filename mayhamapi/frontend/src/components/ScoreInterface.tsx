@@ -877,7 +877,8 @@ const ScoreInterface: React.FC = () => {
                           return (
                             <td 
                               key={holeNum} 
-                              className="px-3 py-2 text-center border-r border-gray-300 bg-white"
+                              className="px-3 py-2 text-center border-r border-gray-300"
+                              style={teamWonHole && player.team?.color ? { backgroundColor: player.team.color, opacity: 0.3 } : { backgroundColor: 'white' }}
                               rowSpan={isTeamFormat ? teamSize : 1}
                             >
                               <div className="flex flex-col items-center gap-0.5">
@@ -894,9 +895,6 @@ const ScoreInterface: React.FC = () => {
                                   <span className="text-sm font-semibold text-gray-900">
                                     {score > 0 ? score : '-'}
                                   </span>
-                                )}
-                                {teamWonHole && (
-                                  <CheckCircle className="h-3 w-3 text-green-600" />
                                 )}
                               </div>
                             </td>
@@ -941,7 +939,8 @@ const ScoreInterface: React.FC = () => {
                           return (
                             <td 
                               key={holeNum} 
-                              className="px-3 py-2 text-center border-r border-gray-300 bg-white"
+                              className="px-3 py-2 text-center border-r border-gray-300"
+                              style={teamWonHole && player.team?.color ? { backgroundColor: player.team.color, opacity: 0.3 } : { backgroundColor: 'white' }}
                               rowSpan={isTeamFormat ? teamSize : 1}
                             >
                               <div className="flex flex-col items-center gap-0.5">
@@ -958,9 +957,6 @@ const ScoreInterface: React.FC = () => {
                                   <span className="text-sm font-semibold text-gray-900">
                                     {score > 0 ? score : '-'}
                                   </span>
-                                )}
-                                {teamWonHole && (
-                                  <CheckCircle className="h-3 w-3 text-green-600" />
                                 )}
                               </div>
                             </td>
