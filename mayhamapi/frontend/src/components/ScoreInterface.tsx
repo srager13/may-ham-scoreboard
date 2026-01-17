@@ -612,31 +612,32 @@ const ScoreInterface: React.FC = () => {
   // Scorecard Color Configuration
   // ============================================
   // Easily adjust these colors to change the entire scorecard appearance
+  // Using grayscale to let team colors stand out when shading hole winners/match status
   const SCORECARD_COLORS = {
     // Course info box text colors
-    courseInfoHeading: 'text-green-900',
-    courseInfoSubtext: 'text-green-700',
+    courseInfoHeading: 'text-gray-900',
+    courseInfoSubtext: 'text-gray-700',
     
     // Par row styling
-    parRowBg: 'bg-yellow-50',
-    parRowHeaderBg: 'bg-yellow-50',
-    parOutInBg: 'bg-yellow-100',
-    parTotalBg: 'bg-green-200',
+    parRowBg: 'bg-gray-100',
+    parRowHeaderBg: 'bg-gray-100',
+    parOutInBg: 'bg-gray-100',
+    parTotalBg: 'bg-gray-200',
     
     // Out/In/Total column styling
-    outBg: 'bg-yellow-50',
-    inBg: 'bg-yellow-50',
-    totalBg: 'bg-green-100',
+    outBg: 'bg-gray-100',
+    inBg: 'bg-gray-100',
+    totalBg: 'bg-gray-200',
     
     // Yardage row styling
-    yardageOutInBg: 'bg-yellow-50',
-    yardageTotalBg: 'bg-green-100',
+    yardageOutInBg: 'bg-gray-100',
+    yardageTotalBg: 'bg-gray-200',
     
     // Status row styling
-    statusRowBg: 'bg-blue-50',
-    statusRowHeaderBg: 'bg-blue-50',
-    statusRowHeaderText: 'text-blue-900',
-    statusOutInBg: 'bg-blue-50',
+    statusRowBg: 'bg-gray-100',
+    statusRowHeaderBg: 'bg-gray-100',
+    statusRowHeaderText: 'text-gray-900',
+    statusOutInBg: 'bg-gray-100',
   };
 
   // Component to display match results for completed pairings
