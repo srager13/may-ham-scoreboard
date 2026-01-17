@@ -308,6 +308,17 @@ const ScoreInterface: React.FC = () => {
     return Array.from(teamMap.values());
   };
 
+  // Sort players by team_id, then by player_order for consistent display
+  const getSortedPlayers = (players: PairingPlayer[] | undefined) => {
+    if (!players) return [];
+    return [...players].sort((a, b) => {
+      if (a.team_id !== b.team_id) {
+        return a.team_id.localeCompare(b.team_id);
+      }
+      return (a.player_order || 0) - (b.player_order || 0);
+    });
+  };
+
   const startPairing = async (pairingId: string) => {
     try {
       setError(null);
@@ -858,12 +869,7 @@ const ScoreInterface: React.FC = () => {
             {/* Player Score Rows - One row per player, merged cells for team scoring */}
             {(() => {
               // Sort players by team, then by player_order
-              const sortedPlayers = [...(pairing.players || [])].sort((a, b) => {
-                if (a.team_id !== b.team_id) {
-                  return a.team_id.localeCompare(b.team_id);
-                }
-                return (a.player_order || 0) - (b.player_order || 0);
-              });
+              const sortedPlayers = getSortedPlayers(pairing.players);
 
               return sortedPlayers.map((player, playerIdx) => {
                 const playerScores = mode === 'entry' ? holeScores : pairing.scores;
@@ -1715,7 +1721,7 @@ const ScoreInterface: React.FC = () => {
                         
                         {/* Players */}
                         <div className="space-y-1 mt-2">
-                          {(pairing.players || []).map(player => (
+                          {getSortedPlayers(pairing.players).map(player => (
                             <div key={player.user_id} className="text-xs flex items-center">
                               <div 
                                 className="w-2 h-2 rounded-full mr-2" 
