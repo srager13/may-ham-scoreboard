@@ -621,6 +621,67 @@ const ScoreInterface: React.FC = () => {
   }
 
   // ============================================
+  // Pairing Matches Summary Component (Reusable)
+  // ============================================
+  // Displays match information for a pairing in a compact format
+  const PairingMatchesSummary: React.FC<{ pairing: PairingWithScores }> = ({ pairing }) => {
+    if (!pairing.matches || pairing.matches.length === 0) {
+      return (
+        <div className="text-xs text-gray-500 italic">
+          No matches configured
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-1 mt-2 pt-2 border-t border-gray-200">
+        {pairing.matches.map((match, idx) => {
+          const holeRange = (match.start_hole && match.end_hole) 
+            ? `Holes ${match.start_hole}-${match.end_hole}`
+            : `${match.holes} holes`;
+          const formatName = match.format?.name || 'Unknown Format';
+          
+          // Get players for each team
+          const team1Players = (match.players || [])
+            .filter(p => p.team_id === match.team1_id)
+            .sort((a, b) => (a.player_order || 0) - (b.player_order || 0))
+            .map(p => p.user?.name || 'Unknown')
+            .slice(0, 2); // Limit to 2 for display purposes
+          
+          const team2Players = (match.players || [])
+            .filter(p => p.team_id === match.team2_id)
+            .sort((a, b) => (a.player_order || 0) - (b.player_order || 0))
+            .map(p => p.user?.name || 'Unknown')
+            .slice(0, 2); // Limit to 2 for display purposes
+          
+          // Format players string based on match type
+          const playersPerSide = match.format?.players_per_side || 1;
+          let playersStr = '';
+          
+          if (playersPerSide === 1) {
+            // Singles match
+            playersStr = `${team1Players[0]} vs. ${team2Players[0]}`;
+          } else {
+            // Team match (2v2, etc.)
+            playersStr = `${team1Players.join(' & ')} vs. ${team2Players.join(' & ')}`;
+          }
+          
+          return (
+            <div key={match.id} className="text-xs">
+              <div className="font-semibold text-gray-700">
+                {formatName} - {playersStr}
+              </div>
+              <div className="text-gray-500 text-[11px]">
+                {holeRange}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // ============================================
   // Scorecard Color Configuration
   // ============================================
   // Easily adjust these colors to change the entire scorecard appearance
@@ -1741,6 +1802,9 @@ const ScoreInterface: React.FC = () => {
                             </div>
                           ))}
                         </div>
+
+                        {/* Matches Summary */}
+                        <PairingMatchesSummary pairing={pairing} />
                       </button>
                     ))}
                   </div>
@@ -1754,6 +1818,15 @@ const ScoreInterface: React.FC = () => {
       {/* Score Entry */}
       {selectedPairing && (
         <div className="bg-white shadow-sm rounded-lg p-6">
+          {/* Pairing Header with Match Info */}
+          <div className="mb-6 pb-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              Pairing {selectedPairing.pairing_number}
+              {selectedPairing.round && ` - Round ${selectedPairing.round.round_number}: ${selectedPairing.round.name}`}
+            </h2>
+            <PairingMatchesSummary pairing={selectedPairing} />
+          </div>
+
           {/* Start Pairing Section for not_started pairings */}
           {selectedPairing.status === 'not_started' && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">

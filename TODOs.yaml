@@ -14,6 +14,8 @@ TODOs:
         - Show live matches
 
     - SCORING:
+        - Fix status row to be match-aware
+            - Need to be able to display status of singles matches and handle 6 hole matches.
         - Make scoring a separate page for each hole (?)
         - Check high-low scoring
 
