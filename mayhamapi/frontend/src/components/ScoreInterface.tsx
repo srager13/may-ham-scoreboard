@@ -2083,7 +2083,7 @@ const ScoreInterface: React.FC = () => {
                       ) : (
                         <Save className="h-4 w-4 mr-2" />
                       )}
-                      {isSubmitting ? 'Submitting...' : 'Save Scores'}
+                      {isSubmitting ? 'Submitting...' : 'Submit Scores'}
                     </button>
                   </div>
                 </div>
