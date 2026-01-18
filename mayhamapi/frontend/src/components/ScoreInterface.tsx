@@ -1067,70 +1067,78 @@ const ScoreInterface: React.FC = () => {
                 <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold ${SCORECARD_COLORS.statusRowHeaderText} uppercase border-r-2 border-gray-800 ${SCORECARD_COLORS.statusRowHeaderBg}`}>
                   Status
                 </td>
+                {/* Front 9 status */}
                 {Array.from({ length: 9 }, (_, i) => {
                   const holeNum = i + 1;
-                  const match = getMatchForHole(pairing, holeNum);
-                  if (!match) return <td key={holeNum}></td>;
-                  const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
-                  if (!matchResult?.hole_results) return <td key={holeNum}></td>;
-                  const holeResult = matchResult.hole_results.find(hr => hr.hole_number === holeNum);
-                  if (!holeResult) return <td key={holeNum}></td>;
 
-                  const team1Won = holeResult.team1_points > holeResult.team2_points;
-                  const team2Won = holeResult.team2_points > holeResult.team1_points;
-                  let statusText = 'TIED';
-                  let winningTeamColor = undefined;
-
-                  if (team1Won) {
-                    statusText = 'TEAM 1';
-                    winningTeamColor = matchResult.team1?.color;
-                  } else if (team2Won) {
-                    statusText = 'TEAM 2';
-                    winningTeamColor = matchResult.team2?.color;
-                  }
-
-                  return (
-                    <td
-                      key={holeNum}
-                      className="px-3 py-2 text-center text-xs font-bold border-r border-gray-300"
-                      style={winningTeamColor ? { backgroundColor: `${winningTeamColor}4D` } : {}}
-                    >
-                      {statusText}
-                    </td>
-                  );
+                    // Calculate holes won by each team up to this hole (front 9)
+                    let team1HolesWon = 0;
+                    let team2HolesWon = 0;
+                    
+                    for (let h = 1; h <= holeNum; h++) {
+                      if (didTeamWinHole(h, pairing.matchResults?.[0]?.team1_id!)) {
+                        team1HolesWon++;
+                      } else if (didTeamWinHole(h, pairing.matchResults?.[0]?.team2_id!)) {
+                        team2HolesWon++;
+                      }
+                    }
+                    
+                    const diff = Math.abs(team1HolesWon - team2HolesWon);
+                    const team1Leading = team1HolesWon > team2HolesWon;
+                    const team2Leading = team2HolesWon > team1HolesWon;
+                    const isTied = team1HolesWon === team2HolesWon;
+                    
+                    const statusText = isTied ? 'TIED' : team1Leading ? `${diff}UP` : `${diff}UP`;
+                    const statusColor = team1Leading ? pairing.matchResults?.[0]?.team1?.color : team2Leading ? pairing.matchResults?.[0]?.team2?.color : undefined;
+                    
+                    return (
+                      <td 
+                        key={`status-${holeNum}`}
+                        className="px-3 py-2 text-center border-r border-gray-300 font-bold"
+                        style={statusColor && !isTied ? { backgroundColor: statusColor, opacity: 0.3 } : { backgroundColor: 'white' }}
+                      >
+                        <span className={`text-xs font-bold ${isTied ? 'text-gray-600' : 'text-gray-900'}`}>
+                          {statusText}
+                        </span>
+                      </td>
+                    );
                 })}
                 <td className={`px-3 py-2 border-r-2 border-gray-800 ${SCORECARD_COLORS.statusOutInBg}`}></td>
-                {Array.from({ length: 9 }, (_, i) => {
-                  const holeNum = i + 10;
-                  const match = getMatchForHole(pairing, holeNum);
-                  if (!match) return <td key={holeNum}></td>;
-                  const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
-                  if (!matchResult?.hole_results) return <td key={holeNum}></td>;
-                  const holeResult = matchResult.hole_results.find(hr => hr.hole_number === holeNum);
-                  if (!holeResult) return <td key={holeNum}></td>;
-
-                  const team1Won = holeResult.team1_points > holeResult.team2_points;
-                  const team2Won = holeResult.team2_points > holeResult.team1_points;
-                  let statusText = 'TIED';
-                  let winningTeamColor = undefined;
-
-                  if (team1Won) {
-                    statusText = 'TEAM 1';
-                    winningTeamColor = matchResult.team1?.color;
-                  } else if (team2Won) {
-                    statusText = 'TEAM 2';
-                    winningTeamColor = matchResult.team2?.color;
-                  }
-
-                  return (
-                    <td
-                      key={holeNum}
-                      className="px-3 py-2 text-center text-xs font-bold border-r border-gray-300"
-                      style={winningTeamColor ? { backgroundColor: `${winningTeamColor}4D` } : {}}
-                    >
-                      {statusText}
-                    </td>
-                  );
+                {/* Back 9 status */}
+                  {Array.from({ length: 9 }, (_, i) => {
+                    const holeNum = i + 10;
+                    
+                    // Calculate holes won by each team up to this hole (all holes)
+                    let team1HolesWon = 0;
+                    let team2HolesWon = 0;
+                    
+                    for (let h = 10; h <= holeNum; h++) {
+                      if (didTeamWinHole(h, pairing.matchResults?.[0]?.team1_id!)) {
+                        team1HolesWon++;
+                      } else if (didTeamWinHole(h, pairing.matchResults?.[0]?.team2_id!)) {
+                        team2HolesWon++;
+                      }
+                    }
+                    
+                    const diff = Math.abs(team1HolesWon - team2HolesWon);
+                    const team1Leading = team1HolesWon > team2HolesWon;
+                    const team2Leading = team2HolesWon > team1HolesWon;
+                    const isTied = team1HolesWon === team2HolesWon;
+                    
+                    const statusText = isTied ? 'TIED' : team1Leading ? `${diff}UP` : `${diff}UP`;
+                    const statusColor = team1Leading ? pairing.matchResults?.[0]?.team1?.color : team2Leading ? pairing.matchResults?.[0]?.team2?.color : undefined;
+                    
+                    return (
+                      <td 
+                        key={`status-${holeNum}`}
+                        className="px-3 py-2 text-center border-r border-gray-300 font-bold"
+                        style={statusColor && !isTied ? { backgroundColor: statusColor, opacity: 0.3 } : { backgroundColor: 'white' }}
+                      >
+                        <span className={`text-xs font-bold ${isTied ? 'text-gray-600' : 'text-gray-900'}`}>
+                          {statusText}
+                        </span>
+                      </td>
+                    );
                 })}
                 <td className={`px-3 py-2 ${SCORECARD_COLORS.statusOutInBg} border-r-2 border-gray-800`}></td>
                 <td className={`px-3 py-2 ${SCORECARD_COLORS.totalBg}`}></td>
