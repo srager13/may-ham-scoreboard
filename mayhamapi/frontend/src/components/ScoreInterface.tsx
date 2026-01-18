@@ -542,6 +542,24 @@ const ScoreInterface: React.FC = () => {
         setLoadingResults(false);
       }
 
+      // Advance to next hole after successful submission
+      const updatedScores = {
+        ...selectedPairing.scores,
+        ...holeScores
+      };
+      const completedHoles = new Set(Object.keys(updatedScores).map(h => parseInt(h)));
+      let nextHole = currentHole + 1;
+      for (let h = nextHole; h <= 18; h++) {
+        if (!completedHoles.has(h)) {
+          nextHole = h;
+          break;
+        }
+      }
+      if (nextHole > 18) {
+        nextHole = 18;
+      }
+      setCurrentHole(nextHole);
+
       // Clear any previous errors on success
       setError(null);
       
