@@ -30,6 +30,7 @@ const ScoreInterface: React.FC = () => {
   const [showMyPairingsOnly, setShowMyPairingsOnly] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loadingResults, setLoadingResults] = useState(false);
+  const [currentHole, setCurrentHole] = useState<number>(1);
 
   useEffect(() => {
     loadTournaments();
@@ -238,6 +239,17 @@ const ScoreInterface: React.FC = () => {
       // Initialize holeScores with existing scores for all holes
       setHoleScores(scoresMap);
       
+      // Determine current hole (first hole without scores)
+      const completedHoles = new Set(Object.keys(scoresMap).map(h => parseInt(h)));
+      let nextHole = 1;
+      for (let h = 1; h <= 18; h++) {
+        if (!completedHoles.has(h)) {
+          nextHole = h;
+          break;
+        }
+      }
+      setCurrentHole(nextHole);
+      
     } catch (err) {
       console.warn('Error loading existing scores:', err);
       // Don't show error to user, just proceed without existing scores
@@ -317,6 +329,15 @@ const ScoreInterface: React.FC = () => {
       }
       return (a.player_order || 0) - (b.player_order || 0);
     });
+  };
+
+  // Helper function to get par-relative symbol for a score
+  const getParRelativeSymbol = (score: number, parValue?: number): string => {
+    if (parValue === undefined) return '';
+    const diff = score - parValue;
+    if (diff < 0) return '●'; // Below par (filled circle)
+    if (diff === 0) return '○'; // Even with par (circle)
+    return '□'; // Above par (square)
   };
 
   const startPairing = async (pairingId: string) => {
@@ -999,25 +1020,37 @@ const ScoreInterface: React.FC = () => {
                       const score = playerScores?.[holeNum]?.[scoreKey];
                       
                       const hasWon = mode === 'display' && didTeamWinHole(holeNum, player.team_id);
+                      
+                      // Determine what to render based on entry mode and currentHole
+                      const isCurrentHole = mode === 'entry' && holeNum === currentHole;
+                      const hasScore = score !== undefined && score > 0;
+                      const holeParValue = pairing.holes?.find(h => h.hole_number === holeNum)?.par;
+                      const parSymbol = hasScore ? getParRelativeSymbol(score, holeParValue) : '';
 
                       return (
                         <td
                           key={holeNum}
-                          className="px-3 py-2 text-center text-xs border-r border-gray-300"
+                          className={`px-3 py-2 text-center text-xs border-r border-gray-300 ${isCurrentHole ? 'bg-blue-50' : ''}`}
                           rowSpan={isTeamScoring ? teamSize : 1}
                           style={hasWon && teamColor ? { backgroundColor: `${teamColor}4D` } : {}}
                         >
-                          {mode === 'entry' ? (
+                          {isCurrentHole ? (
                             <input
                               type="number"
                               min="0"
                               max="15"
                               value={score || ''}
                               onChange={(e) => onScoreChange?.(holeNum, scoreKey || player.user_id, parseInt(e.target.value) || 0)}
-                              className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs"
+                              className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              autoFocus
                             />
+                          ) : hasScore ? (
+                            <span className={`font-semibold ${mode === 'entry' ? 'text-gray-600' : ''}`}>
+                              {score}
+                              {parSymbol && <span className="ml-0.5">{parSymbol}</span>}
+                            </span>
                           ) : (
-                            <span className="font-semibold">{score || '—'}</span>
+                            <span className="text-gray-300">—</span>
                           )}
                         </td>
                       );
@@ -1064,25 +1097,37 @@ const ScoreInterface: React.FC = () => {
                       const score = playerScores?.[holeNum]?.[scoreKey];
                       
                       const hasWon = mode === 'display' && didTeamWinHole(holeNum, player.team_id);
+                      
+                      // Determine what to render based on entry mode and currentHole
+                      const isCurrentHole = mode === 'entry' && holeNum === currentHole;
+                      const hasScore = score !== undefined && score > 0;
+                      const holeParValue = pairing.holes?.find(h => h.hole_number === holeNum)?.par;
+                      const parSymbol = hasScore ? getParRelativeSymbol(score, holeParValue) : '';
 
                       return (
                         <td
                           key={holeNum}
-                          className="px-3 py-2 text-center text-xs border-r border-gray-300"
+                          className={`px-3 py-2 text-center text-xs border-r border-gray-300 ${isCurrentHole ? 'bg-blue-50' : ''}`}
                           rowSpan={isTeamScoring ? teamSize : 1}
                           style={hasWon && teamColor ? { backgroundColor: `${teamColor}4D` } : {}}
                         >
-                          {mode === 'entry' ? (
+                          {isCurrentHole ? (
                             <input
                               type="number"
                               min="0"
                               max="15"
                               value={score || ''}
                               onChange={(e) => onScoreChange?.(holeNum, scoreKey || player.user_id, parseInt(e.target.value) || 0)}
-                              className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs"
+                              className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              autoFocus
                             />
+                          ) : hasScore ? (
+                            <span className={`font-semibold ${mode === 'entry' ? 'text-gray-600' : ''}`}>
+                              {score}
+                              {parSymbol && <span className="ml-0.5">{parSymbol}</span>}
+                            </span>
                           ) : (
-                            <span className="font-semibold">{score || '—'}</span>
+                            <span className="text-gray-300">—</span>
                           )}
                         </td>
                       );
@@ -1916,40 +1961,83 @@ const ScoreInterface: React.FC = () => {
                 />
               </div>
 
-              {/* Submit Button */}
-              <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-                <div className="text-sm text-gray-500">
-                  {(() => {
-                    const totalScores = Object.values(holeScores).reduce((acc, hole) => 
-                      acc + Object.values(hole).filter(score => score > 0).length, 0
-                    );
-                    return totalScores > 0 && (
-                      <span className="flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {totalScores} score{totalScores !== 1 ? 's' : ''} entered
-                      </span>
-                    );
-                  })()}
+              {/* Hole Navigation & Submit Button */}
+              <div className="flex flex-col gap-4 pt-4 border-t border-gray-200">
+                {/* Navigation Controls */}
+                <div className="flex justify-center items-center gap-3 bg-gray-50 p-3 rounded">
+                  <button
+                    onClick={() => setCurrentHole(Math.max(1, currentHole - 1))}
+                    disabled={currentHole === 1}
+                    className="px-3 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    ← Previous
+                  </button>
+                  <div className="text-center min-w-[200px]">
+                    <div className="text-sm font-semibold text-gray-900">Hole {currentHole}</div>
+                    <div className="text-xs text-gray-600">
+                      Par {selectedPairing.holes?.find(h => h.hole_number === currentHole)?.par || '—'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setCurrentHole(Math.min(18, currentHole + 1))}
+                    disabled={currentHole === 18}
+                    className="px-3 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    Next →
+                  </button>
                 </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => completePairing(selectedPairing.id)}
-                    className="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-green-700"
-                  >
-                    Complete Round
-                  </button>
-                  <button
-                    onClick={submitHoleScores}
-                    disabled={isSubmitting || Object.values(holeScores).every(hole => Object.values(hole).filter(score => score > 0).length === 0)}
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
-                  >
-                    {isSubmitting ? (
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4 mr-2" />
-                    )}
-                    {isSubmitting ? 'Submitting...' : 'Save Scores'}
-                  </button>
+
+                {/* Par-Relative Symbol Legend */}
+                <div className="flex justify-center gap-6 text-xs text-gray-600 bg-blue-50 p-2 rounded">
+                  <div className="flex items-center gap-1">
+                    <span className="font-semibold">●</span>
+                    <span>Below Par</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="font-semibold">○</span>
+                    <span>Even Par</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="font-semibold">□</span>
+                    <span>Above Par</span>
+                  </div>
+                </div>
+
+                {/* Submit Buttons */}
+                <div className="flex justify-between items-center">
+                  <div className="text-sm text-gray-500">
+                    {(() => {
+                      const totalScores = Object.values(holeScores).reduce((acc, hole) => 
+                        acc + Object.values(hole).filter(score => score > 0).length, 0
+                      );
+                      return totalScores > 0 && (
+                        <span className="flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {totalScores} score{totalScores !== 1 ? 's' : ''} entered
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => completePairing(selectedPairing.id)}
+                      className="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-green-700"
+                    >
+                      Complete Round
+                    </button>
+                    <button
+                      onClick={submitHoleScores}
+                      disabled={isSubmitting || Object.values(holeScores).every(hole => Object.values(hole).filter(score => score > 0).length === 0)}
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
+                    >
+                      {isSubmitting ? (
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      {isSubmitting ? 'Submitting...' : 'Save Scores'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </>
