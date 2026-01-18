@@ -669,10 +669,10 @@ const ScoreInterface: React.FC = () => {
           return (
             <div key={match.id} className="text-xs">
               <div className="font-semibold text-gray-700">
-                {formatName} - {playersStr}
+                {holeRange}: {formatName}
               </div>
               <div className="text-gray-500 text-[11px]">
-                {holeRange}
+                {playersStr}
               </div>
             </div>
           );
