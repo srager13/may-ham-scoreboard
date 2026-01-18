@@ -331,15 +331,6 @@ const ScoreInterface: React.FC = () => {
     });
   };
 
-  // Helper function to get par-relative symbol for a score
-  const getParRelativeSymbol = (score: number, parValue?: number): string => {
-    if (parValue === undefined) return '';
-    const diff = score - parValue;
-    if (diff < 0) return '●'; // Below par (filled circle)
-    if (diff === 0) return '○'; // Even with par (circle)
-    return '□'; // Above par (square)
-  };
-
   const startPairing = async (pairingId: string) => {
     try {
       setError(null);
@@ -1025,7 +1016,22 @@ const ScoreInterface: React.FC = () => {
                       const isCurrentHole = mode === 'entry' && holeNum === currentHole;
                       const hasScore = score !== undefined && score > 0;
                       const holeParValue = pairing.holes?.find(h => h.hole_number === holeNum)?.par;
-                      const parSymbol = hasScore ? getParRelativeSymbol(score, holeParValue) : '';
+                      const scoreToPar = hasScore && holeParValue ? score - holeParValue : null;
+                      
+                      // Determine shape based on score to par
+                      let shapeClass = '';
+                      if (scoreToPar !== null) {
+                        if (scoreToPar <= -1) {
+                          // Under par: circle
+                          shapeClass = 'inline-flex items-center justify-center w-6 h-6 rounded-full border-2 border-gray-900';
+                        } else if (scoreToPar === 1) {
+                          // Bogey: square
+                          shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900';
+                        } else if (scoreToPar >= 2) {
+                          // Double bogey or worse: double box
+                          shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900 relative';
+                        }
+                      }
 
                       return (
                         <td
@@ -1045,10 +1051,20 @@ const ScoreInterface: React.FC = () => {
                               autoFocus
                             />
                           ) : hasScore ? (
-                            <span className={`font-semibold ${mode === 'entry' ? 'text-gray-600' : ''}`}>
-                              {score}
-                              {parSymbol && <span className="ml-0.5">{parSymbol}</span>}
-                            </span>
+                            scoreToPar !== null && shapeClass ? (
+                              <span className={shapeClass}>
+                                {scoreToPar >= 2 && (
+                                  <span className="absolute inset-0 border border-gray-900 m-0.5"></span>
+                                )}
+                                <span className="text-xs font-semibold text-gray-900 relative z-10">
+                                  {score}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="text-xs font-semibold text-gray-900">
+                                {score}
+                              </span>
+                            )
                           ) : (
                             <span className="text-gray-300">—</span>
                           )}
@@ -1102,7 +1118,22 @@ const ScoreInterface: React.FC = () => {
                       const isCurrentHole = mode === 'entry' && holeNum === currentHole;
                       const hasScore = score !== undefined && score > 0;
                       const holeParValue = pairing.holes?.find(h => h.hole_number === holeNum)?.par;
-                      const parSymbol = hasScore ? getParRelativeSymbol(score, holeParValue) : '';
+                      const scoreToPar = hasScore && holeParValue ? score - holeParValue : null;
+                      
+                      // Determine shape based on score to par
+                      let shapeClass = '';
+                      if (scoreToPar !== null) {
+                        if (scoreToPar <= -1) {
+                          // Under par: circle
+                          shapeClass = 'inline-flex items-center justify-center w-6 h-6 rounded-full border-2 border-gray-900';
+                        } else if (scoreToPar === 1) {
+                          // Bogey: square
+                          shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900';
+                        } else if (scoreToPar >= 2) {
+                          // Double bogey or worse: double box
+                          shapeClass = 'inline-flex items-center justify-center w-6 h-6 border-2 border-gray-900 relative';
+                        }
+                      }
 
                       return (
                         <td
@@ -1122,10 +1153,20 @@ const ScoreInterface: React.FC = () => {
                               autoFocus
                             />
                           ) : hasScore ? (
-                            <span className={`font-semibold ${mode === 'entry' ? 'text-gray-600' : ''}`}>
-                              {score}
-                              {parSymbol && <span className="ml-0.5">{parSymbol}</span>}
-                            </span>
+                            scoreToPar !== null && shapeClass ? (
+                              <span className={shapeClass}>
+                                {scoreToPar >= 2 && (
+                                  <span className="absolute inset-0 border border-gray-900 m-0.5"></span>
+                                )}
+                                <span className="text-xs font-semibold text-gray-900 relative z-10">
+                                  {score}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="text-xs font-semibold text-gray-900">
+                                {score}
+                              </span>
+                            )
                           ) : (
                             <span className="text-gray-300">—</span>
                           )}
@@ -1989,17 +2030,24 @@ const ScoreInterface: React.FC = () => {
 
                 {/* Par-Relative Symbol Legend */}
                 <div className="flex justify-center gap-6 text-xs text-gray-600 bg-blue-50 p-2 rounded">
-                  <div className="flex items-center gap-1">
-                    <span className="font-semibold">●</span>
-                    <span>Below Par</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full border-2 border-gray-900 flex items-center justify-center">
+                      <span className="text-[10px] font-semibold">3</span>
+                    </div>
+                    <span>Under par (Eagle/Birdie)</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="font-semibold">○</span>
-                    <span>Even Par</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 border-2 border-gray-900 flex items-center justify-center">
+                      <span className="text-[10px] font-semibold">5</span>
+                    </div>
+                    <span>Bogey</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="font-semibold">□</span>
-                    <span>Above Par</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 border-2 border-gray-900 relative flex items-center justify-center">
+                      <div className="absolute inset-0 border border-gray-900 m-0.5"></div>
+                      <span className="text-[10px] font-semibold relative z-10">6</span>
+                    </div>
+                    <span>Double bogey+</span>
                   </div>
                 </div>
 
