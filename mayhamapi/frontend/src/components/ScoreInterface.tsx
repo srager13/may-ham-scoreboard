@@ -37,6 +37,13 @@ const ScoreInterface: React.FC = () => {
     loadCurrentUser();
   }, []);
 
+  // Save selected pairing to localStorage whenever it changes
+  useEffect(() => {
+    if (selectedPairing?.id) {
+      localStorage.setItem('lastSelectedPairingId', selectedPairing.id);
+    }
+  }, [selectedPairing?.id]);
+
   useEffect(() => {
     if (selectedTournamentId) {
       loadPairings();
@@ -155,8 +162,13 @@ const ScoreInterface: React.FC = () => {
       
       setPairings(allPairings);
       if (allPairings.length > 0) {
-        const firstPairing = allPairings[0];
-        await loadExistingScores(firstPairing);
+        // Try to restore the last selected pairing from localStorage
+        const lastSelectedId = localStorage.getItem('lastSelectedPairingId');
+        const lastSelectedPairing = lastSelectedId ? allPairings.find(p => p.id === lastSelectedId) : null;
+        
+        // Use the last selected pairing if it exists, otherwise use the first one
+        const pairingToLoad = lastSelectedPairing || allPairings[0];
+        await loadExistingScores(pairingToLoad);
       } else {
         setSelectedPairing(null);
       }
