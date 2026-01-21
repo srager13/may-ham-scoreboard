@@ -1078,7 +1078,6 @@ const ScoreInterface: React.FC = () => {
                               value={score || ''}
                               onChange={(e) => onScoreChange?.(holeNum, scoreKey || player.user_id, parseInt(e.target.value) || 0)}
                               className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              autoFocus
                             />
                           ) : hasScore ? (
                             scoreToPar !== null && shapeClass ? (
@@ -1180,7 +1179,6 @@ const ScoreInterface: React.FC = () => {
                               value={score || ''}
                               onChange={(e) => onScoreChange?.(holeNum, scoreKey || player.user_id, parseInt(e.target.value) || 0)}
                               className="w-10 px-1 py-1 border border-gray-300 rounded text-center text-xs font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              autoFocus
                             />
                           ) : hasScore ? (
                             scoreToPar !== null && shapeClass ? (
