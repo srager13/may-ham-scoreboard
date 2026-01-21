@@ -343,6 +343,96 @@ const ScoreInterface: React.FC = () => {
     });
   };
 
+  // Check if all players have scores for a specific hole
+  const holeHasAllScores = (hole: number, pairing: PairingWithScores): boolean => {
+    if (!pairing.players || pairing.players.length === 0) return false;
+    
+    const holeData = holeScores[hole];
+    if (!holeData) return false;
+
+    // Check if each player has a score for this hole
+    for (const player of pairing.players) {
+      const score = holeData[player.user_id];
+      if (!score || score === 0) {
+        return false; // Missing or zero score
+      }
+    }
+    
+    return true; // All players have scores
+  };
+
+  // Handle Next button click with auto-submit if all scores are present
+  const handleNextHole = async () => {
+    if (!selectedPairing) return;
+
+    // Check if current hole has all player scores
+    if (holeHasAllScores(currentHole, selectedPairing)) {
+      try {
+        // Auto-submit the current hole's scores
+        const holeData = holeScores[currentHole];
+        const validPlayerIds = new Set(selectedPairing.players?.map(p => p.user_id) || []);
+        
+        const scoresArray = Object.entries(holeData)
+          .filter(([userId, strokes]) => {
+            if (!userId || userId === '' || strokes === 0 || strokes === null || strokes === undefined) {
+              return false;
+            }
+            if (!validPlayerIds.has(userId)) {
+              return false;
+            }
+            return true;
+          })
+          .map(([userId, strokes]) => ({
+            user_id: userId,
+            strokes: strokes
+          }));
+
+        if (scoresArray.length > 0) {
+          console.log(`Auto-submitting hole ${currentHole}:`, scoresArray);
+          await apiClient.submitPairingScores(selectedPairing.id, {
+            hole_number: currentHole,
+            scores: scoresArray
+          });
+
+          // Reload match results to reflect calculated scoring
+          if (selectedPairing.matches && selectedPairing.matches.length > 0) {
+            try {
+              const updatedMatchResults = await Promise.all(
+                selectedPairing.matches.map(async (match) => {
+                  try {
+                    const matchScores = await apiClient.getMatchScores(match.id);
+                    const matchPlayers = await apiClient.getMatchPlayers(match.id);
+                    return {
+                      ...match,
+                      hole_results: matchScores.hole_results || [],
+                      match_players: matchPlayers
+                    };
+                  } catch (err) {
+                    console.warn('Error loading results for match:', match.id, err);
+                    return match;
+                  }
+                })
+              );
+
+              setSelectedPairing(prev => ({
+                ...prev!,
+                matchResults: updatedMatchResults
+              }));
+            } catch (err) {
+              console.warn('Error reloading match results:', err);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error auto-submitting hole scores:', err);
+        // Don't show error to user, just proceed to next hole
+      }
+    }
+
+    // Advance to next hole
+    setCurrentHole(Math.min(18, currentHole + 1));
+  };
+
   const startPairing = async (pairingId: string) => {
     try {
       setError(null);
@@ -2048,7 +2138,7 @@ const ScoreInterface: React.FC = () => {
                     </div>
                   </div>
                   <button
-                    onClick={() => setCurrentHole(Math.min(18, currentHole + 1))}
+                    onClick={handleNextHole}
                     disabled={currentHole === 18}
                     className="px-3 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   >
