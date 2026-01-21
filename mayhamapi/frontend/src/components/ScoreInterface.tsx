@@ -31,6 +31,7 @@ const ScoreInterface: React.FC = () => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loadingResults, setLoadingResults] = useState(false);
   const [currentHole, setCurrentHole] = useState<number>(1);
+  const [showPairingDrawer, setShowPairingDrawer] = useState(false);
 
   // Ref to preserve horizontal scroll position in scorecard
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1964,123 +1965,146 @@ const ScoreInterface: React.FC = () => {
         </div>
       </div>
 
+      {/* Pairing Drawer Modal */}
+      {showPairingDrawer && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Overlay */}
+          <div
+            className="absolute inset-0 bg-black bg-opacity-50"
+            onClick={() => setShowPairingDrawer(false)}
+          />
+          {/* Drawer Panel */}
+          <div className="relative ml-auto w-full max-w-md bg-white shadow-lg overflow-y-auto max-h-screen">
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Select Pairing</h2>
+              <button
+                onClick={() => setShowPairingDrawer(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showMyPairingsOnly}
+                  onChange={(e) => setShowMyPairingsOnly(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <span className="ml-2 text-sm text-gray-700">Show only my pairings</span>
+              </label>
+
+              {filteredPairings.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p className="text-sm">No pairings found. {showMyPairingsOnly && 'Try unchecking "Show only my pairings".'}</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {sortedRounds.map(({ round, pairings: roundPairings }) => (
+                    <div key={round?.id || 'unknown'}>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 pb-2 border-b border-gray-200">
+                        Round {round?.round_number || '?'} {round?.name ? `- ${round.name}` : ''}
+                      </h4>
+                      <div className="space-y-2">
+                        {roundPairings.map((pairing) => (
+                          <button
+                            key={pairing.id}
+                            onClick={async () => {
+                              await loadExistingScores(pairing);
+                              setShowPairingDrawer(false);
+                            }}
+                            className={`w-full p-3 rounded-lg border-2 text-left text-sm transition-colors ${
+                              selectedPairing?.id === pairing.id
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start mb-1">
+                              <div className="font-medium">Pairing {pairing.pairing_number}</div>
+                              <div className={`text-xs px-2 py-1 rounded-full ${
+                                pairing.status === 'not_started' ? 'bg-gray-200 text-gray-700' :
+                                pairing.status === 'in_progress' ? 'bg-green-200 text-green-700' :
+                                'bg-blue-200 text-blue-700'
+                              }`}>
+                                {pairing.status.replace('_', ' ')}
+                              </div>
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              {getSortedPlayers(pairing.players).map(p => p.user?.name).join(', ')}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white shadow-sm rounded-lg p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Scorecard Entry</h1>
-            <p className="text-gray-500">Enter scores for your pairing like a traditional golf scorecard</p>
+            {selectedPairing ? (
+              <p className="text-gray-500">
+                Pairing {selectedPairing.pairing_number} - {getSortedPlayers(selectedPairing.players).map(p => p.user?.name).join(', ')}
+              </p>
+            ) : (
+              <p className="text-gray-500">Select a pairing to enter scores</p>
+            )}
           </div>
+          {pairings.length > 0 && (
+            <button
+              onClick={() => setShowPairingDrawer(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            >
+              {selectedPairing ? 'Change Pairing' : 'Choose Pairing'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Pairing Selection */}
-      {pairings.length > 0 && (
-        <div className="bg-white shadow-sm rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Select Pairing</h3>
-            <label className="flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showMyPairingsOnly}
-                onChange={(e) => setShowMyPairingsOnly(e.target.checked)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <span className="ml-2 text-sm text-gray-700">Show only my pairings</span>
-            </label>
+      {/* No Pairing Selected Placeholder */}
+      {!selectedPairing && pairings.length > 0 && (
+        <div className="bg-white shadow-sm rounded-lg p-12">
+          <div className="text-center">
+            <div className="mb-4">
+              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Pairing Selected</h3>
+            <p className="text-gray-500 mb-6">Select a pairing to begin entering scores</p>
+            <button
+              onClick={() => setShowPairingDrawer(true)}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              Choose a Pairing
+            </button>
           </div>
-          {filteredPairings.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p>No pairings found. {showMyPairingsOnly && 'Try unchecking "Show only my pairings".'}</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {sortedRounds.map(({ round, pairings: roundPairings }) => (
-                <div key={round?.id || 'unknown'}>
-                  <h4 className="text-md font-semibold text-gray-700 mb-3 pb-2 border-b border-gray-200">
-                    Round {round?.round_number || '?'} {round?.name ? `- ${round.name}` : ''}
-                    {round?.golf_course && (
-                      <span className="ml-2 text-sm font-normal text-gray-500">
-                        @ {round.golf_course.course_name}
-                      </span>
-                    )}
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {roundPairings.map((pairing) => (
-                      <button
-                        key={pairing.id}
-                        onClick={async () => {
-                          console.log('Selected pairing:', pairing);
-                          console.log('Pairing players:', pairing.players);
-                          pairing.players?.forEach(player => {
-                            console.log('Player details:', {
-                              id: player.id,
-                              user_id: player.user_id,
-                              team_id: player.team_id,
-                              player_order: player.player_order,
-                              user: player.user
-                            });
-                          });
-                          await loadExistingScores(pairing);
-                        }}
-                        className={`p-4 rounded-lg border-2 text-left transition-colors ${
-                          selectedPairing?.id === pairing.id
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="font-medium">
-                            Pairing {pairing.pairing_number}
-                          </div>
-                          <div className={`text-xs px-2 py-1 rounded-full ${
-                            pairing.status === 'not_started' ? 'bg-gray-200 text-gray-700' :
-                            pairing.status === 'in_progress' ? 'bg-green-200 text-green-700' :
-                            'bg-blue-200 text-blue-700'
-                          }`}>
-                            {pairing.status.replace('_', ' ')}
-                          </div>
-                        </div>
-                        
-                        {/* Tee Time and Tee Info */}
-                        <div className="text-xs text-gray-600 mb-2 space-y-1">
-                          {pairing.tee_time && (
-                            <div className="flex items-center">
-                              <Clock className="h-3 w-3 mr-1" />
-                              {new Date(pairing.tee_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          )}
-                          {pairing.tee && (
-                            <div className="italic">
-                              {pairing.tee.tee_name} {pairing.tee.total_yards && `(${pairing.tee.total_yards} yds)`}
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* Players */}
-                        <div className="space-y-1 mt-2">
-                          {getSortedPlayers(pairing.players).map(player => (
-                            <div key={player.user_id} className="text-xs flex items-center">
-                              <div 
-                                className="w-2 h-2 rounded-full mr-2" 
-                                style={{ backgroundColor: player.team?.color || '#999' }}
-                              />
-                              <span className={player.user_id === currentUserId ? 'font-semibold' : ''}>
-                                {player.user?.name || `Player ${player.user_id}`}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+        </div>
+      )}
 
-                        {/* Matches Summary */}
-                        <PairingMatchesSummary pairing={pairing} />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+      {/* Empty State - No Pairings Available */}
+      {pairings.length === 0 && (
+        <div className="bg-white shadow-sm rounded-lg p-12">
+          <div className="text-center">
+            <div className="mb-4">
+              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </div>
-          )}
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Pairings Available</h3>
+            <p className="text-gray-500">No pairings have been created for your tournaments yet. Create a tournament and pairings to get started.</p>
+          </div>
         </div>
       )}
 
