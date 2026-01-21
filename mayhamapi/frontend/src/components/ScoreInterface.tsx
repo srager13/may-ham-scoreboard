@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock, CheckCircle, Trophy, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat, HoleResult, MatchPlayer } from '../services/api';
 
@@ -32,6 +32,10 @@ const ScoreInterface: React.FC = () => {
   const [loadingResults, setLoadingResults] = useState(false);
   const [currentHole, setCurrentHole] = useState<number>(1);
 
+  // Ref to preserve horizontal scroll position in scorecard
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollPosition, setScrollPosition] = useState(0);
+
   useEffect(() => {
     loadTournaments();
     loadCurrentUser();
@@ -43,6 +47,13 @@ const ScoreInterface: React.FC = () => {
       localStorage.setItem('lastSelectedPairingId', selectedPairing.id);
     }
   }, [selectedPairing?.id]);
+
+  // Restore scroll position after scorecard re-renders
+  useEffect(() => {
+    if (scrollContainerRef.current && scrollPosition > 0) {
+      scrollContainerRef.current.scrollLeft = scrollPosition;
+    }
+  }, [holeScores, scrollPosition]);
 
   useEffect(() => {
     if (selectedTournamentId) {
@@ -272,6 +283,11 @@ const ScoreInterface: React.FC = () => {
   };
 
   const handleScoreChange = (holeNumber: number, playerId: string, score: number) => {
+    // Save current scroll position before state update
+    if (scrollContainerRef.current) {
+      setScrollPosition(scrollContainerRef.current.scrollLeft);
+    }
+
     setHoleScores(prev => ({
       ...prev,
       [holeNumber]: {
@@ -958,7 +974,7 @@ const ScoreInterface: React.FC = () => {
             )}
           </div>
         )}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" ref={scrollContainerRef}>
           <table className="min-w-full divide-y-2 divide-gray-800 bg-white text-xs">
           <thead className="bg-gray-100">
             <tr>
