@@ -1403,7 +1403,7 @@ const ScoreInterface: React.FC = () => {
                           statusText = `${team2Points - team1Points}UP`;
                           statusTeamColor = match?.team2?.color || '#2563EB';
                         } else {
-                          statusText = 'ALL';
+                          statusText = 'TIED';
                         }
                       }
                     }
@@ -1452,7 +1452,7 @@ const ScoreInterface: React.FC = () => {
                           statusText = `${team2Points - team1Points}UP`;
                           statusTeamColor = match?.team2?.color || '#2563EB';
                         } else {
-                          statusText = 'ALL';
+                          statusText = 'TIED';
                         }
                       }
                     }
