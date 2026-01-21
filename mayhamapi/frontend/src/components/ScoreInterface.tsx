@@ -189,9 +189,9 @@ const ScoreInterface: React.FC = () => {
       const response = await apiClient.getPairingScores(pairing.id);
       const scores = response.scores || [];
       
-      // Load match results if pairing is completed
-      let matchResults: MatchWithResults[] | undefined;
-      if (pairing.status === 'completed' && pairing.matches) {
+      // Load match results for both in_progress and completed pairings
+      let matchResults: MatchWithResults[] = [];
+      if (pairing.matches && pairing.matches.length > 0) {
         setLoadingResults(true);
         try {
           matchResults = await Promise.all(
@@ -1260,8 +1260,8 @@ const ScoreInterface: React.FC = () => {
               });
             })()}
             
-            {/* Status Row - Shows match status (TIED or {x}UP) - for in_progress and display modes */}
-            {((mode === 'display' && pairing.matchResults) || (mode === 'entry' && pairing.matchResults)) && (
+            {/* Status Row - Shows match status (TIED or {x}UP) - always display for entry and display modes */}
+            {(mode === 'display' || mode === 'entry') && (
               <tr className={`${SCORECARD_COLORS.statusRowBg} border-t-2 border-gray-400`}>
                 <th className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase border-r-2 border-gray-800 ${SCORECARD_COLORS.statusRowHeaderBg}`}>
                   Status
