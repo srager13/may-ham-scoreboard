@@ -918,13 +918,19 @@ const ScoreInterface: React.FC = () => {
                     </div>
                     <div className="text-sm space-y-1">
                       <div className="flex items-center">
-                        <span className="font-medium" style={{ color: match.team1?.color || '#DC2626' }}>
-                          {team1Players}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: match.team1?.color || '#DC2626' }}></div>
+                          <span className="font-medium text-gray-900">
+                            {team1Players}
+                          </span>
+                        </div>
                         <span className="mx-2 text-gray-500">vs</span>
-                        <span className="font-medium" style={{ color: match.team2?.color || '#2563EB' }}>
-                          {team2Players}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: match.team2?.color || '#2563EB' }}></div>
+                          <span className="font-medium text-gray-900">
+                            {team2Players}
+                          </span>
+                        </div>
                       </div>
                       <div className="text-gray-600">{holeRange}</div>
                     </div>
