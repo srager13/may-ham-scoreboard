@@ -351,13 +351,13 @@ const ScoreInterface: React.FC = () => {
 
   // Helper function to get background color class for a match
   const getMatchColorClass = (matchIndex: number): string => {
-    const matchColors = ['bg-blue-50', 'bg-amber-50', 'bg-purple-50', 'bg-green-50', 'bg-pink-50', 'bg-cyan-50'];
+    const matchColors = ['bg-white-100', 'bg-slate-100', 'bg-blue-50', 'bg-white-100', 'bg-gray-100'];
     return matchColors[matchIndex % matchColors.length];
   };
 
   // Helper function to get match color hex for display
   const getMatchColorHex = (matchIndex: number): string => {
-    const matchColorHexes = ['#dbeafe', '#fef3c7', '#f3e8ff', '#d1fae5', '#fce7f3', '#cffafe'];
+    const matchColorHexes = ['#f1f5f9', '#dbeafe', '#f1f5f9', '#dbeafe', '#f3f4f6'];
     return matchColorHexes[matchIndex % matchColorHexes.length];
   };
 
@@ -2183,14 +2183,6 @@ const ScoreInterface: React.FC = () => {
       {/* Score Entry */}
       {selectedPairing && (
         <div className="bg-white shadow-sm rounded-lg p-6">
-          {/* Pairing Header with Match Info */}
-          <div className="mb-6 pb-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Pairing {selectedPairing.pairing_number}
-              {selectedPairing.round && ` - Round ${selectedPairing.round.round_number}: ${selectedPairing.round.name}`}
-            </h2>
-            <PairingMatchesSummary pairing={selectedPairing} />
-          </div>
 
           {/* Start Pairing Section for not_started pairings */}
           {selectedPairing.status === 'not_started' && (
