@@ -2112,14 +2112,6 @@ const ScoreInterface: React.FC = () => {
       {/* Score Entry */}
       {selectedPairing && (
         <div className="bg-white shadow-sm rounded-lg p-6">
-          {/* Pairing Header with Match Info */}
-          <div className="mb-6 pb-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Pairing {selectedPairing.pairing_number}
-              {selectedPairing.round && ` - ${selectedPairing.round.name}`}
-            </h2>
-            <PairingMatchesSummary pairing={selectedPairing} />
-          </div>
 
           {/* Start Pairing Section for not_started pairings */}
           {selectedPairing.status === 'not_started' && (
@@ -2150,9 +2142,6 @@ const ScoreInterface: React.FC = () => {
             <>
               {/* Full Scorecard Table - Entry Mode */}
               <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">
-                <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b-2 border-gray-300">
-                  <h3 className="text-lg font-semibold text-gray-900">Pairing {selectedPairing.pairing_number} Scorecard</h3>
-                </div>
                 <ScorecardTable 
                   mode="entry"
                   pairing={selectedPairing}
