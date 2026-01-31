@@ -954,6 +954,7 @@ const ScoreInterface: React.FC = () => {
 
     return (
       <>
+        
         {/* Golf Course Information Box */}
         {pairing.round?.golf_course && (
           <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b-2 border-gray-300 mb-4 rounded-t-lg">
