@@ -2008,7 +2008,7 @@ const ScoreInterface: React.FC = () => {
                   {sortedRounds.map(({ round, pairings: roundPairings }) => (
                     <div key={round?.id || 'unknown'}>
                       <h4 className="text-sm font-semibold text-gray-700 mb-2 pb-2 border-b border-gray-200">
-                        Round {round?.round_number || '?'} {round?.name ? `- ${round.name}` : ''}
+                        {round?.name ? round.name : `Round ${round?.round_number || '?'}`}
                       </h4>
                       <div className="space-y-2">
                         {roundPairings.map((pairing) => (
@@ -2056,7 +2056,7 @@ const ScoreInterface: React.FC = () => {
             <h1 className="text-2xl font-bold text-gray-900">Scorecard Entry</h1>
             {selectedPairing ? (
               <p className="text-gray-500">
-                Pairing {selectedPairing.pairing_number} - {getSortedPlayers(selectedPairing.players).map(p => p.user?.name).join(', ')}
+                {selectedPairing.round.name} - Pairing {selectedPairing.pairing_number} - {getSortedPlayers(selectedPairing.players).map(p => p.user?.name).join(', ')}
               </p>
             ) : (
               <p className="text-gray-500">Select a pairing to enter scores</p>
@@ -2116,7 +2116,7 @@ const ScoreInterface: React.FC = () => {
           <div className="mb-6 pb-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Pairing {selectedPairing.pairing_number}
-              {selectedPairing.round && ` - Round ${selectedPairing.round.round_number}: ${selectedPairing.round.name}`}
+              {selectedPairing.round && ` - ${selectedPairing.round.name}`}
             </h2>
             <PairingMatchesSummary pairing={selectedPairing} />
           </div>
