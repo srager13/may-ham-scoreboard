@@ -697,6 +697,26 @@ const ScoreInterface: React.FC = () => {
     return pairing.players.some(player => player.user_id === currentUserId);
   };
 
+  // Calculate overall team points from match results
+  const calculateOverallTeamPoints = (pairing: PairingWithScores | null) => {
+    const teamPoints: Record<string, number> = {};
+    
+    if (pairing?.matchResults) {
+      pairing.matchResults.forEach(match => {
+        if (match.team1_points > 0) {
+          teamPoints[match.team1_id] = (teamPoints[match.team1_id] || 0) + match.team1_points;
+        }
+        if (match.team2_points > 0) {
+          teamPoints[match.team2_id] = (teamPoints[match.team2_id] || 0) + match.team2_points;
+        }
+      });
+    }
+    
+    return teamPoints;
+  };
+
+  const overallTeamPoints = calculateOverallTeamPoints(selectedPairing);
+
   // Filter pairings based on the checkbox
   const filteredPairings = showMyPairingsOnly
     ? pairings.filter(pairing => isUserInPairing(pairing))
@@ -800,27 +820,6 @@ const ScoreInterface: React.FC = () => {
     const getPlayerScore = (playerId: string) => {
       return currentHoleScores[playerId] || holePar;
     };
-
-    // Calculate overall team points
-    const calculateOverallTeamPoints = () => {
-      const teamPoints: Record<string, number> = {};
-      
-      if (pairing.matchResults) {
-        pairing.matchResults.forEach(match => {
-          if (match.team1_points > 0) {
-            teamPoints[match.team1_id] = (teamPoints[match.team1_id] || 0) + match.team1_points;
-          }
-          if (match.team2_points > 0) {
-            teamPoints[match.team2_id] = (teamPoints[match.team2_id] || 0) + match.team2_points;
-          }
-        });
-      }
-      
-      return teamPoints;
-    };
-
-    const overallTeamPoints = calculateOverallTeamPoints();
-    const teams = getTeamsFromPairing(pairing);
 
     // Calculate match status for display
     const getMatchStatus = (match: Match) => {
@@ -947,32 +946,6 @@ const ScoreInterface: React.FC = () => {
 
     return (
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-        {/* Tournament Header */}
-        <div className="bg-gradient-to-r from-green-700 to-green-600 text-white p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold">{selectedTournament?.name || 'Tournament'}</h2>
-              {pairing.round && (
-                <p className="text-green-100 text-sm mt-1">
-                  {pairing.round.name} - Round {pairing.round.round_number}
-                </p>
-              )}
-            </div>
-            {teams.length >= 2 && (
-              <div className="flex items-center space-x-6">
-                {teams.map((team, idx) => (
-                  <div key={team.id} className="text-center">
-                    <div className="text-sm text-green-100">{team.name}</div>
-                    <div className="text-3xl font-bold" style={{ color: team.color || '#fff' }}>
-                      {overallTeamPoints[team.id]?.toFixed(1) || '0.0'}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Hole Information */}
         <div className="bg-gray-50 border-b-2 border-gray-300 p-4">
           <div className="text-center">
@@ -2465,6 +2438,48 @@ const ScoreInterface: React.FC = () => {
       {/* Score Entry */}
       {selectedPairing && (
         <div className="space-y-6">
+          {/* Tournament Header */}
+          <div className="bg-gradient-to-r from-green-700 to-green-600 text-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold mb-1">
+                  {selectedTournament?.name || 'Tournament'}
+                </h2>
+                {selectedPairing.round && (
+                  <p className="text-green-100 text-sm">
+                    {selectedPairing.round.name} - Pairing {selectedPairing.pairing_number}
+                    {selectedPairing.tee_time && (
+                      <span className="ml-2">
+                        @ {new Date(selectedPairing.tee_time).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                {getTeamsFromPairing(selectedPairing).map((team, idx) => {
+                  const teamPoints = overallTeamPoints[team.id] || 0;
+                  return (
+                    <div
+                      key={team.id}
+                      className="flex items-center space-x-2 bg-white bg-opacity-20 px-3 py-2 rounded"
+                    >
+                      <div
+                        className="w-4 h-4 rounded-full"
+                        style={{ backgroundColor: team.color || (idx === 0 ? '#DC2626' : '#2563EB') }}
+                      />
+                      <span className="font-semibold">{team.name}</span>
+                      <span className="ml-2 font-bold">{teamPoints.toFixed(1)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           {/* View Mode Toggle */}
           <div className="bg-white rounded-lg shadow-sm p-4">
             <div className="flex items-center justify-center">
