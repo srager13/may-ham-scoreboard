@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock, CheckCircle, Trophy, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock, CheckCircle, Trophy, TrendingUp, ChevronLeft, ChevronRight, PlayCircle } from 'lucide-react';
 import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat, HoleResult, MatchPlayer } from '../services/api';
 
 interface MatchWithResults extends Match {
@@ -32,6 +32,7 @@ const ScoreInterface: React.FC = () => {
   const [loadingResults, setLoadingResults] = useState(false);
   const [currentHole, setCurrentHole] = useState<number>(1);
   const [showPairingDrawer, setShowPairingDrawer] = useState(false);
+  const [viewMode, setViewMode] = useState<'hole-by-hole' | 'scorecard' | 'matches'>('hole-by-hole');
 
   // Ref to preserve horizontal scroll position in scorecard
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -823,6 +824,355 @@ const ScoreInterface: React.FC = () => {
       </div>
     );
   }
+
+  // ============================================
+  // Hole-by-Hole Score Entry Component
+  // ============================================
+  const HoleByHoleView: React.FC<{ pairing: PairingWithScores }> = ({ pairing }) => {
+    if (!pairing.players || pairing.players.length === 0) {
+      return (
+        <div className="bg-white rounded-lg shadow p-8 text-center">
+          <p className="text-gray-600">No players in this pairing</p>
+        </div>
+      );
+    }
+
+    // Get hole information
+    const holeInfo = pairing.holes?.find(h => h.hole_number === currentHole);
+    const holePar = holeInfo?.par || 4;
+    const holeYards = holeInfo?.yards || 0;
+
+    // Get current hole scores or initialize with par
+    const currentHoleScores = holeScores[currentHole] || {};
+    const getPlayerScore = (playerId: string) => {
+      return currentHoleScores[playerId] || holePar;
+    };
+
+    // Calculate overall team points
+    const calculateOverallTeamPoints = () => {
+      const teamPoints: Record<string, number> = {};
+      
+      if (pairing.matchResults) {
+        pairing.matchResults.forEach(match => {
+          if (match.team1_points > 0) {
+            teamPoints[match.team1_id] = (teamPoints[match.team1_id] || 0) + match.team1_points;
+          }
+          if (match.team2_points > 0) {
+            teamPoints[match.team2_id] = (teamPoints[match.team2_id] || 0) + match.team2_points;
+          }
+        });
+      }
+      
+      return teamPoints;
+    };
+
+    const overallTeamPoints = calculateOverallTeamPoints();
+    const teams = getTeamsFromPairing(pairing);
+
+    // Calculate match status for display
+    const getMatchStatus = (match: Match) => {
+      const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
+      if (!matchResult?.hole_results) {
+        return { status: 'AS', team1Points: 0, team2Points: 0, holesLeft: match.holes };
+      }
+
+      const startHole = match.start_hole || 1;
+      const endHole = match.end_hole || 18;
+      let team1Points = 0;
+      let team2Points = 0;
+      let holesPlayed = 0;
+
+      for (let h = startHole; h <= endHole; h++) {
+        const holeResult = matchResult.hole_results.find(hr => hr.hole_number === h);
+        if (holeResult) {
+          team1Points += holeResult.team1_points;
+          team2Points += holeResult.team2_points;
+          holesPlayed++;
+        }
+      }
+
+      const totalHoles = endHole - startHole + 1;
+      const holesLeft = totalHoles - holesPlayed;
+      const difference = Math.abs(team1Points - team2Points);
+      
+      let status = 'AS';
+      if (team1Points > team2Points) {
+        status = difference === 1 ? '1UP' : `${difference}UP`;
+      } else if (team2Points > team1Points) {
+        status = difference === 1 ? '1DN' : `${difference}DN`;
+      }
+
+      return { status, team1Points, team2Points, holesLeft, team1Winning: team1Points > team2Points };
+    };
+
+    const handleScoreUpdate = (playerId: string, newScore: number) => {
+      if (newScore < 1) return; // Minimum score is 1
+      handleScoreChange(currentHole, playerId, newScore);
+    };
+
+    const handleNavigateHole = async (direction: 'prev' | 'next') => {
+      // Auto-submit current hole scores if they've changed
+      const hasScores = Object.keys(currentHoleScores).length > 0;
+      if (hasScores) {
+        try {
+          const scores = pairing.players!.map(player => ({
+            user_id: player.user_id,
+            strokes: getPlayerScore(player.user_id)
+          }));
+
+          await apiClient.submitPairingScores(pairing.id, {
+            hole_number: currentHole,
+            scores
+          });
+
+          // Reload match results
+          if (pairing.matches && pairing.matches.length > 0) {
+            const matchResults: MatchWithResults[] = [];
+            for (const match of pairing.matches) {
+              try {
+                const scoresResponse = await apiClient.getMatchScores(match.id);
+                matchResults.push({
+                  ...match,
+                  hole_results: scoresResponse.hole_results || []
+                });
+              } catch (err) {
+                console.warn('Error loading match scores:', err);
+              }
+            }
+            setSelectedPairing(prev => prev ? { ...prev, matchResults } : null);
+          }
+        } catch (err) {
+          console.error('Error auto-submitting scores:', err);
+          setError(err instanceof ApiError ? err.message : 'Failed to save scores');
+          return;
+        }
+      }
+
+      // Navigate to new hole
+      const newHole = direction === 'prev' ? Math.max(1, currentHole - 1) : Math.min(18, currentHole + 1);
+      setCurrentHole(newHole);
+    };
+
+    const handleSubmitCurrentHole = async () => {
+      try {
+        setIsSubmitting(true);
+        const scores = pairing.players!.map(player => ({
+          user_id: player.user_id,
+          strokes: getPlayerScore(player.user_id)
+        }));
+
+        await apiClient.submitPairingScores(pairing.id, {
+          hole_number: currentHole,
+          scores
+        });
+
+        // Reload match results
+        if (pairing.matches && pairing.matches.length > 0) {
+          const matchResults: MatchWithResults[] = [];
+          for (const match of pairing.matches) {
+            try {
+              const scoresResponse = await apiClient.getMatchScores(match.id);
+              matchResults.push({
+                ...match,
+                hole_results: scoresResponse.hole_results || []
+              });
+            } catch (err) {
+              console.warn('Error loading match scores:', err);
+            }
+          }
+          setSelectedPairing(prev => prev ? { ...prev, matchResults } : null);
+        }
+
+        setError(null);
+      } catch (err) {
+        console.error('Error submitting scores:', err);
+        setError(err instanceof ApiError ? err.message : 'Failed to submit scores');
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    return (
+      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+        {/* Tournament Header */}
+        <div className="bg-gradient-to-r from-green-700 to-green-600 text-white p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">{selectedTournament?.name || 'Tournament'}</h2>
+              {pairing.round && (
+                <p className="text-green-100 text-sm mt-1">
+                  {pairing.round.name} - Round {pairing.round.round_number}
+                </p>
+              )}
+            </div>
+            {teams.length >= 2 && (
+              <div className="flex items-center space-x-6">
+                {teams.map((team, idx) => (
+                  <div key={team.id} className="text-center">
+                    <div className="text-sm text-green-100">{team.name}</div>
+                    <div className="text-3xl font-bold" style={{ color: team.color || '#fff' }}>
+                      {overallTeamPoints[team.id]?.toFixed(1) || '0.0'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Hole Information */}
+        <div className="bg-gray-50 border-b-2 border-gray-300 p-4">
+          <div className="text-center">
+            <div className="text-4xl font-bold text-gray-900 mb-1">Hole {currentHole}</div>
+            <div className="flex items-center justify-center space-x-8 text-gray-700">
+              <div>
+                <span className="font-semibold">Par</span> <span className="text-2xl font-bold">{holePar}</span>
+              </div>
+              {holeYards > 0 && (
+                <div>
+                  <span className="font-semibold">{holeYards}</span> <span className="text-sm">yds</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Score Entry */}
+        <div className="p-6">
+          <div className="space-y-4 max-w-2xl mx-auto">
+            {getSortedPlayers(pairing.players).map(player => (
+              <div key={player.user_id} className="flex items-center justify-between bg-gray-50 rounded-lg p-4 border-2 border-gray-200">
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-900">{player.user?.name}</div>
+                  {player.team && (
+                    <div className="text-sm text-gray-600" style={{ color: player.team.color }}>
+                      {player.team.name}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => handleScoreUpdate(player.user_id, getPlayerScore(player.user_id) - 1)}
+                    className="w-10 h-10 flex items-center justify-center bg-gray-300 hover:bg-gray-400 rounded-lg text-xl font-bold text-gray-700 transition-colors"
+                    disabled={isSubmitting}
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    max="15"
+                    value={getPlayerScore(player.user_id)}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val) && val >= 1) {
+                        handleScoreUpdate(player.user_id, val);
+                      }
+                    }}
+                    className="w-20 h-10 text-center text-2xl font-bold border-2 border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none"
+                    disabled={isSubmitting}
+                  />
+                  <button
+                    onClick={() => handleScoreUpdate(player.user_id, getPlayerScore(player.user_id) + 1)}
+                    className="w-10 h-10 flex items-center justify-center bg-gray-300 hover:bg-gray-400 rounded-lg text-xl font-bold text-gray-700 transition-colors"
+                    disabled={isSubmitting}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Navigation Buttons */}
+        <div className="border-t-2 border-gray-300 p-4">
+          <div className="flex items-center justify-center space-x-4 max-w-2xl mx-auto">
+            <button
+              onClick={() => handleNavigateHole('prev')}
+              disabled={currentHole === 1 || isSubmitting}
+              className="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded-lg font-semibold transition-colors flex items-center justify-center"
+            >
+              <ChevronLeft className="mr-2" size={20} />
+              Hole {Math.max(1, currentHole - 1)}
+            </button>
+            <button
+              onClick={handleSubmitCurrentHole}
+              disabled={isSubmitting}
+              className="px-8 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg font-bold text-lg transition-colors"
+            >
+              {isSubmitting ? 'SUBMITTING...' : 'SUBMIT'}
+            </button>
+            <button
+              onClick={() => handleNavigateHole('next')}
+              disabled={currentHole === 18 || isSubmitting}
+              className="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded-lg font-semibold transition-colors flex items-center justify-center"
+            >
+              Hole {Math.min(18, currentHole + 1)}
+              <ChevronRight className="ml-2" size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* Match Status Summary */}
+        {pairing.matches && pairing.matches.length > 0 && (
+          <div className="border-t-2 border-gray-300 bg-gray-50 p-6">
+            <div className="max-w-2xl mx-auto space-y-3">
+              {pairing.matches.map((match, idx) => {
+                const matchStatus = getMatchStatus(match);
+                const isTeamMatch = match.format?.players_per_side === 2;
+                
+                // Get players for this match
+                const team1Players = match.players?.filter(p => p.team_id === match.team1_id).sort((a, b) => a.player_order - b.player_order) || [];
+                const team2Players = match.players?.filter(p => p.team_id === match.team2_id).sort((a, b) => a.player_order - b.player_order) || [];
+
+                return (
+                  <div key={match.id} className="bg-white rounded-lg border-2 border-gray-300 p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-semibold text-gray-900">
+                        Match {idx + 1} - {match.format?.name || 'Unknown Format'}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {matchStatus.holesLeft} hole{matchStatus.holesLeft !== 1 ? 's' : ''} to play
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="font-medium" style={{ color: match.team1?.color }}>
+                          {isTeamMatch ? (
+                            team1Players.map(p => p.user?.name).join(' & ')
+                          ) : (
+                            team1Players[0]?.user?.name || match.team1?.name
+                          )}
+                        </div>
+                      </div>
+                      <div className="px-4">
+                        <div className={`text-xl font-bold ${
+                          matchStatus.status === 'AS' ? 'text-gray-600' :
+                          matchStatus.team1Winning ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {matchStatus.status === 'AS' ? 'AS' : matchStatus.team1Winning ? matchStatus.status : matchStatus.status}
+                        </div>
+                      </div>
+                      <div className="flex-1 text-right">
+                        <div className="font-medium" style={{ color: match.team2?.color }}>
+                          {isTeamMatch ? (
+                            team2Players.map(p => p.user?.name).join(' & ')
+                          ) : (
+                            team2Players[0]?.user?.name || match.team2?.name
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ============================================
   // Matches Status Display Component
@@ -2188,7 +2538,53 @@ const ScoreInterface: React.FC = () => {
 
       {/* Score Entry */}
       {selectedPairing && (
-        <div className="bg-white shadow-sm rounded-lg p-6">
+        <div className="space-y-6">
+          {/* View Mode Toggle */}
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <div className="flex items-center justify-center">
+              <div className="inline-flex rounded-lg border border-gray-300 bg-white p-1">
+                <button
+                  onClick={() => setViewMode('hole-by-hole')}
+                  className={`px-6 py-2 rounded-md font-medium transition-colors ${
+                    viewMode === 'hole-by-hole'
+                      ? 'bg-green-600 text-white'
+                      : 'text-gray-700 hover:text-gray-900'
+                  }`}
+                >
+                  Hole-by-Hole
+                </button>
+                <button
+                  onClick={() => setViewMode('scorecard')}
+                  className={`px-6 py-2 rounded-md font-medium transition-colors ${
+                    viewMode === 'scorecard'
+                      ? 'bg-green-600 text-white'
+                      : 'text-gray-700 hover:text-gray-900'
+                  }`}
+                >
+                  Scorecard
+                </button>
+                <button
+                  onClick={() => setViewMode('matches')}
+                  className={`px-6 py-2 rounded-md font-medium transition-colors ${
+                    viewMode === 'matches'
+                      ? 'bg-green-600 text-white'
+                      : 'text-gray-700 hover:text-gray-900'
+                  }`}
+                >
+                  Matches
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Hole-by-Hole View */}
+          {viewMode === 'hole-by-hole' && (
+            <HoleByHoleView pairing={selectedPairing} />
+          )}
+
+          {/* Scorecard View */}
+          {viewMode === 'scorecard' && (
+            <div className="bg-white shadow-sm rounded-lg p-6">
 
           {/* Start Pairing Section for not_started pairings */}
           {selectedPairing.status === 'not_started' && (
@@ -2347,6 +2743,23 @@ const ScoreInterface: React.FC = () => {
                   Reopen for Editing
                 </button>
               </div>
+            </div>
+          )}
+        </div>
+          )}
+
+          {/* Matches View */}
+          {viewMode === 'matches' && (
+            <div className="space-y-6">
+              {selectedPairing.status === 'completed' ? (
+                <MatchResultsDisplay pairing={selectedPairing} />
+              ) : selectedPairing.status === 'in_progress' ? (
+                <MatchesStatusDisplay pairing={selectedPairing} />
+              ) : (
+                <div className="bg-white rounded-lg shadow p-8 text-center">
+                  <p className="text-gray-600">Match results will be available once the pairing is in progress</p>
+                </div>
+              )}
             </div>
           )}
         </div>
