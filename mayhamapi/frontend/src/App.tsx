@@ -8,6 +8,7 @@ import LandingPage from './components/LandingPage';
 import Groups from './components/Groups';
 import AdminPortal from './components/AdminPortal';
 import { AuthProvider, AuthModal, LoginButton, useAuth } from './components/Auth';
+import { TournamentProvider } from './components/TournamentContext';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Protected Route Component
@@ -277,7 +278,9 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <AppContent />
+        <TournamentProvider>
+          <AppContent />
+        </TournamentProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

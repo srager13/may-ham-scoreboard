@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock, CheckCircle, Trophy, TrendingUp, ChevronLeft, ChevronRight, PlayCircle } from 'lucide-react';
-import { apiClient, ApiError, Tournament, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat, HoleResult, MatchPlayer } from '../services/api';
+import { apiClient, ApiError, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat, HoleResult, MatchPlayer } from '../services/api';
+import { useTournament } from './TournamentContext';
 
 interface MatchWithResults extends Match {
   hole_results?: HoleResult[];
@@ -18,9 +19,7 @@ interface PairingWithScores extends Pairing {
 }
 
 const ScoreInterface: React.FC = () => {
-  const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
-  const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
+  const { selectedTournamentId, selectedTournament, loading: tournamentsLoading, error: tournamentError } = useTournament();
   const [pairings, setPairings] = useState<PairingWithScores[]>([]);
   const [selectedPairing, setSelectedPairing] = useState<PairingWithScores | null>(null);
   const [holeScores, setHoleScores] = useState<Record<number, Record<string, number>>>({});
@@ -39,7 +38,6 @@ const ScoreInterface: React.FC = () => {
   const [scrollPosition, setScrollPosition] = useState(0);
 
   useEffect(() => {
-    loadTournaments();
     loadCurrentUser();
   }, []);
 
@@ -60,19 +58,8 @@ const ScoreInterface: React.FC = () => {
   useEffect(() => {
     if (selectedTournamentId) {
       loadPairings();
-      loadSelectedTournament();
     }
   }, [selectedTournamentId]);
-
-  const loadSelectedTournament = async () => {
-    if (!selectedTournamentId) return;
-    try {
-      const tournament = await apiClient.getTournament(selectedTournamentId);
-      setSelectedTournament(tournament);
-    } catch (err) {
-      console.error('Error loading tournament:', err);
-    }
-  };
 
   const loadCurrentUser = async () => {
     try {
@@ -81,28 +68,6 @@ const ScoreInterface: React.FC = () => {
       setCurrentUserId(user.id);
     } catch (err) {
       console.error('Error loading current user:', err);
-    }
-  };
-
-  const loadTournaments = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await apiClient.getUserTournaments();
-      const tournamentList = Array.isArray(response) ? response : (response || []);
-      setTournaments(tournamentList);
-      
-      if (tournamentList && tournamentList.length > 0) {
-        setSelectedTournamentId(tournamentList[0].id);
-      } else {
-        setError('You are not a member of any tournaments. Ask an admin to add you to a tournament team.');
-        setLoading(false);
-      }
-    } catch (err) {
-      console.error('Error loading tournaments:', err);
-      setError('Failed to load tournaments. Please make sure you are logged in.');
-      setLoading(false);
     }
   };
 
@@ -757,27 +722,37 @@ const ScoreInterface: React.FC = () => {
     return roundA - roundB;
   });
 
-  if (loading) {
+  if (loading || tournamentsLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <RefreshCw className="h-8 w-8 animate-spin text-gray-500" />
         <span className="ml-2 text-gray-500">
-          {!tournaments || tournaments.length === 0 ? 'Loading tournaments...' : 'Loading pairings...'}
+          {tournamentsLoading ? 'Loading tournaments...' : 'Loading pairings...'}
         </span>
       </div>
     );
   }
 
-  if (error || !tournaments || tournaments.length === 0) {
+  if (tournamentError || !selectedTournamentId) {
     return (
       <div className="text-center py-12">
-        <Target className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No Tournaments Available</h3>
+        <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 mb-2">No Tournament Selected</h3>
         <p className="text-gray-500 mb-6">
-          {error || 'You are not currently participating in any tournaments.'}
+          {tournamentError || 'Please select a tournament from the user menu to enter scores.'}
         </p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Pairings</h3>
+        <p className="text-gray-500 mb-6">{error}</p>
         <button
-          onClick={loadTournaments}
+          onClick={loadPairings}
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
         >
           Retry
@@ -788,39 +763,17 @@ const ScoreInterface: React.FC = () => {
 
   if (pairings.length === 0 && selectedTournamentId) {
     return (
-      <div className="space-y-6">
-        {/* Tournament Selector */}
-        <div className="bg-white border-b border-gray-200 rounded-lg p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium text-gray-900">Select Tournament</h2>
-            <div className="flex items-center space-x-4">
-              <select
-                value={selectedTournamentId}
-                onChange={(e) => setSelectedTournamentId(e.target.value)}
-                className="block w-64 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                {tournaments.map((tournament) => (
-                  <option key={tournament.id} value={tournament.id}>
-                    {tournament.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={loadPairings}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <div className="text-center py-12">
-          <Target className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Pairings</h3>
-          <p className="text-gray-500">There are no pairings currently available for scoring in this tournament.</p>
-        </div>
+      <div className="text-center py-12">
+        <Target className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Pairings</h3>
+        <p className="text-gray-500">There are no pairings currently available for scoring in this tournament.</p>
+        <button
+          onClick={loadPairings}
+          className="mt-4 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh
+        </button>
       </div>
     );
   }
@@ -2365,33 +2318,6 @@ const ScoreInterface: React.FC = () => {
           {error}
         </div>
       )}
-
-      {/* Tournament Selector */}
-      <div className="bg-white border-b border-gray-200 rounded-lg p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-medium text-gray-900">Select Tournament</h2>
-          <div className="flex items-center space-x-4">
-            <select
-              value={selectedTournamentId}
-              onChange={(e) => setSelectedTournamentId(e.target.value)}
-              className="block w-64 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            >
-              {tournaments.map((tournament) => (
-                <option key={tournament.id} value={tournament.id}>
-                  {tournament.name}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={loadPairings}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Pairing Drawer Modal */}
       {showPairingDrawer && (

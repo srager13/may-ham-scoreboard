@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Trophy, Users, User, Award, Clock, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
-import { apiClient, ApiError, Tournament, Team, Match, TeamStanding, LeaderboardData, Round, Pairing, HoleResult } from '../services/api';
+import { apiClient, ApiError, Team, Match, TeamStanding, LeaderboardData, Round, Pairing, HoleResult } from '../services/api';
+import { useTournament } from './TournamentContext';
 
 // Helper function to format date as MM-DD-YYYY
 const formatDate = (dateString: string): string => {
@@ -782,39 +783,9 @@ const TeamStandings = ({ teams, totalAvailablePoints }: { teams: TeamStanding[],
 };
 
 const Leaderboard = () => {
-  const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { selectedTournamentId, loading: tournamentsLoading, error: tournamentError } = useTournament();
 
-  useEffect(() => {
-    loadTournaments();
-  }, []);
-
-  const loadTournaments = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Get tournaments where the current user is a team member
-      const tournamentList = await apiClient.getUserTournaments();
-      setTournaments(tournamentList);
-      
-      // If we have tournaments, select the first one
-      if (tournamentList.length > 0) {
-        setSelectedTournamentId(tournamentList[0].id);
-      } else {
-        setError('You are not a member of any tournaments. Ask an admin to add you to a tournament team.');
-      }
-    } catch (err) {
-      console.error('Error loading tournaments:', err);
-      setError('Failed to load tournaments. Please make sure you are logged in.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
+  if (tournamentsLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
@@ -825,20 +796,15 @@ const Leaderboard = () => {
     );
   }
 
-  if (error || tournaments.length === 0) {
+  if (tournamentError || !selectedTournamentId) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center max-w-md">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">No Tournaments Available</h2>
-          <p className="text-gray-600 mb-6">
-            {error || 'You are not currently participating in any tournaments.'}
+          <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">No Tournament Selected</h2>
+          <p className="text-gray-600 mb-4">
+            {tournamentError || 'Please select a tournament from the user menu to view the leaderboard.'}
           </p>
-          <button
-            onClick={loadTournaments}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-          >
-            Retry
-          </button>
         </div>
       </div>
     );
@@ -846,28 +812,6 @@ const Leaderboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Tournament Selector */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium text-gray-900">Select Tournament</h2>
-            <div className="flex items-center space-x-4">
-              <select
-                value={selectedTournamentId}
-                onChange={(e) => setSelectedTournamentId(e.target.value)}
-                className="block w-64 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
-              >
-                {tournaments.map((tournament) => (
-                  <option key={tournament.id} value={tournament.id}>
-                    {tournament.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-      
       {selectedTournamentId && <TournamentLeaderboard tournamentId={selectedTournamentId} />}
     </div>
   );

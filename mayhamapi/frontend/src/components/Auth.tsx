@@ -2,6 +2,7 @@ import React, { useState, useContext, createContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, Mail, UserPlus, LogIn, Eye, EyeOff, Trophy, X } from 'lucide-react';
 import { apiClient, ApiError, User as ApiUser } from '../services/api';
+import { useTournament } from './TournamentContext';
 
 // Authentication Context
 interface AuthContextType {
@@ -336,6 +337,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
 // User Profile Display Component
 const UserProfile: React.FC = () => {
   const { user, logout, isAuthenticated } = useAuth();
+  const { tournaments, selectedTournamentId, setSelectedTournamentId } = useTournament();
   const [showDropdown, setShowDropdown] = useState(false);
   const navigate = useNavigate();
 
@@ -345,6 +347,11 @@ const UserProfile: React.FC = () => {
     logout();
     setShowDropdown(false);
     navigate('/');
+  };
+
+  const handleTournamentChange = (tournamentId: string) => {
+    setSelectedTournamentId(tournamentId);
+    // Don't close dropdown to allow easier switching
   };
 
   return (
@@ -360,7 +367,7 @@ const UserProfile: React.FC = () => {
       </button>
 
       {showDropdown && (
-        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+        <div className="absolute right-0 mt-2 w-72 bg-white rounded-md shadow-lg py-1 z-50">
           <div className="px-4 py-2 border-b border-gray-100">
             <p className="text-sm font-medium text-gray-900">{user.name || user.email}</p>
             <p className="text-sm text-gray-500">{user.email}</p>
@@ -368,6 +375,28 @@ const UserProfile: React.FC = () => {
               <p className="text-xs text-gray-500">Handicap: {user.handicap}</p>
             )}
           </div>
+          
+          {/* Tournament Selection */}
+          {tournaments.length > 0 && (
+            <div className="px-4 py-3 border-b border-gray-100">
+              <label className="block text-xs font-medium text-gray-700 mb-2">
+                <Trophy className="h-3 w-3 inline mr-1" />
+                Active Tournament
+              </label>
+              <select
+                value={selectedTournamentId || ''}
+                onChange={(e) => handleTournamentChange(e.target.value)}
+                className="w-full text-sm border border-gray-300 rounded-md px-2 py-1.5 focus:ring-green-500 focus:border-green-500"
+              >
+                {tournaments.map((tournament) => (
+                  <option key={tournament.id} value={tournament.id}>
+                    {tournament.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
           <button
             onClick={handleLogout}
             className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
