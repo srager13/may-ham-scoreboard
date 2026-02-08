@@ -814,6 +814,26 @@ const ScoreInterface: React.FC = () => {
   }
 
   // ============================================
+  // Reopen Pairing Section Component (Reusable)
+  // ============================================
+  // Displays option to reopen a completed pairing for editing
+  const ReopenPairingSection: React.FC<{ pairingId: string }> = ({ pairingId }) => {
+    return (
+      <div className="text-center py-6 mt-6 border-t border-gray-200">
+        <p className="text-gray-500 mb-4">
+          Need to make changes? You can reopen this pairing for editing.
+        </p>
+        <button
+          onClick={() => startPairing(pairingId)}
+          className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium transition-colors"
+        >
+          Reopen for Editing
+        </button>
+      </div>
+    );
+  };
+
+  // ============================================
   // Hole-by-Hole Score Entry Component
   // ============================================
   const HoleByHoleView: React.FC<{ pairing: PairingWithScores }> = ({ pairing }) => {
@@ -821,6 +841,26 @@ const ScoreInterface: React.FC = () => {
       return (
         <div className="bg-white rounded-lg shadow p-8 text-center">
           <p className="text-gray-600">No players in this pairing</p>
+        </div>
+      );
+    }
+
+    // If pairing is completed, show the reopen option instead of score entry
+    if (pairing.status === 'completed') {
+      return (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="text-center py-8">
+            <div className="mb-4">
+              <svg className="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Pairing Completed</h3>
+            <p className="text-gray-600 mb-4">
+              This pairing has been completed. View the results in the Scorecard or Matches tab.
+            </p>
+          </div>
+          <ReopenPairingSection pairingId={pairing.id} />
         </div>
       );
     }
@@ -2702,17 +2742,7 @@ const ScoreInterface: React.FC = () => {
               )}
 
               {/* Reopen Button */}
-              <div className="text-center py-6 mt-6 border-t border-gray-200">
-                <p className="text-gray-500 mb-4">
-                  Need to make changes? You can reopen this pairing for editing.
-                </p>
-                <button
-                  onClick={() => startPairing(selectedPairing.id)}
-                  className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium transition-colors"
-                >
-                  Reopen for Editing
-                </button>
-              </div>
+              <ReopenPairingSection pairingId={selectedPairing.id} />
             </div>
           )}
         </div>
