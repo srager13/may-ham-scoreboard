@@ -2390,9 +2390,30 @@ const ScoreInterface: React.FC = () => {
                                 {pairing.status.replace('_', ' ')}
                               </div>
                             </div>
-                            <div className="text-xs text-gray-600">
+                            <div className="text-xs text-gray-600 mb-1">
                               {getSortedPlayers(pairing.players).map(p => p.user?.name).join(', ')}
                             </div>
+                            {(pairing.round?.golf_course || pairing.tee_time) && (
+                              <div className="text-xs text-gray-500 space-y-0.5 mt-2 pt-2 border-t border-gray-200">
+                                {pairing.round?.golf_course && (
+                                  <div className="flex items-center">
+                                    <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    <span>{pairing.round.golf_course.course_name}</span>
+                                  </div>
+                                )}
+                                {pairing.tee_time && (
+                                  <div className="flex items-center">
+                                    <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>{new Date(pairing.tee_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </button>
                         ))}
                       </div>
