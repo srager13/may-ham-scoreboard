@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock, CheckCircle, Trophy, TrendingUp, ChevronLeft, ChevronRight, PlayCircle } from 'lucide-react';
+import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock, CheckCircle, Trophy, TrendingUp, ChevronLeft, ChevronRight, PlayCircle, MapPin } from 'lucide-react';
 import { apiClient, ApiError, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat, HoleResult, MatchPlayer } from '../services/api';
 import { useTournament } from './TournamentContext';
 
@@ -2580,6 +2580,17 @@ const ScoreInterface: React.FC = () => {
                           hour: 'numeric',
                           minute: '2-digit'
                         })}
+                      </span>
+                    )}
+                  </p>
+                )}
+                {selectedPairing.round?.golf_course && (
+                  <p className="text-green-100 text-sm mt-1">
+                    <MapPin className="inline h-3.5 w-3.5 mr-1" />
+                    {selectedPairing.round.golf_course.course_name}
+                    {selectedPairing.round.golf_course.city && selectedPairing.round.golf_course.state && (
+                      <span className="ml-1 text-green-200">
+                        ({selectedPairing.round.golf_course.city}, {selectedPairing.round.golf_course.state})
                       </span>
                     )}
                   </p>
