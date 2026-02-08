@@ -1095,7 +1095,7 @@ const ScoreInterface: React.FC = () => {
           </div>
         </div>
 
-        {/* Match Status Summary - All Matches for Current Hole */}
+        {/* Match Status Summary - Matches for Current Hole */}
         {(() => {
           // Find all matches that apply to the current hole
           const currentMatches = getAllMatchesForHole(pairing, currentHole);
@@ -1105,58 +1105,17 @@ const ScoreInterface: React.FC = () => {
             <div className="border-t-2 border-gray-300 bg-gray-50 p-6">
               <div className="max-w-2xl mx-auto space-y-3">
                 {currentMatches.map((currentMatch) => {
-                  const matchStatus = getMatchStatus(currentMatch);
-                  const isTeamMatch = currentMatch.format?.players_per_side === 2;
-                  
-                  // Get players for this match
-                  const team1Players = currentMatch.players?.filter(p => p.team_id === currentMatch.team1_id).sort((a, b) => a.player_order - b.player_order) || [];
-                  const team2Players = currentMatch.players?.filter(p => p.team_id === currentMatch.team2_id).sort((a, b) => a.player_order - b.player_order) || [];
-
                   // Find the match index for display
                   const matchIdx = pairing.matches?.findIndex(m => m.id === currentMatch.id) ?? 0;
 
                   return (
-                    <div key={currentMatch.id} className="bg-white rounded-lg border-2 border-gray-300 p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="font-semibold text-gray-900">
-                          Match {matchIdx + 1} - {currentMatch.format?.name || 'Unknown Format'}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {matchStatus.holesLeft} hole{matchStatus.holesLeft !== 1 ? 's' : ''} to play
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: currentMatch.team1?.color || '#DC2626' }}></div>
-                          <span className="font-medium text-gray-900">
-                            {isTeamMatch ? (
-                              team1Players.map(p => p.user?.name).join(' & ')
-                            ) : (
-                              team1Players[0]?.user?.name || currentMatch.team1?.name
-                            )}
-                          </span>
-                        </div>
-                        <span className="mx-2 text-gray-500 text-sm">vs</span>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: currentMatch.team2?.color || '#2563EB' }}></div>
-                          <span className="font-medium text-gray-900">
-                            {isTeamMatch ? (
-                              team2Players.map(p => p.user?.name).join(' & ')
-                            ) : (
-                              team2Players[0]?.user?.name || currentMatch.team2?.name
-                            )}
-                          </span>
-                        </div>
-                        <div className="ml-4">
-                          <div className={`text-xl font-bold ${
-                            matchStatus.status === 'AS' ? 'text-gray-600' :
-                            matchStatus.team1Winning ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            {matchStatus.status}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <MatchStatusBox
+                      key={currentMatch.id}
+                      match={currentMatch}
+                      matchIndex={matchIdx}
+                      pairing={pairing}
+                      variant="compact"
+                    />
                   );
                 })}
               </div>
@@ -1168,57 +1127,222 @@ const ScoreInterface: React.FC = () => {
   };
 
   // ============================================
+  // Match Status Box Component (Reusable)
+  // ============================================
+  // Single match status display box used across all views
+  interface MatchStatusBoxProps {
+    match: Match;
+    matchIndex: number;
+    pairing: PairingWithScores;
+    variant?: 'compact' | 'detailed'; // compact for hole-by-hole, detailed for matches/scorecard views
+  }
+
+  const MatchStatusBox: React.FC<MatchStatusBoxProps> = ({ match, matchIndex, pairing, variant = 'detailed' }) => {
+    // Calculate match status
+    const getMatchStatus = () => {
+      const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
+      if (!matchResult?.hole_results) {
+        return { 
+          status: 'AS', 
+          statusText: 'Not Started', 
+          statusColor: 'text-gray-500',
+          team1Points: 0, 
+          team2Points: 0, 
+          holesLeft: match.holes,
+          team1Winning: false 
+        };
+      }
+
+      const startHole = match.start_hole || 1;
+      const endHole = match.end_hole || 18;
+      let team1Points = 0;
+      let team2Points = 0;
+      let holesPlayed = 0;
+
+      for (let h = startHole; h <= endHole; h++) {
+        const holeResult = matchResult.hole_results.find(hr => hr.hole_number === h);
+        if (holeResult) {
+          team1Points += holeResult.team1_points;
+          team2Points += holeResult.team2_points;
+          holesPlayed++;
+        }
+      }
+
+      const totalHoles = endHole - startHole + 1;
+      const holesLeft = totalHoles - holesPlayed;
+      const difference = Math.abs(team1Points - team2Points);
+      
+      let status = 'AS';
+      let statusText = 'TIED';
+      let statusColor = 'text-gray-700 font-semibold';
+      let leadingTeam = undefined;
+      let teamColor = undefined;
+
+      if (team1Points > team2Points) {
+        status = difference === 1 ? '1UP' : `${difference}UP`;
+        statusText = status;
+        statusColor = 'text-red-700 font-bold';
+        leadingTeam = match.team1?.name || 'Team 1';
+        teamColor = match.team1?.color || '#DC2626';
+      } else if (team2Points > team1Points) {
+        status = difference === 1 ? '1UP' : `${difference}UP`;
+        statusText = status;
+        statusColor = 'text-blue-700 font-bold';
+        leadingTeam = match.team2?.name || 'Team 2';
+        teamColor = match.team2?.color || '#2563EB';
+      } else if (team1Points > 0 || team2Points > 0) {
+        statusText = 'TIED';
+      } else {
+        statusText = 'Not Started';
+        statusColor = 'text-gray-500';
+      }
+
+      return { 
+        status, 
+        statusText, 
+        statusColor, 
+        leadingTeam, 
+        teamColor,
+        team1Points, 
+        team2Points, 
+        holesLeft, 
+        team1Winning: team1Points > team2Points 
+      };
+    };
+
+    const matchStatus = getMatchStatus();
+    const isTeamMatch = match.format?.players_per_side === 2;
+    
+    // Get players for this match
+    const team1Players = match.players?.filter(p => p.team_id === match.team1_id).sort((a, b) => a.player_order - b.player_order) || [];
+    const team2Players = match.players?.filter(p => p.team_id === match.team2_id).sort((a, b) => a.player_order - b.player_order) || [];
+
+    const team1PlayerNames = team1Players.map(p => p.user?.name).join(' & ') || match.team1?.name || 'Team 1';
+    const team2PlayerNames = team2Players.map(p => p.user?.name).join(' & ') || match.team2?.name || 'Team 2';
+
+    const holeRange = (match.start_hole && match.end_hole)
+      ? `Holes ${match.start_hole}-${match.end_hole}`
+      : `All ${match.holes} Holes`;
+
+    if (variant === 'compact') {
+      // Compact variant for hole-by-hole view
+      return (
+        <div className="bg-white rounded-lg border-2 border-gray-300 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="font-semibold text-gray-900">
+              Match {matchIndex + 1} - {match.format?.name || 'Unknown Format'}
+            </div>
+            <div className="text-sm text-gray-600">
+              {matchStatus.holesLeft} hole{matchStatus.holesLeft !== 1 ? 's' : ''} to play
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: match.team1?.color || '#DC2626' }}></div>
+              <span className="font-medium text-gray-900">
+                {isTeamMatch ? team1PlayerNames : (team1Players[0]?.user?.name || match.team1?.name)}
+              </span>
+              {/* Show status next to team1 if they're winning */}
+              {matchStatus.status !== 'AS' && matchStatus.team1Winning && (
+                <span className="ml-2 text-xl font-bold text-green-600">
+                  {matchStatus.status}
+                </span>
+              )}
+            </div>
+            <span className="mx-2 text-gray-500 text-sm">vs</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: match.team2?.color || '#2563EB' }}></div>
+              <span className="font-medium text-gray-900">
+                {isTeamMatch ? team2PlayerNames : (team2Players[0]?.user?.name || match.team2?.name)}
+              </span>
+              {/* Show status next to team2 if they're winning */}
+              {matchStatus.status !== 'AS' && !matchStatus.team1Winning && (
+                <span className="ml-2 text-xl font-bold text-red-600">
+                  {matchStatus.status}
+                </span>
+              )}
+            </div>
+            {/* Show AS on right side when tied */}
+            {matchStatus.status === 'AS' && (
+              <div className="ml-4">
+                <div className="text-xl font-bold text-gray-600">
+                  {matchStatus.status}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Detailed variant for matches/scorecard views
+    const matchBgClass = getMatchColorClass(matchIndex);
+    const matchColorHex = getMatchColorHex(matchIndex);
+
+    return (
+      <div 
+        className={`${matchBgClass} border-2 border-gray-300 rounded-lg p-4`}
+        style={{ borderLeftWidth: '6px', borderLeftColor: matchColorHex }}
+      >
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <div 
+                className="w-4 h-4 rounded border border-gray-400" 
+                style={{ backgroundColor: matchColorHex }}
+              ></div>
+              <span className="font-semibold text-gray-900">Match {matchIndex + 1}</span>
+              <span className="text-sm text-gray-600">({match.format?.name})</span>
+            </div>
+            <div className="text-sm space-y-1">
+              <div className="flex items-center">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: match.team1?.color || '#DC2626' }}></div>
+                  <span className="font-medium text-gray-900">
+                    {team1PlayerNames}
+                  </span>
+                </div>
+                <span className="mx-2 text-gray-500">vs</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: match.team2?.color || '#2563EB' }}></div>
+                  <span className="font-medium text-gray-900">
+                    {team2PlayerNames}
+                  </span>
+                </div>
+              </div>
+              <div className="text-gray-600">{holeRange}</div>
+            </div>
+          </div>
+          <div className="text-right ml-4">
+            {matchStatus.leadingTeam ? (
+              <div>
+                <div className="text-xs text-gray-600 mb-1">{matchStatus.leadingTeam}</div>
+                <div 
+                  className={`text-2xl ${matchStatus.statusColor}`}
+                  style={{ color: matchStatus.teamColor }}
+                >
+                  {matchStatus.statusText}
+                </div>
+              </div>
+            ) : (
+              <div className={`text-xl ${matchStatus.statusColor}`}>
+                {matchStatus.statusText}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ============================================
   // Matches Status Display Component
   // ============================================
-  // Displays current match status with scores below the scorecard
+  // Displays all match statuses
   const MatchesStatusDisplay: React.FC<{ pairing: PairingWithScores }> = ({ pairing }) => {
     if (!pairing.matches || pairing.matches.length === 0) {
       return null;
     }
-
-    // Helper to calculate current match status
-    const getMatchStatus = (match: Match) => {
-      const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
-      if (!matchResult?.hole_results) {
-        return { statusText: 'Not Started', statusColor: 'text-gray-500' };
-      }
-
-      // Calculate total points for this match
-      let team1Points = 0;
-      let team2Points = 0;
-      const startHole = match.start_hole || 1;
-      const endHole = match.end_hole || 18;
-      
-      for (let h = startHole; h <= endHole; h++) {
-        const hr = matchResult.hole_results.find(r => r.hole_number === h);
-        if (hr) {
-          team1Points += hr.team1_points || 0;
-          team2Points += hr.team2_points || 0;
-        }
-      }
-
-      if (team1Points > team2Points) {
-        const diff = team1Points - team2Points;
-        return {
-          statusText: `${diff}UP`,
-          statusColor: 'text-red-700 font-bold',
-          leadingTeam: match.team1?.name || 'Team 1',
-          teamColor: match.team1?.color || '#DC2626'
-        };
-      } else if (team2Points > team1Points) {
-        const diff = team2Points - team1Points;
-        return {
-          statusText: `${diff}UP`,
-          statusColor: 'text-blue-700 font-bold',
-          leadingTeam: match.team2?.name || 'Team 2',
-          teamColor: match.team2?.color || '#2563EB'
-        };
-      } else if (team1Points > 0 || team2Points > 0) {
-        return { statusText: 'TIED', statusColor: 'text-gray-700 font-semibold' };
-      } else {
-        return { statusText: 'Not Started', statusColor: 'text-gray-500' };
-      }
-    };
 
     return (
       <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg mt-6">
@@ -1226,79 +1350,15 @@ const ScoreInterface: React.FC = () => {
           <h3 className="text-lg font-semibold text-gray-900">Matches</h3>
         </div>
         <div className="p-6 space-y-4">
-          {pairing.matches.map((match, idx) => {
-            const matchBgClass = getMatchColorClass(idx);
-            const matchColorHex = getMatchColorHex(idx);
-            const team1Players = (match.players || [])
-              .filter(p => p.team_id === match.team1_id)
-              .map(p => p.user?.name || 'Player')
-              .join(' & ');
-            const team2Players = (match.players || [])
-              .filter(p => p.team_id === match.team2_id)
-              .map(p => p.user?.name || 'Player')
-              .join(' & ');
-            const holeRange = (match.start_hole && match.end_hole)
-              ? `Holes ${match.start_hole}-${match.end_hole}`
-              : `All ${match.holes} Holes`;
-            
-            const matchStatus = getMatchStatus(match);
-            
-            return (
-              <div 
-                key={match.id} 
-                className={`${matchBgClass} border-2 border-gray-300 rounded-lg p-4`}
-                style={{ borderLeftWidth: '6px', borderLeftColor: matchColorHex }}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div 
-                        className="w-4 h-4 rounded border border-gray-400" 
-                        style={{ backgroundColor: matchColorHex }}
-                      ></div>
-                      <span className="font-semibold text-gray-900">Match {idx + 1}</span>
-                      <span className="text-sm text-gray-600">({match.format?.name})</span>
-                    </div>
-                    <div className="text-sm space-y-1">
-                      <div className="flex items-center">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: match.team1?.color || '#DC2626' }}></div>
-                          <span className="font-medium text-gray-900">
-                            {team1Players}
-                          </span>
-                        </div>
-                        <span className="mx-2 text-gray-500">vs</span>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: match.team2?.color || '#2563EB' }}></div>
-                          <span className="font-medium text-gray-900">
-                            {team2Players}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-gray-600">{holeRange}</div>
-                    </div>
-                  </div>
-                  <div className="text-right ml-4">
-                    {matchStatus.leadingTeam ? (
-                      <div>
-                        <div className="text-xs text-gray-600 mb-1">{matchStatus.leadingTeam}</div>
-                        <div 
-                          className={`text-2xl ${matchStatus.statusColor}`}
-                          style={{ color: matchStatus.teamColor }}
-                        >
-                          {matchStatus.statusText}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className={`text-xl ${matchStatus.statusColor}`}>
-                        {matchStatus.statusText}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {pairing.matches.map((match, idx) => (
+            <MatchStatusBox
+              key={match.id}
+              match={match}
+              matchIndex={idx}
+              pairing={pairing}
+              variant="detailed"
+            />
+          ))}
         </div>
       </div>
     );
@@ -2731,6 +2791,9 @@ const ScoreInterface: React.FC = () => {
                   pairing={selectedPairing}
                 />
               </div>
+
+              {/* Match Status Summary */}
+              <MatchesStatusDisplay pairing={selectedPairing} />
 
               {/* Reopen Button */}
               <ReopenPairingSection pairingId={selectedPairing.id} />
