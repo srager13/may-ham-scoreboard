@@ -1117,7 +1117,7 @@ const ScoreInterface: React.FC = () => {
 
                   return (
                     <div key={currentMatch.id} className="bg-white rounded-lg border-2 border-gray-300 p-4">
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="font-semibold text-gray-900">
                           Match {matchIdx + 1} - {currentMatch.format?.name || 'Unknown Format'}
                         </div>
@@ -1126,30 +1126,33 @@ const ScoreInterface: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium" style={{ color: currentMatch.team1?.color }}>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: currentMatch.team1?.color || '#DC2626' }}></div>
+                          <span className="font-medium text-gray-900">
                             {isTeamMatch ? (
                               team1Players.map(p => p.user?.name).join(' & ')
                             ) : (
                               team1Players[0]?.user?.name || currentMatch.team1?.name
                             )}
-                          </div>
+                          </span>
                         </div>
-                        <div className="px-4">
-                          <div className={`text-xl font-bold ${
-                            matchStatus.status === 'AS' ? 'text-gray-600' :
-                            matchStatus.team1Winning ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            {matchStatus.status === 'AS' ? 'AS' : matchStatus.team1Winning ? matchStatus.status : matchStatus.status}
-                          </div>
-                        </div>
-                        <div className="flex-1 text-right">
-                          <div className="font-medium" style={{ color: currentMatch.team2?.color }}>
+                        <span className="mx-2 text-gray-500 text-sm">vs</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-3 h-3 rounded-full border border-gray-400" style={{ backgroundColor: currentMatch.team2?.color || '#2563EB' }}></div>
+                          <span className="font-medium text-gray-900">
                             {isTeamMatch ? (
                               team2Players.map(p => p.user?.name).join(' & ')
                             ) : (
                               team2Players[0]?.user?.name || currentMatch.team2?.name
                             )}
+                          </span>
+                        </div>
+                        <div className="ml-4">
+                          <div className={`text-xl font-bold ${
+                            matchStatus.status === 'AS' ? 'text-gray-600' :
+                            matchStatus.team1Winning ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {matchStatus.status}
                           </div>
                         </div>
                       </div>
