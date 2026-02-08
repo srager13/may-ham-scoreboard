@@ -296,6 +296,21 @@ const ScoreInterface: React.FC = () => {
     });
   };
 
+  // Helper function to find ALL matches that apply to a specific hole
+  const getAllMatchesForHole = (pairing: PairingWithScores | null, holeNumber: number): Match[] => {
+    if (!pairing?.matches) return [];
+    
+    // Find all matches that include this hole
+    return pairing.matches.filter(match => {
+      if (match.start_hole !== undefined && match.end_hole !== undefined) {
+        // Match has specific hole range (e.g., holes 1-6, 7-12, 13-18)
+        return holeNumber >= match.start_hole && holeNumber <= match.end_hole;
+      }
+      // For matches without specific hole ranges, assume they cover all holes
+      return true;
+    });
+  };
+
   // Helper function to find which match a specific player is in for a specific hole
   const getMatchForPlayerAndHole = (pairing: PairingWithScores | null, playerId: string, holeNumber: number): Match | undefined => {
     if (!pairing?.matches) return undefined;
@@ -1040,62 +1055,71 @@ const ScoreInterface: React.FC = () => {
           </div>
         </div>
 
-        {/* Match Status Summary */}
-        {pairing.matches && pairing.matches.length > 0 && (
-          <div className="border-t-2 border-gray-300 bg-gray-50 p-6">
-            <div className="max-w-2xl mx-auto space-y-3">
-              {pairing.matches.map((match, idx) => {
-                const matchStatus = getMatchStatus(match);
-                const isTeamMatch = match.format?.players_per_side === 2;
-                
-                // Get players for this match
-                const team1Players = match.players?.filter(p => p.team_id === match.team1_id).sort((a, b) => a.player_order - b.player_order) || [];
-                const team2Players = match.players?.filter(p => p.team_id === match.team2_id).sort((a, b) => a.player_order - b.player_order) || [];
+        {/* Match Status Summary - All Matches for Current Hole */}
+        {(() => {
+          // Find all matches that apply to the current hole
+          const currentMatches = getAllMatchesForHole(pairing, currentHole);
+          if (currentMatches.length === 0) return null;
 
-                return (
-                  <div key={match.id} className="bg-white rounded-lg border-2 border-gray-300 p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="font-semibold text-gray-900">
-                        Match {idx + 1} - {match.format?.name || 'Unknown Format'}
+          return (
+            <div className="border-t-2 border-gray-300 bg-gray-50 p-6">
+              <div className="max-w-2xl mx-auto space-y-3">
+                {currentMatches.map((currentMatch) => {
+                  const matchStatus = getMatchStatus(currentMatch);
+                  const isTeamMatch = currentMatch.format?.players_per_side === 2;
+                  
+                  // Get players for this match
+                  const team1Players = currentMatch.players?.filter(p => p.team_id === currentMatch.team1_id).sort((a, b) => a.player_order - b.player_order) || [];
+                  const team2Players = currentMatch.players?.filter(p => p.team_id === currentMatch.team2_id).sort((a, b) => a.player_order - b.player_order) || [];
+
+                  // Find the match index for display
+                  const matchIdx = pairing.matches?.findIndex(m => m.id === currentMatch.id) ?? 0;
+
+                  return (
+                    <div key={currentMatch.id} className="bg-white rounded-lg border-2 border-gray-300 p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="font-semibold text-gray-900">
+                          Match {matchIdx + 1} - {currentMatch.format?.name || 'Unknown Format'}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {matchStatus.holesLeft} hole{matchStatus.holesLeft !== 1 ? 's' : ''} to play
+                        </div>
                       </div>
-                      <div className="text-sm text-gray-600">
-                        {matchStatus.holesLeft} hole{matchStatus.holesLeft !== 1 ? 's' : ''} to play
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="font-medium" style={{ color: currentMatch.team1?.color }}>
+                            {isTeamMatch ? (
+                              team1Players.map(p => p.user?.name).join(' & ')
+                            ) : (
+                              team1Players[0]?.user?.name || currentMatch.team1?.name
+                            )}
+                          </div>
+                        </div>
+                        <div className="px-4">
+                          <div className={`text-xl font-bold ${
+                            matchStatus.status === 'AS' ? 'text-gray-600' :
+                            matchStatus.team1Winning ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {matchStatus.status === 'AS' ? 'AS' : matchStatus.team1Winning ? matchStatus.status : matchStatus.status}
+                          </div>
+                        </div>
+                        <div className="flex-1 text-right">
+                          <div className="font-medium" style={{ color: currentMatch.team2?.color }}>
+                            {isTeamMatch ? (
+                              team2Players.map(p => p.user?.name).join(' & ')
+                            ) : (
+                              team2Players[0]?.user?.name || currentMatch.team2?.name
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="font-medium" style={{ color: match.team1?.color }}>
-                          {isTeamMatch ? (
-                            team1Players.map(p => p.user?.name).join(' & ')
-                          ) : (
-                            team1Players[0]?.user?.name || match.team1?.name
-                          )}
-                        </div>
-                      </div>
-                      <div className="px-4">
-                        <div className={`text-xl font-bold ${
-                          matchStatus.status === 'AS' ? 'text-gray-600' :
-                          matchStatus.team1Winning ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {matchStatus.status === 'AS' ? 'AS' : matchStatus.team1Winning ? matchStatus.status : matchStatus.status}
-                        </div>
-                      </div>
-                      <div className="flex-1 text-right">
-                        <div className="font-medium" style={{ color: match.team2?.color }}>
-                          {isTeamMatch ? (
-                            team2Players.map(p => p.user?.name).join(' & ')
-                          ) : (
-                            team2Players[0]?.user?.name || match.team2?.name
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     );
   };
