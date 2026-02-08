@@ -1226,11 +1226,21 @@ const ScoreInterface: React.FC = () => {
 
     if (variant === 'compact') {
       // Compact variant for hole-by-hole view
+      const matchColorHex = getMatchColorHex(matchIndex);
+      
       return (
-        <div className="bg-white rounded-lg border-2 border-gray-300 p-4">
+        <div 
+          className="bg-white border-2 border-gray-300 rounded-lg p-4"
+          style={{ borderLeftWidth: '6px', borderLeftColor: matchColorHex }}
+        >
           <div className="flex items-center justify-between mb-3">
-            <div className="font-semibold text-gray-900">
-              Match {matchIndex + 1} - {match.format?.name || 'Unknown Format'}
+            <div className="flex items-center gap-2">
+              <div 
+                className="w-4 h-4 rounded border border-gray-400" 
+                style={{ backgroundColor: matchColorHex }}
+              ></div>
+              <span className="font-semibold text-gray-900">Match {matchIndex + 1}</span>
+              <span className="text-sm text-gray-600">({match.format?.name || 'Unknown Format'})</span>
             </div>
             <div className="text-sm text-gray-600">
               {matchStatus.holesLeft} hole{matchStatus.holesLeft !== 1 ? 's' : ''} to play
@@ -1244,7 +1254,7 @@ const ScoreInterface: React.FC = () => {
               </span>
               {/* Show status next to team1 if they're winning */}
               {matchStatus.status !== 'AS' && matchStatus.team1Winning && (
-                <span className="ml-2 text-xl font-bold text-green-600">
+                <span className="ml-2 text-xl font-bold" style={{ color: match.team1?.color || '#DC2626' }}>
                   {matchStatus.status}
                 </span>
               )}
@@ -1257,7 +1267,7 @@ const ScoreInterface: React.FC = () => {
               </span>
               {/* Show status next to team2 if they're winning */}
               {matchStatus.status !== 'AS' && !matchStatus.team1Winning && (
-                <span className="ml-2 text-xl font-bold text-red-600">
+                <span className="ml-2 text-xl font-bold" style={{ color: match.team2?.color || '#2563EB' }}>
                   {matchStatus.status}
                 </span>
               )}
