@@ -2399,29 +2399,23 @@ const ScoreInterface: React.FC = () => {
         </div>
       )}
 
-      {/* Header */}
-      <div className="bg-white shadow-sm rounded-lg p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Scorecard Entry</h1>
-            {selectedPairing ? (
-              <p className="text-gray-500">
-                Pairing {selectedPairing.pairing_number} - {getSortedPlayers(selectedPairing.players).map(p => p.user?.name).join(', ')}
-              </p>
-            ) : (
-              <p className="text-gray-500">Select a pairing to enter scores</p>
-            )}
-          </div>
-          {pairings.length > 0 && (
+      {/* Header - Only show if no pairing selected */}
+      {!selectedPairing && pairings.length > 0 && (
+        <div className="bg-white shadow-sm rounded-lg p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Select a Pairing</h1>
+              <p className="text-gray-500">Choose a pairing to enter scores</p>
+            </div>
             <button
               onClick={() => setShowPairingDrawer(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
             >
-              {selectedPairing ? 'Change Pairing' : 'Choose Pairing'}
+              Choose Pairing
             </button>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* No Pairing Selected Placeholder */}
       {!selectedPairing && pairings.length > 0 && (
@@ -2465,10 +2459,18 @@ const ScoreInterface: React.FC = () => {
           {/* Tournament Header */}
           <div className="bg-gradient-to-r from-green-700 to-green-600 text-white rounded-lg shadow-lg p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold mb-1">
-                  {selectedTournament?.name || 'Tournament'}
-                </h2>
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-2xl font-bold">
+                    {selectedTournament?.name || 'Tournament'}
+                  </h2>
+                  <button
+                    onClick={() => setShowPairingDrawer(true)}
+                    className="px-3 py-1.5 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg transition-colors text-sm font-medium"
+                  >
+                    Change Pairing
+                  </button>
+                </div>
                 {selectedPairing.round && (
                   <p className="text-green-100 text-sm">
                     {selectedPairing.round.name} - Pairing {selectedPairing.pairing_number}
@@ -2482,25 +2484,28 @@ const ScoreInterface: React.FC = () => {
                     )}
                   </p>
                 )}
+                <p className="text-green-100 text-sm mt-1">
+                  Players: {getSortedPlayers(selectedPairing.players).map(p => p.user?.name).join(', ')}
+                </p>
               </div>
-              <div className="flex items-center space-x-2">
-                {getTeamsFromPairing(selectedPairing).map((team, idx) => {
-                  const teamPoints = overallTeamPoints[team.id] || 0;
-                  return (
+            </div>
+            <div className="flex items-center justify-end space-x-2 mt-3">
+              {getTeamsFromPairing(selectedPairing).map((team, idx) => {
+                const teamPoints = overallTeamPoints[team.id] || 0;
+                return (
+                  <div
+                    key={team.id}
+                    className="flex items-center space-x-2 bg-white bg-opacity-20 px-3 py-2 rounded"
+                  >
                     <div
-                      key={team.id}
-                      className="flex items-center space-x-2 bg-white bg-opacity-20 px-3 py-2 rounded"
-                    >
-                      <div
-                        className="w-4 h-4 rounded-full"
-                        style={{ backgroundColor: team.color || (idx === 0 ? '#DC2626' : '#2563EB') }}
-                      />
-                      <span className="font-semibold">{team.name}</span>
-                      <span className="ml-2 font-bold">{teamPoints.toFixed(1)}</span>
-                    </div>
-                  );
-                })}
-              </div>
+                      className="w-4 h-4 rounded-full"
+                      style={{ backgroundColor: team.color || (idx === 0 ? '#DC2626' : '#2563EB') }}
+                    />
+                    <span className="font-semibold">{team.name}</span>
+                    <span className="ml-2 font-bold">{teamPoints.toFixed(1)}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
