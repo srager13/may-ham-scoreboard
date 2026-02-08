@@ -1983,40 +1983,6 @@ const ScoreInterface: React.FC = () => {
           <h2 className="text-2xl font-bold text-gray-900">Match Results</h2>
         </div>
 
-        {/* Scorecard Display */}
-        <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">
-          <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b-2 border-gray-300">
-            <h3 className="text-lg font-semibold text-gray-900">Final Scorecard</h3>
-          </div>
-          
-          <ScorecardTable 
-            mode="display"
-            pairing={pairing}
-          />
-          
-          {/* Score Legend */}
-          <div className="bg-gray-50 px-6 py-3 border-t-2 border-gray-300">
-            <div className="flex items-center justify-center gap-6 text-xs">
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded-full border-2 border-gray-900 flex items-center justify-center">
-                  <span className="text-[8px] font-semibold">-</span>
-                </div>
-                <span>Under par (Eagle/Birdie)</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 border-2 border-gray-900"></div>
-                <span>Bogey</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 border-2 border-gray-900 relative">
-                  <div className="absolute inset-0 border border-gray-900 m-0.5"></div>
-                </div>
-                <span>Double bogey+</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Matches Status Display */}
         <MatchesStatusDisplay pairing={pairing} />
 
@@ -2731,15 +2697,16 @@ const ScoreInterface: React.FC = () => {
           {/* Show info for completed pairings */}
           {selectedPairing.status === 'completed' && (
             <div>
-              {/* Match Results Display */}
-              {loadingResults ? (
-                <div className="text-center py-8">
-                  <RefreshCw className="h-8 w-8 animate-spin text-gray-500 mx-auto mb-4" />
-                  <p className="text-gray-500">Loading match results...</p>
+              {/* Scorecard Display */}
+              <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg mb-6">
+                <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b-2 border-gray-300">
+                  <h3 className="text-lg font-semibold text-gray-900">Final Scorecard</h3>
                 </div>
-              ) : (
-                <MatchResultsDisplay pairing={selectedPairing} />
-              )}
+                <ScorecardTable 
+                  mode="display"
+                  pairing={selectedPairing}
+                />
+              </div>
 
               {/* Reopen Button */}
               <ReopenPairingSection pairingId={selectedPairing.id} />
