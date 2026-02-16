@@ -870,10 +870,10 @@ const ScoreInterface: React.FC = () => {
     const holePar = holeInfo?.par || 4;
     const holeYards = holeInfo?.yards || 0;
 
-    // Get current hole scores or initialize with par
+    // Get current hole scores or initialize with empty
     const currentHoleScores = holeScores[currentHole] || {};
     const getPlayerScore = (playerId: string) => {
-      return currentHoleScores[playerId] || holePar;
+      return currentHoleScores[playerId] ?? 0;
     };
 
     // Calculate match status for display
@@ -922,10 +922,18 @@ const ScoreInterface: React.FC = () => {
       const hasScores = Object.keys(currentHoleScores).length > 0;
       if (hasScores) {
         try {
-          const scores = pairing.players!.map(player => ({
-            user_id: player.user_id,
-            strokes: getPlayerScore(player.user_id)
-          }));
+          const validPlayerIds = new Set(pairing.players?.map(p => p.user_id) || []);
+          const scores = Object.entries(currentHoleScores)
+            .filter(([userId, strokes]) => validPlayerIds.has(userId) && strokes > 0)
+            .map(([userId, strokes]) => ({
+              user_id: userId,
+              strokes: strokes
+            }));
+
+          if (scores.length === 0) {
+            setError('Please enter at least one score before leaving this hole.');
+            return;
+          }
 
           await apiClient.submitPairingScores(pairing.id, {
             hole_number: currentHole,
@@ -963,10 +971,18 @@ const ScoreInterface: React.FC = () => {
     const handleSubmitCurrentHole = async () => {
       try {
         setIsSubmitting(true);
-        const scores = pairing.players!.map(player => ({
-          user_id: player.user_id,
-          strokes: getPlayerScore(player.user_id)
-        }));
+        const validPlayerIds = new Set(pairing.players?.map(p => p.user_id) || []);
+        const scores = Object.entries(currentHoleScores)
+          .filter(([userId, strokes]) => validPlayerIds.has(userId) && strokes > 0)
+          .map(([userId, strokes]) => ({
+            user_id: userId,
+            strokes: strokes
+          }));
+
+        if (scores.length === 0) {
+          setError('Please enter at least one score before submitting.');
+          return;
+        }
 
         await apiClient.submitPairingScores(pairing.id, {
           hole_number: currentHole,
@@ -1043,7 +1059,7 @@ const ScoreInterface: React.FC = () => {
                     type="number"
                     min="1"
                     max="15"
-                    value={getPlayerScore(player.user_id)}
+                    value={currentHoleScores[player.user_id] ?? ''}
                     onChange={(e) => {
                       const val = parseInt(e.target.value);
                       if (!isNaN(val) && val >= 1) {
