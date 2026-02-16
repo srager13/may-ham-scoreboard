@@ -1007,6 +1007,13 @@ const ScoreInterface: React.FC = () => {
         }
 
         setError(null);
+
+        if (currentHole === 18) {
+          const shouldComplete = window.confirm('Complete the round now?');
+          if (shouldComplete) {
+            await completePairing(pairing.id);
+          }
+        }
       } catch (err) {
         console.error('Error submitting scores:', err);
         setError(err instanceof ApiError ? err.message : 'Failed to submit scores');
