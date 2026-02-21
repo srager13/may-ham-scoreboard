@@ -272,6 +272,18 @@ func (r *Repository) GetRoundsByTournament(tournamentID string) ([]models.Round,
 // ============================================
 
 func (r *Repository) CreatePairing(roundID string, req *models.CreatePairingRequest) (*models.Pairing, error) {
+	teeID := req.GolfCourseTeeID
+	if teeID == nil {
+		defaultTeeID, err := r.getDefaultTeeIDForRound(roundID)
+		if err != nil {
+			return nil, err
+		}
+		if defaultTeeID == nil {
+			return nil, fmt.Errorf("golf_course_tee_id is required for pairings without a default tee")
+		}
+		teeID = defaultTeeID
+	}
+
 	query := `
 		INSERT INTO pairings (round_id, pairing_number, tee_time, golf_course_tee_id, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, 'not_started', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -279,7 +291,7 @@ func (r *Repository) CreatePairing(roundID string, req *models.CreatePairingRequ
 	`
 
 	var pairing models.Pairing
-	err := r.db.QueryRow(query, roundID, req.PairingNumber, req.TeeTime, req.GolfCourseTeeID).Scan(
+	err := r.db.QueryRow(query, roundID, req.PairingNumber, req.TeeTime, teeID).Scan(
 		&pairing.ID, &pairing.RoundID, &pairing.PairingNumber, &pairing.TeeTime,
 		&pairing.GolfCourseTeeID, &pairing.Status, &pairing.CreatedAt, &pairing.UpdatedAt,
 	)
@@ -323,6 +335,32 @@ func (r *Repository) CreatePairing(roundID string, req *models.CreatePairingRequ
 	}
 
 	return &pairing, nil
+}
+
+func (r *Repository) getDefaultTeeIDForRound(roundID string) (*string, error) {
+	query := `SELECT golf_course_id FROM rounds WHERE id = $1`
+
+	var courseID *string
+	if err := r.db.QueryRow(query, roundID).Scan(&courseID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("round not found")
+		}
+		return nil, fmt.Errorf("failed to get round golf course: %w", err)
+	}
+
+	if courseID == nil {
+		return nil, nil
+	}
+
+	tees, err := r.GetGolfCourseTees(*courseID)
+	if err != nil {
+		return nil, err
+	}
+	if len(tees) == 0 {
+		return nil, nil
+	}
+
+	return &tees[0].ID, nil
 }
 
 func (r *Repository) CreatePairingPlayer(player *models.PairingPlayer) error {
@@ -689,30 +727,36 @@ func (r *Repository) SubmitScore(pairingID, userID string, holeNumber, strokes i
 		return nil, fmt.Errorf("failed to get tournament scoring method: %w", err)
 	}
 
+	var holePar *int
+	parValue, parErr := r.getHoleParFromPairing(pairingID, holeNumber)
+	if parErr != nil {
+		fmt.Printf("Warning: failed to get hole par: %v\n", parErr)
+	} else {
+		holePar = &parValue
+	}
+
 	var stablefordPoints *int
 	if scoringMethod == "stableford" {
-		// Calculate Stableford points
-		points, err := r.calculateStablefordPointsForScore(pairingID, userID, holeNumber, strokes)
-		if err != nil {
-			// Log error but don't fail - just don't set Stableford points
-			fmt.Printf("Warning: failed to calculate Stableford points: %v\n", err)
+		if holePar == nil {
+			fmt.Printf("Warning: missing hole par for stableford calculation\n")
 		} else {
+			points := calculateStablefordPointsFromPar(strokes, *holePar)
 			stablefordPoints = &points
 		}
 	}
 
 	query := `
-		INSERT INTO hole_scores (pairing_id, user_id, hole_number, strokes, stableford_points, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		INSERT INTO hole_scores (pairing_id, user_id, hole_number, strokes, par, stableford_points, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		ON CONFLICT (pairing_id, user_id, hole_number) 
-		DO UPDATE SET strokes = EXCLUDED.strokes, stableford_points = EXCLUDED.stableford_points, updated_at = CURRENT_TIMESTAMP
-		RETURNING id, pairing_id, user_id, hole_number, strokes, stableford_points, created_at, updated_at
+		DO UPDATE SET strokes = EXCLUDED.strokes, par = EXCLUDED.par, stableford_points = EXCLUDED.stableford_points, updated_at = CURRENT_TIMESTAMP
+		RETURNING id, pairing_id, user_id, hole_number, strokes, par, stableford_points, created_at, updated_at
 	`
 
 	var score models.Score
-	err = r.db.QueryRow(query, pairingID, userID, holeNumber, strokes, stablefordPoints).Scan(
+	err = r.db.QueryRow(query, pairingID, userID, holeNumber, strokes, holePar, stablefordPoints).Scan(
 		&score.ID, &score.PairingID, &score.UserID, &score.HoleNumber,
-		&score.Strokes, &score.StablefordPoints, &score.CreatedAt, &score.UpdatedAt,
+		&score.Strokes, &score.Par, &score.StablefordPoints, &score.CreatedAt, &score.UpdatedAt,
 	)
 
 	if err != nil {
@@ -739,10 +783,7 @@ func (r *Repository) getTournamentScoringMethodFromPairing(pairingID string) (st
 	return scoringMethod, nil
 }
 
-// Helper method to calculate Stableford points for a score
-func (r *Repository) calculateStablefordPointsForScore(pairingID, userID string, holeNumber, strokes int) (int, error) {
-	// Get hole par from golf course tee
-	var holePar int
+func (r *Repository) getHoleParFromPairing(pairingID string, holeNumber int) (int, error) {
 	parQuery := `
 		SELECT gch.par
 		FROM pairings p
@@ -750,32 +791,33 @@ func (r *Repository) calculateStablefordPointsForScore(pairingID, userID string,
 		JOIN golf_course_holes gch ON gch.tee_id = gct.id
 		WHERE p.id = $1 AND gch.hole_number = $2
 	`
-	err := r.db.QueryRow(parQuery, pairingID, holeNumber).Scan(&holePar)
-	if err != nil {
+
+	var holePar int
+	if err := r.db.QueryRow(parQuery, pairingID, holeNumber).Scan(&holePar); err != nil {
 		return 0, fmt.Errorf("failed to get hole par: %w", err)
 	}
 
-	// Calculate Stableford points based on gross score vs par
+	return holePar, nil
+}
+
+func calculateStablefordPointsFromPar(strokes, holePar int) int {
 	// Points: albatross(5), eagle(4), birdie(3), par(2), bogey(1), double bogey or worse(0)
 	scoreToPar := strokes - holePar
 
-	var points int
 	switch {
 	case scoreToPar <= -3:
-		points = 5 // Albatross or better
+		return 5 // Albatross or better
 	case scoreToPar == -2:
-		points = 4 // Eagle
+		return 4 // Eagle
 	case scoreToPar == -1:
-		points = 3 // Birdie
+		return 3 // Birdie
 	case scoreToPar == 0:
-		points = 2 // Par
+		return 2 // Par
 	case scoreToPar == 1:
-		points = 1 // Bogey
+		return 1 // Bogey
 	default:
-		points = 0 // Double bogey or worse
+		return 0 // Double bogey or worse
 	}
-
-	return points, nil
 }
 
 // Legacy method - submit score by matchID (will find pairing from match)
@@ -794,7 +836,7 @@ func (r *Repository) SubmitScoreByMatch(matchID, userID string, holeNumber, stro
 }
 
 func (r *Repository) GetPairingScores(pairingID string) ([]models.Score, error) {
-	query := `SELECT id, pairing_id, user_id, hole_number, strokes, stableford_points, created_at, updated_at FROM hole_scores WHERE pairing_id = $1 ORDER BY hole_number, user_id`
+	query := `SELECT id, pairing_id, user_id, hole_number, strokes, par, stableford_points, created_at, updated_at FROM hole_scores WHERE pairing_id = $1 ORDER BY hole_number, user_id`
 
 	rows, err := r.db.Query(query, pairingID)
 	if err != nil {
@@ -807,7 +849,7 @@ func (r *Repository) GetPairingScores(pairingID string) ([]models.Score, error) 
 		var score models.Score
 		err := rows.Scan(
 			&score.ID, &score.PairingID, &score.UserID, &score.HoleNumber,
-			&score.Strokes, &score.StablefordPoints, &score.CreatedAt, &score.UpdatedAt,
+			&score.Strokes, &score.Par, &score.StablefordPoints, &score.CreatedAt, &score.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan score: %w", err)

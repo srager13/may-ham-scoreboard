@@ -128,6 +128,7 @@ export interface Score {
   user_id: string;
   hole_number: number;
   strokes: number;
+  par?: number;
   stableford_points?: number; // Points for Stableford scoring (0-5)
   created_at: string;
   updated_at: string;

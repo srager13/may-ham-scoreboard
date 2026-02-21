@@ -39,6 +39,11 @@ interface IndividualStanding {
   holes_won: number;
   holes_lost: number;
   holes_tied: number;
+  eagles: number;
+  birdies: number;
+  pars: number;
+  bogeys: number;
+  double_bogey_or_worse: number;
 }
 
 const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
@@ -200,7 +205,7 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
             return;
           }
 
-          let scores: Array<{ user_id: string; strokes: number; stableford_points?: number }> = [];
+          let scores: Array<{ user_id: string; strokes: number; par?: number }> = [];
           let holeResults: HoleResult[] = [];
           try {
             const scoreResponse = await apiClient.getMatchScores(match.id);
@@ -215,12 +220,37 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
             hole_results: holeResults
           };
 
-          const scoresByUser = new Map<string, Array<{ strokes: number; stableford_points?: number }>>();
+          const scoresByUser = new Map<string, Array<{ strokes: number; par?: number }>>();
           scores.forEach((score) => {
             const existing = scoresByUser.get(score.user_id) || [];
-            existing.push({ strokes: score.strokes, stableford_points: score.stableford_points });
+            existing.push({ strokes: score.strokes, par: score.par });
             scoresByUser.set(score.user_id, existing);
           });
+
+          console.log('Match scores loaded:', { matchId: match.id, scoresCount: scores.length, scoresByUserSize: scoresByUser.size });
+
+          if (scores.length > 0) {
+            const firstEntry = scoresByUser.entries().next().value;
+            console.log('First map entry:', { firstEntry, isUndefined: firstEntry === undefined });
+            const [sampleUserId, sampleScores] = firstEntry || [];
+            console.log('After destructure:', { sampleUserId, sampleScores, sampleScoresIsArray: Array.isArray(sampleScores) });
+            if (sampleUserId && sampleScores) {
+              const sample = sampleScores.slice(0, 3).map((score) => ({
+                strokes: score.strokes,
+                par: score.par
+              }));
+              const parCount = sampleScores.filter((score) => typeof score.par === 'number').length;
+              console.debug('Individual stats sample:', {
+                matchId: match.id,
+                sampleUserId,
+                sampleScores: sample,
+                sampleParCount: parCount,
+                sampleScoreCount: sampleScores.length
+              });
+            } else {
+              console.log('Nested condition failed:', { sampleUserIdTruthy: !!sampleUserId, sampleScoresTruthy: !!sampleScores });
+            }
+          }
 
           const team1Players = matchWithResults.players.filter((player) => player.team_id === matchWithResults.team1_id);
           const team2Players = matchWithResults.players.filter((player) => player.team_id === matchWithResults.team2_id);
@@ -249,6 +279,35 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
           matchWithResults.players.forEach((player) => {
             const userId = player.user_id;
             const playerScores = scoresByUser.get(userId) || [];
+            const scoreBreakdown = playerScores.reduce(
+              (totals, score) => {
+                if (typeof score.par !== 'number') {
+                  return totals;
+                }
+
+                const scoreToPar = score.strokes - score.par;
+                if (scoreToPar <= -2) {
+                  totals.eagles += 1;
+                } else if (scoreToPar === -1) {
+                  totals.birdies += 1;
+                } else if (scoreToPar === 0) {
+                  totals.pars += 1;
+                } else if (scoreToPar === 1) {
+                  totals.bogeys += 1;
+                } else {
+                  totals.double_bogey_or_worse += 1;
+                }
+
+                return totals;
+              },
+              {
+                eagles: 0,
+                birdies: 0,
+                pars: 0,
+                bogeys: 0,
+                double_bogey_or_worse: 0
+              }
+            );
             const existing = standingsMap.get(userId) || {
               user_id: userId,
               name: player.user?.name || 'Player',
@@ -264,7 +323,12 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
               matches_tied: 0,
               holes_won: 0,
               holes_lost: 0,
-              holes_tied: 0
+              holes_tied: 0,
+              eagles: 0,
+              birdies: 0,
+              pars: 0,
+              bogeys: 0,
+              double_bogey_or_worse: 0
             };
 
             if (countMatch) {
@@ -292,6 +356,12 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
               existing.holes_lost += team1HolesWon;
               existing.holes_tied += holesTied;
             }
+
+            existing.eagles += scoreBreakdown.eagles;
+            existing.birdies += scoreBreakdown.birdies;
+            existing.pars += scoreBreakdown.pars;
+            existing.bogeys += scoreBreakdown.bogeys;
+            existing.double_bogey_or_worse += scoreBreakdown.double_bogey_or_worse;
 
             standingsMap.set(userId, existing);
           });
@@ -1026,6 +1096,21 @@ const IndividualStandings = ({
                 <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Holes Record (W-L-T)
                 </th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Eagles
+                </th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Birdies
+                </th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Pars
+                </th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Bogeys
+                </th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Double+
+                </th>
                 
               </tr>
             </thead>
@@ -1064,6 +1149,21 @@ const IndividualStandings = ({
                     <div className="text-sm font-semibold text-gray-700">
                       {player.holes_won}-{player.holes_lost}-{player.holes_tied}
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-sm font-semibold text-gray-700">{player.eagles}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-sm font-semibold text-gray-700">{player.birdies}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-sm font-semibold text-gray-700">{player.pars}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-sm font-semibold text-gray-700">{player.bogeys}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-sm font-semibold text-gray-700">{player.double_bogey_or_worse}</div>
                   </td>
                   
                 </tr>

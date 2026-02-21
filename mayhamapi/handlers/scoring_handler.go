@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -78,6 +79,12 @@ func (h *ScoringHandler) GetMatchScores(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Debug: log first few scores to check par values
+	if len(scores) > 0 {
+		log.Printf("GetMatchScores DEBUG: First score - UserID: %s, Hole: %d, Strokes: %d, Par: %v\n",
+			scores[0].UserID, scores[0].HoleNumber, scores[0].Strokes, scores[0].Par)
 	}
 
 	// Get match details for context

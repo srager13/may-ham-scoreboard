@@ -207,6 +207,7 @@ CREATE TABLE IF NOT EXISTS hole_scores (
     hole_number INT NOT NULL,
     user_id UUID REFERENCES users(id),
     strokes INT NOT NULL,
+    par INT, -- cached par for easier scoring stats
     stableford_points INT, -- Stableford points (calculated from strokes vs par/handicap), NULL if using gross scoring
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
