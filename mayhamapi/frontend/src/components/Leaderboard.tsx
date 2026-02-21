@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Users, User, Award, Clock, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
-import { apiClient, ApiError, Team, Match, TeamStanding, LeaderboardData, Round, Pairing, HoleResult } from '../services/api';
+import { Trophy, Users, User, Clock, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
+import { apiClient, Match, TeamStanding, LeaderboardData, Round, Pairing, HoleResult } from '../services/api';
 import { useTournament } from './TournamentContext';
 
 // Helper function to format date as MM-DD-YYYY
@@ -25,6 +25,26 @@ interface RoundWithPairings extends Round {
   pairings?: PairingWithResults[];
 }
 
+interface IndividualStanding {
+  user_id: string;
+  name: string;
+  team_id?: string;
+  team_name?: string;
+  team_color?: string;
+  points_won: number;
+  matches_played: number;
+  matches_won: number;
+  matches_lost: number;
+  matches_tied: number;
+  holes_won: number;
+  holes_lost: number;
+  holes_tied: number;
+  holes_played: number;
+  total_strokes: number;
+  stableford_points: number;
+  avg_strokes: number | null;
+}
+
 const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [view, setView] = useState<'team' | 'individual'>('team');
@@ -34,6 +54,9 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
   const [loadingRounds, setLoadingRounds] = useState(false);
   const [expandedRounds, setExpandedRounds] = useState<Set<string>>(new Set());
   const [showRoundHistory, setShowRoundHistory] = useState(false);
+  const [individualStandings, setIndividualStandings] = useState<IndividualStanding[]>([]);
+  const [loadingIndividuals, setLoadingIndividuals] = useState(false);
+  const [individualError, setIndividualError] = useState<string | null>(null);
 
   useEffect(() => {
     loadLeaderboardData();
@@ -47,6 +70,12 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
       loadRoundsData();
     }
   }, [showRoundHistory]);
+
+  useEffect(() => {
+    if (view === 'individual' && individualStandings.length === 0 && !loadingIndividuals) {
+      loadIndividualStandings();
+    }
+  }, [view]);
 
   const toggleRound = (roundId: string) => {
     setExpandedRounds(prev => {
@@ -149,6 +178,161 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
     }
   };
 
+  const loadIndividualStandings = async () => {
+    try {
+      setLoadingIndividuals(true);
+      setIndividualError(null);
+
+      const roundsData = await apiClient.getTournamentRounds(tournamentId);
+      const matchesByRound = await Promise.all(
+        roundsData.map(async (round) => {
+          try {
+            return await apiClient.getRoundMatches(round.id);
+          } catch (err) {
+            console.warn('Error loading round matches:', round.id, err);
+            return [] as Match[];
+          }
+        })
+      );
+
+      const matches = matchesByRound.flat();
+      const standingsMap = new Map<string, IndividualStanding>();
+
+      await Promise.all(
+        matches.map(async (match) => {
+          if (!match.players || match.players.length === 0) {
+            return;
+          }
+
+          let scores: Array<{ user_id: string; strokes: number; stableford_points?: number }> = [];
+          let holeResults: HoleResult[] = [];
+          try {
+            const scoreResponse = await apiClient.getMatchScores(match.id);
+            scores = scoreResponse.scores || [];
+            holeResults = scoreResponse.hole_results || [];
+          } catch (err) {
+            console.warn('Error loading match scores:', match.id, err);
+          }
+
+          const matchWithResults: MatchWithResults = {
+            ...match,
+            hole_results: holeResults
+          };
+
+          const scoresByUser = new Map<string, Array<{ strokes: number; stableford_points?: number }>>();
+          scores.forEach((score) => {
+            const existing = scoresByUser.get(score.user_id) || [];
+            existing.push({ strokes: score.strokes, stableford_points: score.stableford_points });
+            scoresByUser.set(score.user_id, existing);
+          });
+
+          const team1Players = matchWithResults.players.filter((player) => player.team_id === matchWithResults.team1_id);
+          const team2Players = matchWithResults.players.filter((player) => player.team_id === matchWithResults.team2_id);
+          const team1Share = team1Players.length > 0 ? matchWithResults.team1_points / team1Players.length : 0;
+          const team2Share = team2Players.length > 0 ? matchWithResults.team2_points / team2Players.length : 0;
+
+          const holeResultsForMatch = matchWithResults.hole_results || [];
+          let team1HolesWon = 0;
+          let team2HolesWon = 0;
+          let holesTied = 0;
+          holeResultsForMatch.forEach((result) => {
+            if (result.winner_team_id === match.team1_id) {
+              team1HolesWon += 1;
+            } else if (result.winner_team_id === match.team2_id) {
+              team2HolesWon += 1;
+            } else {
+              holesTied += 1;
+            }
+          });
+
+          const team1Won = matchWithResults.team1_points > matchWithResults.team2_points;
+          const team2Won = matchWithResults.team2_points > matchWithResults.team1_points;
+          const tied = matchWithResults.team1_points === matchWithResults.team2_points;
+          const countMatch = match.status !== 'scheduled' || scores.length > 0;
+
+          matchWithResults.players.forEach((player) => {
+            const userId = player.user_id;
+            const playerScores = scoresByUser.get(userId) || [];
+            const totalStrokes = playerScores.reduce((sum, s) => sum + s.strokes, 0);
+            const stablefordPoints = playerScores.reduce(
+              (sum, s) => sum + (s.stableford_points ?? 0),
+              0
+            );
+            const holesPlayed = playerScores.length;
+
+            const existing = standingsMap.get(userId) || {
+              user_id: userId,
+              name: player.user?.name || 'Player',
+              team_id: player.team_id,
+              team_name:
+                player.team_id === matchWithResults.team1_id ? matchWithResults.team1?.name : matchWithResults.team2?.name,
+              team_color:
+                player.team_id === matchWithResults.team1_id ? matchWithResults.team1?.color : matchWithResults.team2?.color,
+              points_won: 0,
+              matches_played: 0,
+              matches_won: 0,
+              matches_lost: 0,
+              matches_tied: 0,
+              holes_won: 0,
+              holes_lost: 0,
+              holes_tied: 0,
+              holes_played: 0,
+              total_strokes: 0,
+              stableford_points: 0,
+              avg_strokes: null
+            };
+
+            if (countMatch) {
+              existing.matches_played += 1;
+              if (tied) {
+                existing.matches_tied += 1;
+              } else if (
+                (team1Won && player.team_id === matchWithResults.team1_id) ||
+                (team2Won && player.team_id === matchWithResults.team2_id)
+              ) {
+                existing.matches_won += 1;
+              } else {
+                existing.matches_lost += 1;
+              }
+            }
+
+            if (player.team_id === matchWithResults.team1_id) {
+              existing.points_won += team1Share;
+              existing.holes_won += team1HolesWon;
+              existing.holes_lost += team2HolesWon;
+              existing.holes_tied += holesTied;
+            } else if (player.team_id === matchWithResults.team2_id) {
+              existing.points_won += team2Share;
+              existing.holes_won += team2HolesWon;
+              existing.holes_lost += team1HolesWon;
+              existing.holes_tied += holesTied;
+            }
+
+            existing.holes_played += holesPlayed;
+            existing.total_strokes += totalStrokes;
+            existing.stableford_points += stablefordPoints;
+            existing.avg_strokes =
+              existing.holes_played > 0
+                ? existing.total_strokes / existing.holes_played
+                : null;
+
+            standingsMap.set(userId, existing);
+          });
+        })
+      );
+
+      const standings = Array.from(standingsMap.values());
+      setIndividualStandings(standings);
+    } catch (err) {
+      console.error('Error loading individual standings:', err);
+      setIndividualError(
+        `Failed to load individual standings: ${err instanceof Error ? err.message : 'Unknown error'}`
+      );
+    } finally {
+      setLoadingIndividuals(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -240,11 +424,13 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
         {view === 'team' ? (
           <TeamStandings teams={data.team_standings} totalAvailablePoints={data.total_available_points} />
         ) : (
-          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-            <h3 className="text-xl font-semibold text-gray-600 mb-4">Individual Standings</h3>
-            <p className="text-gray-500">Individual player statistics are not yet implemented.</p>
-            <p className="text-sm text-gray-400 mt-2">Coming soon: detailed player performance metrics and rankings.</p>
-          </div>
+          <IndividualStandings
+            standings={individualStandings}
+            scoringMethod={data.tournament.scoring_method}
+            loading={loadingIndividuals}
+            error={individualError}
+            onRefresh={loadIndividualStandings}
+          />
         )}
 
         {/* Round History Section */}
@@ -778,6 +964,164 @@ const TeamStandings = ({ teams, totalAvailablePoints }: { teams: TeamStanding[],
           </tbody>
         </table>
       </div>
+    </div>
+  );
+};
+
+const IndividualStandings = ({
+  standings,
+  scoringMethod,
+  loading,
+  error,
+  onRefresh
+}: {
+  standings: IndividualStanding[];
+  scoringMethod: string;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) => {
+  const useStableford = scoringMethod === 'stableford';
+
+  const sortedStandings = [...standings].sort((a, b) => {
+    const pointDiff = b.points_won - a.points_won;
+    if (pointDiff !== 0) {
+      return pointDiff;
+    }
+    const avgA = a.avg_strokes ?? Number.POSITIVE_INFINITY;
+    const avgB = b.avg_strokes ?? Number.POSITIVE_INFINITY;
+    return avgA - avgB;
+  });
+
+  return (
+    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div>
+          <h3 className="text-xl font-semibold text-gray-900">Individual Standings</h3>
+          <p className="text-sm text-gray-500">
+            Ranked by points won across matches
+          </p>
+        </div>
+        <button
+          onClick={onRefresh}
+          className="px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 rounded hover:bg-green-100"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="p-8 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-3"></div>
+          <p className="text-gray-600">Loading individual standings...</p>
+        </div>
+      ) : error ? (
+        <div className="p-8 text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={onRefresh}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            Retry
+          </button>
+        </div>
+      ) : sortedStandings.length === 0 ? (
+        <div className="p-8 text-center">
+          <p className="text-gray-600">No individual scores available yet.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Rank
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Player
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Team
+                </th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Matches
+                </th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Points Won
+                </th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Holes Record (W-L-T)
+                </th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Avg Strokes
+                </th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Total Strokes
+                </th>
+                {useStableford && (
+                  <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Stableford
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {sortedStandings.map((player, index) => (
+                <tr key={player.user_id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      {index === 0 && <Trophy size={18} className="text-yellow-500 mr-2" />}
+                      <span className="text-lg font-semibold text-gray-500">{index + 1}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-semibold text-gray-900">{player.name}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div
+                        className="w-3 h-3 rounded-full mr-2"
+                        style={{ backgroundColor: player.team_color || '#9CA3AF' }}
+                      ></div>
+                      <div className="text-sm text-gray-700">{player.team_name || 'TBD'}</div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-sm font-semibold">
+                      {player.matches_won}-{player.matches_lost}-{player.matches_tied}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-sm font-semibold text-gray-900">
+                      {player.points_won.toFixed(1)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-sm font-semibold text-gray-700">
+                      {player.holes_won}-{player.holes_lost}-{player.holes_tied}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-sm font-semibold text-gray-700">
+                      {player.avg_strokes !== null ? player.avg_strokes.toFixed(2) : '—'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <div className="text-sm font-semibold text-gray-700">{player.total_strokes}</div>
+                  </td>
+                  {useStableford && (
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <div className="text-sm font-semibold text-green-700">
+                        {player.stableford_points}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };
