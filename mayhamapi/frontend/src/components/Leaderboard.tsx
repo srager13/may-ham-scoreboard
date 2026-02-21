@@ -39,10 +39,6 @@ interface IndividualStanding {
   holes_won: number;
   holes_lost: number;
   holes_tied: number;
-  holes_played: number;
-  total_strokes: number;
-  stableford_points: number;
-  avg_strokes: number | null;
 }
 
 const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
@@ -253,13 +249,6 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
           matchWithResults.players.forEach((player) => {
             const userId = player.user_id;
             const playerScores = scoresByUser.get(userId) || [];
-            const totalStrokes = playerScores.reduce((sum, s) => sum + s.strokes, 0);
-            const stablefordPoints = playerScores.reduce(
-              (sum, s) => sum + (s.stableford_points ?? 0),
-              0
-            );
-            const holesPlayed = playerScores.length;
-
             const existing = standingsMap.get(userId) || {
               user_id: userId,
               name: player.user?.name || 'Player',
@@ -275,11 +264,7 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
               matches_tied: 0,
               holes_won: 0,
               holes_lost: 0,
-              holes_tied: 0,
-              holes_played: 0,
-              total_strokes: 0,
-              stableford_points: 0,
-              avg_strokes: null
+              holes_tied: 0
             };
 
             if (countMatch) {
@@ -307,14 +292,6 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
               existing.holes_lost += team1HolesWon;
               existing.holes_tied += holesTied;
             }
-
-            existing.holes_played += holesPlayed;
-            existing.total_strokes += totalStrokes;
-            existing.stableford_points += stablefordPoints;
-            existing.avg_strokes =
-              existing.holes_played > 0
-                ? existing.total_strokes / existing.holes_played
-                : null;
 
             standingsMap.set(userId, existing);
           });
@@ -426,7 +403,6 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
         ) : (
           <IndividualStandings
             standings={individualStandings}
-            scoringMethod={data.tournament.scoring_method}
             loading={loadingIndividuals}
             error={individualError}
             onRefresh={loadIndividualStandings}
@@ -970,27 +946,25 @@ const TeamStandings = ({ teams, totalAvailablePoints }: { teams: TeamStanding[],
 
 const IndividualStandings = ({
   standings,
-  scoringMethod,
   loading,
   error,
   onRefresh
 }: {
   standings: IndividualStanding[];
-  scoringMethod: string;
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
 }) => {
-  const useStableford = scoringMethod === 'stableford';
-
   const sortedStandings = [...standings].sort((a, b) => {
     const pointDiff = b.points_won - a.points_won;
     if (pointDiff !== 0) {
       return pointDiff;
     }
-    const avgA = a.avg_strokes ?? Number.POSITIVE_INFINITY;
-    const avgB = b.avg_strokes ?? Number.POSITIVE_INFINITY;
-    return avgA - avgB;
+    const holeDiff = b.holes_won - a.holes_won;
+    if (holeDiff !== 0) {
+      return holeDiff;
+    }
+    return a.name.localeCompare(b.name);
   });
 
   return (
@@ -1052,17 +1026,7 @@ const IndividualStandings = ({
                 <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Holes Record (W-L-T)
                 </th>
-                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Avg Strokes
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Total Strokes
-                </th>
-                {useStableford && (
-                  <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Stableford
-                  </th>
-                )}
+                
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -1101,21 +1065,7 @@ const IndividualStandings = ({
                       {player.holes_won}-{player.holes_lost}-{player.holes_tied}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <div className="text-sm font-semibold text-gray-700">
-                      {player.avg_strokes !== null ? player.avg_strokes.toFixed(2) : '—'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <div className="text-sm font-semibold text-gray-700">{player.total_strokes}</div>
-                  </td>
-                  {useStableford && (
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <div className="text-sm font-semibold text-green-700">
-                        {player.stableford_points}
-                      </div>
-                    </td>
-                  )}
+                  
                 </tr>
               ))}
             </tbody>
