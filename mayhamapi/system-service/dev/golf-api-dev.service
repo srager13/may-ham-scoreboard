@@ -21,6 +21,7 @@ User=golftournament-dev
 Group=golftournament-dev
 WorkingDirectory=/root/may-ham-scoreboard/mayhamapi
 EnvironmentFile=/root/may-ham-scoreboard/mayhamapi/.env.development
+ExecStartPre=/bin/mkdir -p /tmp/golftournament-dev
 ExecStart=/root/go/bin/air
 
 # Security hardening

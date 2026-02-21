@@ -2,10 +2,15 @@ root = "."
 testdata_dir = "testdata"
 tmp_dir = "tmp"
 
+# Loads .env.development and then .env files.
+# Values in the lattermost file overwrite any preceding ones.
+# Does not overwrite variables that were present before running air.
+env_files = [".env.development"]
+
 [build]
   args_bin = []
   entrypoint = "./tmp/main"
-  cmd = "go build -o ./tmp/main ."
+  cmd = "go build -buildvcs=false -o ./tmp/main ."
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "frontend", "static", "system-service", "nginx-proxy-config"]
   exclude_file = []
