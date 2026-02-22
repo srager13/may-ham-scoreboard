@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Users, User, Clock, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
+import { Trophy, Users, User, CheckCircle } from 'lucide-react';
 import { apiClient, Match, TeamStanding, LeaderboardData, Round, Pairing, HoleResult } from '../services/api';
 import { useTournament } from './TournamentContext';
+import { MatchResultsDisplay } from './MatchResultsDisplay';
+import { PairingHeaderDetails } from './PairingHeaderDetails';
 
 // Helper function to format date as MM-DD-YYYY
 const formatDate = (dateString: string): string => {
@@ -19,10 +21,8 @@ interface MatchWithResults extends Match {
 
 interface PairingWithResults extends Pairing {
   matchResults?: MatchWithResults[];
-}
-
-interface RoundWithPairings extends Round {
-  pairings?: PairingWithResults[];
+  matches?: Match[];
+  round?: Round;
 }
 
 interface IndividualStanding {
@@ -48,18 +48,26 @@ interface IndividualStanding {
 
 const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
   const [data, setData] = useState<LeaderboardData | null>(null);
-  const [view, setView] = useState<'team' | 'individual'>('team');
+  const [view, setView] = useState<'team' | 'individual' | 'completed' | 'live'>('team');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [rounds, setRounds] = useState<RoundWithPairings[]>([]);
-  const [loadingRounds, setLoadingRounds] = useState(false);
-  const [expandedRounds, setExpandedRounds] = useState<Set<string>>(new Set());
-  const [showRoundHistory, setShowRoundHistory] = useState(false);
+  const [completedPairings, setCompletedPairings] = useState<PairingWithResults[]>([]);
+  const [loadingCompletedPairings, setLoadingCompletedPairings] = useState(false);
+  const [completedPairingsError, setCompletedPairingsError] = useState<string | null>(null);
+  const [livePairings, setLivePairings] = useState<PairingWithResults[]>([]);
+  const [loadingLivePairings, setLoadingLivePairings] = useState(false);
+  const [livePairingsError, setLivePairingsError] = useState<string | null>(null);
   const [individualStandings, setIndividualStandings] = useState<IndividualStanding[]>([]);
   const [loadingIndividuals, setLoadingIndividuals] = useState(false);
   const [individualError, setIndividualError] = useState<string | null>(null);
 
   useEffect(() => {
+    setCompletedPairings([]);
+    setCompletedPairingsError(null);
+    setLivePairings([]);
+    setLivePairingsError(null);
+    setIndividualStandings([]);
+    setIndividualError(null);
     loadLeaderboardData();
     // Refresh leaderboard every 30 seconds for live updates
     const interval = setInterval(loadLeaderboardData, 30000);
@@ -67,28 +75,22 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
   }, [tournamentId]);
 
   useEffect(() => {
-    if (showRoundHistory && rounds.length === 0) {
-      loadRoundsData();
-    }
-  }, [showRoundHistory]);
-
-  useEffect(() => {
     if (view === 'individual' && individualStandings.length === 0 && !loadingIndividuals) {
       loadIndividualStandings();
     }
   }, [view]);
 
-  const toggleRound = (roundId: string) => {
-    setExpandedRounds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(roundId)) {
-        newSet.delete(roundId);
-      } else {
-        newSet.add(roundId);
-      }
-      return newSet;
-    });
-  };
+  useEffect(() => {
+    if (view === 'completed' && completedPairings.length === 0 && !loadingCompletedPairings) {
+      loadCompletedPairings();
+    }
+  }, [view]);
+
+  useEffect(() => {
+    if (view === 'live' && livePairings.length === 0 && !loadingLivePairings) {
+      loadLivePairings();
+    }
+  }, [view]);
 
   const loadLeaderboardData = async () => {
     try {
@@ -110,72 +112,141 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
     }
   };
 
-  const loadRoundsData = async () => {
+  const loadCompletedPairings = async () => {
     try {
-      setLoadingRounds(true);
-      
-      // Get all rounds for this tournament
+      setLoadingCompletedPairings(true);
+      setCompletedPairingsError(null);
+
       const roundsData = await apiClient.getTournamentRounds(tournamentId);
-      
-      // Load pairings and match results for each round
-      const roundsWithData: RoundWithPairings[] = await Promise.all(
+      const pairingsByRound = await Promise.all(
         roundsData.map(async (round) => {
           try {
             const pairings = await apiClient.getRoundPairings(round.id);
-            
-            // Only include completed pairings with their match results
-            const completedPairings = await Promise.all(
-              pairings
-                .filter(p => p.status === 'completed')
-                .map(async (pairing) => {
-                  try {
-                    const matches = await apiClient.getPairingMatches(pairing.id);
-                    const matchResults = await Promise.all(
-                      matches.map(async (match) => {
-                        try {
-                          const matchScores = await apiClient.getMatchScores(match.id);
-                          return {
-                            ...match,
-                            hole_results: matchScores.hole_results || []
-                          };
-                        } catch (err) {
-                          console.warn('Error loading match results:', match.id, err);
-                          return match;
-                        }
-                      })
-                    );
-                    return {
-                      ...pairing,
-                      matchResults
-                    };
-                  } catch (err) {
-                    console.warn('Error loading pairing matches:', pairing.id, err);
-                    return pairing;
-                  }
-                })
+            const completed = pairings.filter((pairing) => pairing.status === 'completed');
+
+            return Promise.all(
+              completed.map(async (pairing) => {
+                try {
+                  const matches = await apiClient.getPairingMatches(pairing.id);
+                  const matchResults = await Promise.all(
+                    matches.map(async (match) => {
+                      try {
+                        const matchScores = await apiClient.getMatchScores(match.id);
+                        return {
+                          ...match,
+                          hole_results: matchScores.hole_results || []
+                        };
+                      } catch (err) {
+                        console.warn('Error loading match results:', match.id, err);
+                        return match;
+                      }
+                    })
+                  );
+
+                  return {
+                    ...pairing,
+                    round,
+                    matches,
+                    matchResults
+                  };
+                } catch (err) {
+                  console.warn('Error loading pairing matches:', pairing.id, err);
+                  return { ...pairing, round };
+                }
+              })
             );
-            
-            return {
-              ...round,
-              pairings: completedPairings
-            };
           } catch (err) {
             console.warn('Error loading round pairings:', round.id, err);
-            return { ...round, pairings: [] };
+            return [] as PairingWithResults[];
           }
         })
       );
-      
-      // Filter to only rounds with completed pairings and sort by round number (descending)
-      const completedRounds = roundsWithData
-        .filter(r => r.pairings && r.pairings.length > 0)
-        .sort((a, b) => b.round_number - a.round_number);
-      
-      setRounds(completedRounds);
+
+      const completed = pairingsByRound.flat().sort((a, b) => {
+        const roundDiff = (b.round?.round_number || 0) - (a.round?.round_number || 0);
+        if (roundDiff !== 0) {
+          return roundDiff;
+        }
+        return (b.pairing_number || 0) - (a.pairing_number || 0);
+      });
+
+      setCompletedPairings(completed);
     } catch (err) {
-      console.error('Error loading rounds data:', err);
+      console.error('Error loading completed pairings:', err);
+      setCompletedPairingsError(
+        `Failed to load completed matches: ${err instanceof Error ? err.message : 'Unknown error'}`
+      );
     } finally {
-      setLoadingRounds(false);
+      setLoadingCompletedPairings(false);
+    }
+  };
+
+  const loadLivePairings = async () => {
+    try {
+      setLoadingLivePairings(true);
+      setLivePairingsError(null);
+
+      const roundsData = await apiClient.getTournamentRounds(tournamentId);
+      const pairingsByRound = await Promise.all(
+        roundsData.map(async (round) => {
+          try {
+            const pairings = await apiClient.getRoundPairings(round.id);
+            const live = pairings.filter((pairing) => pairing.status === 'in_progress');
+
+            return Promise.all(
+              live.map(async (pairing) => {
+                try {
+                  const matches = await apiClient.getPairingMatches(pairing.id);
+                  const matchResults = await Promise.all(
+                    matches.map(async (match) => {
+                      try {
+                        const matchScores = await apiClient.getMatchScores(match.id);
+                        return {
+                          ...match,
+                          hole_results: matchScores.hole_results || []
+                        };
+                      } catch (err) {
+                        console.warn('Error loading match results:', match.id, err);
+                        return match;
+                      }
+                    })
+                  );
+
+                  return {
+                    ...pairing,
+                    round,
+                    matches,
+                    matchResults
+                  };
+                } catch (err) {
+                  console.warn('Error loading pairing matches:', pairing.id, err);
+                  return { ...pairing, round };
+                }
+              })
+            );
+          } catch (err) {
+            console.warn('Error loading round pairings:', round.id, err);
+            return [] as PairingWithResults[];
+          }
+        })
+      );
+
+      const live = pairingsByRound.flat().sort((a, b) => {
+        const roundDiff = (b.round?.round_number || 0) - (a.round?.round_number || 0);
+        if (roundDiff !== 0) {
+          return roundDiff;
+        }
+        return (b.pairing_number || 0) - (a.pairing_number || 0);
+      });
+
+      setLivePairings(live);
+    } catch (err) {
+      console.error('Error loading live pairings:', err);
+      setLivePairingsError(
+        `Failed to load live matches: ${err instanceof Error ? err.message : 'Unknown error'}`
+      );
+    } finally {
+      setLoadingLivePairings(false);
     }
   };
 
@@ -434,11 +505,6 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
         {/* Team Score Banner */}
         <TeamScoreBanner teams={data.team_standings} totalAvailablePoints={data.total_available_points} />
 
-        {/* Live Matches */}
-        {data.live_matches && data.live_matches.length > 0 && (
-          <LiveMatchesSection matches={data.live_matches} />
-        )}
-
         {/* View Toggle */}
         <div className="flex items-center justify-center mb-6">
           <div className="inline-flex rounded-lg border border-gray-300 bg-white p-1">
@@ -464,30 +530,56 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
               <User size={18} className="mr-2" />
               Individual Standings
             </button>
+            <button
+              onClick={() => setView('completed')}
+              className={`flex items-center px-6 py-2 rounded-md font-medium transition-colors ${
+                view === 'completed'
+                  ? 'bg-green-600 text-white'
+                  : 'text-gray-700 hover:text-gray-900'
+              }`}
+            >
+              <Trophy size={18} className="mr-2" />
+              Completed Matches
+            </button>
+            <button
+              onClick={() => setView('live')}
+              className={`flex items-center px-6 py-2 rounded-md font-medium transition-colors ${
+                view === 'live'
+                  ? 'bg-green-600 text-white'
+                  : 'text-gray-700 hover:text-gray-900'
+              }`}
+            >
+              <Users size={18} className="mr-2" />
+              Live Matches
+            </button>
           </div>
         </div>
 
         {/* Leaderboard Content */}
         {view === 'team' ? (
           <TeamStandings teams={data.team_standings} totalAvailablePoints={data.total_available_points} />
-        ) : (
+        ) : view === 'individual' ? (
           <IndividualStandings
             standings={individualStandings}
             loading={loadingIndividuals}
             error={individualError}
             onRefresh={loadIndividualStandings}
           />
+        ) : view === 'completed' ? (
+          <CompletedMatchesView
+            pairings={completedPairings}
+            loading={loadingCompletedPairings}
+            error={completedPairingsError}
+            onRefresh={loadCompletedPairings}
+          />
+        ) : (
+          <LiveMatchesView
+            pairings={livePairings}
+            loading={loadingLivePairings}
+            error={livePairingsError}
+            onRefresh={loadLivePairings}
+          />
         )}
-
-        {/* Round History Section */}
-        <RoundHistorySection 
-          showHistory={showRoundHistory}
-          onToggle={() => setShowRoundHistory(!showRoundHistory)}
-          rounds={rounds}
-          loadingRounds={loadingRounds}
-          expandedRounds={expandedRounds}
-          onToggleRound={toggleRound}
-        />
       </div>
     </div>
   );
@@ -580,316 +672,6 @@ const TeamScoreBanner = ({ teams, totalAvailablePoints }: { teams: TeamStanding[
           <div className="text-xl font-semibold mb-1">{trailer.team.name}</div>
           <div className="text-sm text-gray-600">
             {trailer.matches_won}W - {trailer.matches_lost}L - {trailer.matches_tied}T
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Live Matches Section
-const LiveMatchesSection = ({ matches }: { matches: Match[] }) => {
-  return (
-    <div className="mb-8">
-      <h2 className="text-2xl font-bold mb-4 flex items-center">
-        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse mr-3"></div>
-        Live Matches
-      </h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {matches.map((match) => (
-          <LiveMatchCard key={match.id} match={match} />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const LiveMatchCard = ({ match }: { match: Match }) => {
-  return (
-    <div className="bg-white rounded-lg shadow p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-sm font-medium text-gray-600">
-          Match {match.match_number} - {match.format?.name}
-        </div>
-        <div className="text-xs text-gray-500">Live</div>
-      </div>
-
-      <div className="space-y-2 mb-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium">{match.team1?.name}</div>
-            {match.players && match.players.length > 0 && (
-              <div className="text-xs text-gray-500">
-                {match.players
-                  .filter(p => p.team_id === match.team1_id)
-                  .sort((a, b) => a.player_order - b.player_order)
-                  .map(p => p.user?.name)
-                  .join(' & ')}
-              </div>
-            )}
-          </div>
-          <div className="font-bold">{match.team1_points}</div>
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium">{match.team2?.name}</div>
-            {match.players && match.players.length > 0 && (
-              <div className="text-xs text-gray-500">
-                {match.players
-                  .filter(p => p.team_id === match.team2_id)
-                  .sort((a, b) => a.player_order - b.player_order)
-                  .map(p => p.user?.name)
-                  .join(' & ')}
-              </div>
-            )}
-          </div>
-          <div className="font-bold">{match.team2_points}</div>
-        </div>
-      </div>
-
-      <div className="pt-3 border-t text-center">
-        <div className="text-sm text-gray-600">
-          Status: {match.status}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Round History Section Component
-const RoundHistorySection = ({
-  showHistory,
-  onToggle,
-  rounds,
-  loadingRounds,
-  expandedRounds,
-  onToggleRound
-}: {
-  showHistory: boolean;
-  onToggle: () => void;
-  rounds: RoundWithPairings[];
-  loadingRounds: boolean;
-  expandedRounds: Set<string>;
-  onToggleRound: (roundId: string) => void;
-}) => {
-  return (
-    <div className="mb-8">
-      <button
-        onClick={onToggle}
-        className="w-full bg-white rounded-lg shadow-sm p-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
-      >
-        <h2 className="text-2xl font-bold flex items-center">
-          <Clock className="mr-3 text-blue-600" size={24} />
-          Round History
-        </h2>
-        {showHistory ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
-      </button>
-
-      {showHistory && (
-        <div className="mt-4">
-          {loadingRounds ? (
-            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading round history...</p>
-            </div>
-          ) : rounds.length === 0 ? (
-            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-              <p className="text-gray-600">No completed rounds yet</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {rounds.map((round) => (
-                <RoundCard
-                  key={round.id}
-                  round={round}
-                  isExpanded={expandedRounds.has(round.id)}
-                  onToggle={() => onToggleRound(round.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Round Card Component
-const RoundCard = ({
-  round,
-  isExpanded,
-  onToggle
-}: {
-  round: RoundWithPairings;
-  isExpanded: boolean;
-  onToggle: () => void;
-}) => {
-  const completedPairingsCount = round.pairings?.length || 0;
-  const totalMatches = round.pairings?.reduce((sum, p) => sum + (p.matchResults?.length || 0), 0) || 0;
-
-  return (
-    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-      <button
-        onClick={onToggle}
-        className="w-full p-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
-      >
-        <div className="flex items-center">
-          <div className="bg-blue-100 rounded-full p-2 mr-4">
-            <Trophy className="text-blue-600" size={20} />
-          </div>
-          <div className="text-left">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Round {round.round_number}: {round.name}
-            </h3>
-            <p className="text-sm text-gray-600">
-              {formatDate(round.round_date)} • {completedPairingsCount} completed pairing{completedPairingsCount !== 1 ? 's' : ''} • {totalMatches} match{totalMatches !== 1 ? 'es' : ''}
-            </p>
-          </div>
-        </div>
-        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-      </button>
-
-      {isExpanded && round.pairings && (
-        <div className="border-t border-gray-200 p-4 bg-gray-50">
-          <div className="space-y-6">
-            {round.pairings.map((pairing) => (
-              <PairingResultCard key={pairing.id} pairing={pairing} />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Pairing Result Card Component
-const PairingResultCard = ({ pairing }: { pairing: PairingWithResults }) => {
-  if (!pairing.matchResults || pairing.matchResults.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="bg-white rounded-lg shadow p-4">
-      <h4 className="text-md font-semibold text-gray-900 mb-4">
-        Pairing {pairing.pairing_number}
-        {pairing.tee_time && (
-          <span className="text-sm font-normal text-gray-600 ml-2">
-            • {new Date(pairing.tee_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
-        )}
-      </h4>
-
-      <div className="space-y-4">
-        {pairing.matchResults.map((match) => (
-          <CompactMatchResult key={match.id} match={match} />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// Compact Match Result Component
-const CompactMatchResult = ({ match }: { match: MatchWithResults }) => {
-  const team1Won = match.team1_points > match.team2_points;
-  const team2Won = match.team2_points > match.team1_points;
-  const tied = match.team1_points === match.team2_points;
-
-  let team1HolesWon = 0;
-  let team2HolesWon = 0;
-  let holesHalved = 0;
-
-  if (match.hole_results) {
-    match.hole_results.forEach(hr => {
-      if (hr.winner_team_id === match.team1_id) {
-        team1HolesWon++;
-      } else if (hr.winner_team_id === match.team2_id) {
-        team2HolesWon++;
-      } else {
-        holesHalved++;
-      }
-    });
-  }
-
-  return (
-    <div className="border border-gray-200 rounded-lg p-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-sm font-medium text-gray-600">
-          {match.format?.name || 'Match'}
-          {match.start_hole && match.end_hole && (
-            <span className="ml-2 text-xs text-gray-500">
-              (Holes {match.start_hole}-{match.end_hole})
-            </span>
-          )}
-        </div>
-        <div className="text-xs text-gray-500">
-          {match.points_available.toFixed(1)} pts available
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        {/* Team 1 */}
-        <div className={`text-center p-2 rounded ${team1Won ? 'bg-green-50 border border-green-300' : 'bg-gray-50'}`}>
-          <div className="flex items-center justify-center mb-1">
-            {team1Won && <Trophy className="h-3 w-3 text-green-600 mr-1" />}
-            <div
-              className="w-2 h-2 rounded-full mr-1"
-              style={{ backgroundColor: match.team1?.color }}
-            ></div>
-            <div className="text-xs font-semibold text-gray-900">{match.team1?.name}</div>
-          </div>
-          {/* Team 1 Players */}
-          {match.players && match.players.length > 0 && (
-            <div className="text-xs text-gray-500 mb-1">
-              {match.players
-                .filter(p => p.team_id === match.team1_id)
-                .sort((a, b) => a.player_order - b.player_order)
-                .map(p => p.user?.name)
-                .join(' & ')}
-            </div>
-          )}
-          <div className="text-xl font-bold" style={{ color: match.team1?.color }}>
-            {match.team1_points.toFixed(1)}
-          </div>
-          <div className="text-xs text-gray-600">
-            {team1HolesWon} hole{team1HolesWon !== 1 ? 's' : ''}
-          </div>
-        </div>
-
-        {/* VS */}
-        <div className="flex flex-col items-center justify-center">
-          <div className="text-sm font-bold text-gray-400">VS</div>
-          {tied && (
-            <div className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full text-xs font-medium mt-1">
-              Tied
-            </div>
-          )}
-        </div>
-
-        {/* Team 2 */}
-        <div className={`text-center p-2 rounded ${team2Won ? 'bg-green-50 border border-green-300' : 'bg-gray-50'}`}>
-          <div className="flex items-center justify-center mb-1">
-            {team2Won && <Trophy className="h-3 w-3 text-green-600 mr-1" />}
-            <div
-              className="w-2 h-2 rounded-full mr-1"
-              style={{ backgroundColor: match.team2?.color }}
-            ></div>
-            <div className="text-xs font-semibold text-gray-900">{match.team2?.name}</div>
-          </div>
-          {/* Team 2 Players */}
-          {match.players && match.players.length > 0 && (
-            <div className="text-xs text-gray-500 mb-1">
-              {match.players
-                .filter(p => p.team_id === match.team2_id)
-                .sort((a, b) => a.player_order - b.player_order)
-                .map(p => p.user?.name)
-                .join(' & ')}
-            </div>
-          )}
-          <div className="text-xl font-bold" style={{ color: match.team2?.color }}>
-            {match.team2_points.toFixed(1)}
-          </div>
-          <div className="text-xs text-gray-600">
-            {team2HolesWon} hole{team2HolesWon !== 1 ? 's' : ''}
           </div>
         </div>
       </div>
@@ -1170,6 +952,132 @@ const IndividualStandings = ({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const CompletedMatchesView = ({
+  pairings,
+  loading,
+  error,
+  onRefresh
+}: {
+  pairings: PairingWithResults[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) => {
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-xl font-semibold text-gray-900">Completed Matches</h3>
+          <p className="text-sm text-gray-500">Pairings with finalized match results</p>
+        </div>
+        <button
+          onClick={onRefresh}
+          className="px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 rounded hover:bg-green-100"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="p-8 text-center bg-white rounded-lg shadow">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-3"></div>
+          <p className="text-gray-600">Loading completed matches...</p>
+        </div>
+      ) : error ? (
+        <div className="p-8 text-center bg-white rounded-lg shadow">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={onRefresh}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            Retry
+          </button>
+        </div>
+      ) : pairings.length === 0 ? (
+        <div className="p-8 text-center bg-white rounded-lg shadow">
+          <p className="text-gray-600">No completed pairings yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-10">
+          {pairings.map((pairing) => (
+            <div key={pairing.id} className="space-y-4">
+              <div className="bg-gradient-to-r from-green-700 to-green-600 text-white rounded-lg shadow-lg p-6">
+                <PairingHeaderDetails pairing={pairing} />
+              </div>
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <MatchResultsDisplay pairing={pairing} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const LiveMatchesView = ({
+  pairings,
+  loading,
+  error,
+  onRefresh
+}: {
+  pairings: PairingWithResults[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) => {
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-xl font-semibold text-gray-900">Live Matches</h3>
+          <p className="text-sm text-gray-500">Pairings currently in progress</p>
+        </div>
+        <button
+          onClick={onRefresh}
+          className="px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 rounded hover:bg-green-100"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="p-8 text-center bg-white rounded-lg shadow">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-3"></div>
+          <p className="text-gray-600">Loading live matches...</p>
+        </div>
+      ) : error ? (
+        <div className="p-8 text-center bg-white rounded-lg shadow">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={onRefresh}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            Retry
+          </button>
+        </div>
+      ) : pairings.length === 0 ? (
+        <div className="p-8 text-center bg-white rounded-lg shadow">
+          <p className="text-gray-600">No live pairings yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-10">
+          {pairings.map((pairing) => (
+            <div key={pairing.id} className="space-y-4">
+              <div className="bg-gradient-to-r from-green-700 to-green-600 text-white rounded-lg shadow-lg p-6">
+                <PairingHeaderDetails pairing={pairing} />
+              </div>
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <MatchResultsDisplay pairing={pairing} />
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
