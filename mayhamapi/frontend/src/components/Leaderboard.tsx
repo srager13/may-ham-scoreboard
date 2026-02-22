@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Trophy, Users, User, CheckCircle } from 'lucide-react';
 import { apiClient, Match, TeamStanding, LeaderboardData, Round, Pairing, HoleResult } from '../services/api';
 import { useTournament } from './TournamentContext';
-import { MatchResultsDisplay } from './MatchResultsDisplay';
+import { MatchesStatusDisplay } from './MatchResultsDisplay';
 import { PairingHeaderDetails } from './PairingHeaderDetails';
 
 // Helper function to format date as MM-DD-YYYY
@@ -1010,9 +1010,7 @@ const CompletedMatchesView = ({
               <div className="bg-gradient-to-r from-green-700 to-green-600 text-white rounded-lg shadow-lg p-6">
                 <PairingHeaderDetails pairing={pairing} />
               </div>
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <MatchResultsDisplay pairing={pairing} />
-              </div>
+              <MatchesStatusDisplay pairing={pairing} />
             </div>
           ))}
         </div>
@@ -1073,9 +1071,7 @@ const LiveMatchesView = ({
               <div className="bg-gradient-to-r from-green-700 to-green-600 text-white rounded-lg shadow-lg p-6">
                 <PairingHeaderDetails pairing={pairing} />
               </div>
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <MatchResultsDisplay pairing={pairing} />
-              </div>
+              <MatchesStatusDisplay pairing={pairing} />
             </div>
           ))}
         </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock, CheckCircle, Trophy, ChevronLeft, ChevronRight, PlayCircle } from 'lucide-react';
 import { apiClient, ApiError, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat, HoleResult, MatchPlayer } from '../services/api';
 import { useTournament } from './TournamentContext';
-import { MatchResultsDisplay, MatchesStatusDisplay, MatchStatusBox } from './MatchResultsDisplay';
+import { MatchesStatusDisplay, MatchStatusBox } from './MatchResultsDisplay';
 import { PairingHeaderDetails } from './PairingHeaderDetails';
 
 interface MatchWithResults extends Match {
@@ -2134,9 +2134,7 @@ const ScoreInterface: React.FC = () => {
           {/* Matches View */}
           {viewMode === 'matches' && (
             <div className="space-y-6">
-              {selectedPairing.status === 'completed' ? (
-                <MatchResultsDisplay pairing={selectedPairing} />
-              ) : selectedPairing.status === 'in_progress' ? (
+              {selectedPairing.status === 'completed' || selectedPairing.status === 'in_progress' ? (
                 <MatchesStatusDisplay pairing={selectedPairing} />
               ) : (
                 <div className="bg-white rounded-lg shadow p-8 text-center">
