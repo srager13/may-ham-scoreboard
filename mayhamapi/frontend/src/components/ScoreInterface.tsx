@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Target, Award, RefreshCw, Save, AlertCircle, Clock, CheckCircle, Trophy, ChevronLeft, ChevronRight, PlayCircle } from 'lucide-react';
+import { Target, RefreshCw, Save, AlertCircle, Trophy, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiClient, ApiError, Round, Pairing, PairingPlayer, GolfCourseTee, GolfCourseHole, Match, MatchFormat, HoleResult, MatchPlayer } from '../services/api';
 import { useTournament } from './TournamentContext';
 import { MatchesStatusDisplay, MatchStatusBox } from './MatchResultsDisplay';
@@ -266,23 +266,6 @@ const ScoreInterface: React.FC = () => {
     }));
   };
 
-  // Helper function to get the list of holes to display based on match configuration
-  const getHolesForMatch = (match?: Match): number[] => {
-    if (!match) return Array.from({ length: 18 }, (_, i) => i + 1);
-    
-    if (match.start_hole !== undefined && match.end_hole !== undefined) {
-      // Match has specific hole range (e.g., holes 1-6, 7-12, 13-18)
-      const holes: number[] = [];
-      for (let i = match.start_hole; i <= match.end_hole; i++) {
-        holes.push(i);
-      }
-      return holes;
-    }
-    
-    // Default to number of holes specified in match
-    return Array.from({ length: match.holes }, (_, i) => i + 1);
-  };
-
   // Helper function to find which match applies to a specific hole
   const getMatchForHole = (pairing: PairingWithScores | null, holeNumber: number): Match | undefined => {
     if (!pairing?.matches) return undefined;
@@ -342,13 +325,6 @@ const ScoreInterface: React.FC = () => {
   const getMatchColorHex = (matchIndex: number): string => {
     const matchColorHexes = ['#f1f5f9', '#dbeafe', '#f1f5f9', '#dbeafe', '#f3f4f6'];
     return matchColorHexes[matchIndex % matchColorHexes.length];
-  };
-
-  // Helper function to determine if we need team or individual score inputs
-  const needsTeamScores = (match?: Match): boolean => {
-    if (!match?.format) return false;
-    // Team score formats: scramble, alternate_shot
-    return match.format.score_input_type === 'team';
   };
 
   // Sort players by team_id, then by player_order for consistent display
@@ -866,42 +842,6 @@ const ScoreInterface: React.FC = () => {
       return currentHoleScores[playerId] ?? 0;
     };
 
-    // Calculate match status for display
-    const getMatchStatus = (match: Match) => {
-      const matchResult = pairing.matchResults?.find(mr => mr.id === match.id);
-      if (!matchResult?.hole_results) {
-        return { status: 'AS', team1Points: 0, team2Points: 0, holesLeft: match.holes };
-      }
-
-      const startHole = match.start_hole || 1;
-      const endHole = match.end_hole || 18;
-      let team1Points = 0;
-      let team2Points = 0;
-      let holesPlayed = 0;
-
-      for (let h = startHole; h <= endHole; h++) {
-        const holeResult = matchResult.hole_results.find(hr => hr.hole_number === h);
-        if (holeResult) {
-          team1Points += holeResult.team1_points;
-          team2Points += holeResult.team2_points;
-          holesPlayed++;
-        }
-      }
-
-      const totalHoles = endHole - startHole + 1;
-      const holesLeft = totalHoles - holesPlayed;
-      const difference = Math.abs(team1Points - team2Points);
-      
-      let status = 'AS';
-      if (team1Points > team2Points) {
-        status = difference === 1 ? '1UP' : `${difference}UP`;
-      } else if (team2Points > team1Points) {
-        status = difference === 1 ? '1DN' : `${difference}DN`;
-      }
-
-      return { status, team1Points, team2Points, holesLeft, team1Winning: team1Points > team2Points };
-    };
-
     const handleScoreUpdate = (playerId: string, newScore: number) => {
       if (newScore < 1) return; // Minimum score is 1
       handleScoreChange(currentHole, playerId, newScore);
@@ -1135,67 +1075,6 @@ const ScoreInterface: React.FC = () => {
             </div>
           );
         })()}
-      </div>
-    );
-  };
-
-  // ============================================
-  // Pairing Matches Summary Component (Reusable)
-  // ============================================
-  // Displays match information for a pairing in a compact format
-  const PairingMatchesSummary: React.FC<{ pairing: PairingWithScores }> = ({ pairing }) => {
-    if (!pairing.matches || pairing.matches.length === 0) {
-      return (
-        <div className="text-xs text-gray-500 italic">
-          No matches configured
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-1 mt-2 pt-2 border-t border-gray-200">
-        {pairing.matches.map((match, idx) => {
-          const holeRange = (match.start_hole && match.end_hole) 
-            ? `Holes ${match.start_hole}-${match.end_hole}`
-            : `${match.holes} holes`;
-          const formatName = match.format?.name || 'Unknown Format';
-          
-          // Get players for each team
-          const team1Players = (match.players || [])
-            .filter(p => p.team_id === match.team1_id)
-            .sort((a, b) => (a.player_order || 0) - (b.player_order || 0))
-            .map(p => p.user?.name || 'Unknown')
-            .slice(0, 2); // Limit to 2 for display purposes
-          
-          const team2Players = (match.players || [])
-            .filter(p => p.team_id === match.team2_id)
-            .sort((a, b) => (a.player_order || 0) - (b.player_order || 0))
-            .map(p => p.user?.name || 'Unknown')
-            .slice(0, 2); // Limit to 2 for display purposes
-          
-          // Format players string based on match type
-          const playersPerSide = match.format?.players_per_side || 1;
-          let playersStr = '';
-          
-          if (playersPerSide === 1) {
-            // Singles match
-            playersStr = `${team1Players[0]} vs. ${team2Players[0]}`;
-          } else {
-            // Team match (2v2, etc.)
-            playersStr = `${team1Players.join(' & ')} vs. ${team2Players.join(' & ')}`;
-          }
-          
-          return (
-            <div key={match.id} className="text-xs">
-              <div className="font-semibold text-gray-700">
-                {holeRange}: {formatName}
-              </div>
-              <div className="text-gray-500 text-[11px]">
-                {playersStr}
-              </div>
-            </div>
-          );
-        })}
       </div>
     );
   };

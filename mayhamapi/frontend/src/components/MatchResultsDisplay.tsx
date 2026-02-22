@@ -29,14 +29,6 @@ const getMatchColorHex = (matchIndex: number): string => {
   return matchColorHexes[matchIndex % matchColorHexes.length];
 };
 
-const getMatchesForPairing = (pairing: PairingWithMatchResults): Match[] => {
-  if (pairing.matches && pairing.matches.length > 0) {
-    return pairing.matches;
-  }
-  return pairing.matchResults || [];
-};
-
-
 export const MatchStatusBox: React.FC<MatchStatusBoxProps> = ({ match, matchIndex, pairing, variant = 'detailed' }) => {
   const getMatchStatus = () => {
     const matchResult = pairing.matchResults?.find((mr) => mr.id === match.id);
