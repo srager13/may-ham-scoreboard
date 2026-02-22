@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { apiClient, Tournament } from '../services/api';
+import { useAuth } from './Auth';
 
 interface TournamentContextType {
   tournaments: Tournament[];
@@ -26,16 +27,19 @@ interface TournamentProviderProps {
 }
 
 export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children }) => {
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [selectedTournamentId, setSelectedTournamentIdState] = useState<string | null>(null);
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load tournaments on mount
+  // Load tournaments on mount and when authentication state changes
   useEffect(() => {
-    refreshTournaments();
-  }, []);
+    if (!authLoading) {
+      refreshTournaments();
+    }
+  }, [isAuthenticated, authLoading]);
 
   // Load selected tournament from localStorage on mount
   useEffect(() => {
