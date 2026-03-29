@@ -11,13 +11,14 @@ import (
 // ============================================
 
 type User struct {
-	ID        string    `json:"id" db:"id"`
-	Email     string    `json:"email" db:"email"`
-	Name      string    `json:"name" db:"name"`
-	Handicap  *float64  `json:"handicap,omitempty" db:"handicap"`
-	IsAdmin   bool      `json:"is_admin" db:"is_admin"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	ID           string    `json:"id" db:"id"`
+	Email        string    `json:"email" db:"email"`
+	Name         string    `json:"name" db:"name"`
+	Handicap     *float64  `json:"handicap,omitempty" db:"handicap"`
+	IsAdmin      bool      `json:"is_admin" db:"is_admin"`
+	PasswordHash string    `json:"-" db:"password_hash"` // bcrypt hash; never serialised to JSON
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type Group struct {

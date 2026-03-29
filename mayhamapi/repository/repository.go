@@ -440,7 +440,7 @@ func (r *Repository) GetPairingsByRound(roundID string) ([]models.Pairing, error
 func (r *Repository) GetPairingPlayers(pairingID string) ([]models.PairingPlayer, error) {
 	query := `
 		SELECT pp.id, pp.pairing_id, pp.user_id, pp.team_id, pp.player_order, pp.created_at,
-		       u.id, u.email, u.name, u.handicap, u.is_admin, u.created_at, u.updated_at,
+		       u.id, u.email, u.name, u.password_hash, u.handicap, u.is_admin, u.created_at, u.updated_at,
 		       t.id, t.tournament_id, t.name, t.color, t.created_at, t.updated_at
 		FROM pairing_players pp
 		JOIN users u ON pp.user_id = u.id
@@ -460,14 +460,18 @@ func (r *Repository) GetPairingPlayers(pairingID string) ([]models.PairingPlayer
 		var player models.PairingPlayer
 		var user models.User
 		var team models.Team
+		var passwordHashNull sql.NullString
 
 		err := rows.Scan(
 			&player.ID, &player.PairingID, &player.UserID, &player.TeamID, &player.PlayerOrder, &player.CreatedAt,
-			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+			&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 			&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.CreatedAt, &team.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan pairing player: %w", err)
+		}
+		if passwordHashNull.Valid {
+			user.PasswordHash = passwordHashNull.String
 		}
 
 		player.User = &user
@@ -879,17 +883,21 @@ func (r *Repository) GetMatchScores(matchID string) ([]models.Score, error) {
 // User Repository Methods
 // ============================================
 
-func (r *Repository) CreateUser(email, name string, handicap *float64) (*models.User, error) {
+func (r *Repository) CreateUser(email, name, passwordHash string, handicap *float64) (*models.User, error) {
 	query := `
-		INSERT INTO users (email, name, handicap, created_at, updated_at)
-		VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, email, name, handicap, is_admin, created_at, updated_at
+		INSERT INTO users (email, name, password_hash, handicap, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, email, name, password_hash, handicap, is_admin, created_at, updated_at
 	`
 
 	var user models.User
-	err := r.db.QueryRow(query, email, name, handicap).Scan(
-		&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+	var passwordHashNull sql.NullString
+	err := r.db.QueryRow(query, email, name, passwordHash, handicap).Scan(
+		&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
+	if passwordHashNull.Valid {
+		user.PasswordHash = passwordHashNull.String
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
@@ -899,12 +907,16 @@ func (r *Repository) CreateUser(email, name string, handicap *float64) (*models.
 }
 
 func (r *Repository) GetUserByEmail(email string) (*models.User, error) {
-	query := `SELECT id, email, name, handicap, is_admin, created_at, updated_at FROM users WHERE email = $1`
+	query := `SELECT id, email, name, password_hash, handicap, is_admin, created_at, updated_at FROM users WHERE email = $1`
 
 	var user models.User
+	var passwordHashNull sql.NullString
 	err := r.db.QueryRow(query, email).Scan(
-		&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
+	if passwordHashNull.Valid {
+		user.PasswordHash = passwordHashNull.String
+	}
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -917,12 +929,16 @@ func (r *Repository) GetUserByEmail(email string) (*models.User, error) {
 }
 
 func (r *Repository) GetUserByID(userID string) (*models.User, error) {
-	query := `SELECT id, email, name, handicap, is_admin, created_at, updated_at FROM users WHERE id = $1`
+	query := `SELECT id, email, name, password_hash, handicap, is_admin, created_at, updated_at FROM users WHERE id = $1`
 
 	var user models.User
+	var passwordHashNull sql.NullString
 	err := r.db.QueryRow(query, userID).Scan(
-		&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
+	if passwordHashNull.Valid {
+		user.PasswordHash = passwordHashNull.String
+	}
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -935,7 +951,7 @@ func (r *Repository) GetUserByID(userID string) (*models.User, error) {
 }
 
 func (r *Repository) GetAllUsers() ([]*models.User, error) {
-	query := `SELECT id, email, name, handicap, is_admin, created_at, updated_at FROM users ORDER BY name ASC`
+	query := `SELECT id, email, name, password_hash, handicap, is_admin, created_at, updated_at FROM users ORDER BY name ASC`
 
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -946,11 +962,15 @@ func (r *Repository) GetAllUsers() ([]*models.User, error) {
 	var users []*models.User
 	for rows.Next() {
 		var user models.User
+		var passwordHashNull sql.NullString
 		err := rows.Scan(
-			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+			&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		if passwordHashNull.Valid {
+			user.PasswordHash = passwordHashNull.String
 		}
 		users = append(users, &user)
 	}
@@ -964,7 +984,7 @@ func (r *Repository) GetAllUsers() ([]*models.User, error) {
 
 func (r *Repository) GetGroupUsers(groupID string) ([]*models.User, error) {
 	query := `
-		SELECT u.id, u.email, u.name, u.handicap, u.is_admin, u.created_at, u.updated_at 
+		SELECT u.id, u.email, u.name, u.password_hash, u.handicap, u.is_admin, u.created_at, u.updated_at 
 		FROM users u
 		JOIN group_members gm ON u.id = gm.user_id
 		WHERE gm.group_id = $1
@@ -980,11 +1000,15 @@ func (r *Repository) GetGroupUsers(groupID string) ([]*models.User, error) {
 	var users []*models.User
 	for rows.Next() {
 		var user models.User
+		var passwordHashNull sql.NullString
 		err := rows.Scan(
-			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+			&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		if passwordHashNull.Valid {
+			user.PasswordHash = passwordHashNull.String
 		}
 		users = append(users, &user)
 	}
@@ -1138,7 +1162,7 @@ func (r *Repository) GetUserGroups(userID string) ([]models.Group, error) {
 func (r *Repository) GetGroupMembers(groupID string) ([]*models.GroupMember, error) {
 	query := `
 		SELECT gm.id, gm.group_id, gm.user_id, gm.role, gm.created_at,
-		       u.id, u.email, u.name, u.handicap, u.is_admin, u.created_at, u.updated_at
+		       u.id, u.email, u.name, u.password_hash, u.handicap, u.is_admin, u.created_at, u.updated_at
 		FROM group_members gm
 		JOIN users u ON gm.user_id = u.id
 		WHERE gm.group_id = $1
@@ -1155,12 +1179,16 @@ func (r *Repository) GetGroupMembers(groupID string) ([]*models.GroupMember, err
 	for rows.Next() {
 		var member models.GroupMember
 		var user models.User
+		var passwordHashNull sql.NullString
 		err := rows.Scan(
 			&member.ID, &member.GroupID, &member.UserID, &member.Role, &member.CreatedAt,
-			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+			&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan group member: %w", err)
+		}
+		if passwordHashNull.Valid {
+			user.PasswordHash = passwordHashNull.String
 		}
 		member.User = &user
 		members = append(members, &member)
@@ -1224,7 +1252,7 @@ func (r *Repository) CreateMatchPlayer(matchPlayer *models.MatchPlayer) error {
 func (r *Repository) GetMatchPlayersByMatch(matchID string) ([]models.MatchPlayer, error) {
 	query := `
 		SELECT mp.id, mp.match_id, mp.user_id, mp.team_id, mp.player_order, mp.created_at,
-		       u.id, u.email, u.name, u.handicap, u.is_admin, u.created_at, u.updated_at
+		       u.id, u.email, u.name, u.password_hash, u.handicap, u.is_admin, u.created_at, u.updated_at
 		FROM match_players mp
 		JOIN users u ON mp.user_id = u.id
 		WHERE mp.match_id = $1
@@ -1241,13 +1269,17 @@ func (r *Repository) GetMatchPlayersByMatch(matchID string) ([]models.MatchPlaye
 	for rows.Next() {
 		var player models.MatchPlayer
 		var user models.User
+		var passwordHashNull sql.NullString
 
 		err := rows.Scan(
 			&player.ID, &player.MatchID, &player.UserID, &player.TeamID, &player.PlayerOrder, &player.CreatedAt,
-			&user.ID, &user.Email, &user.Name, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+			&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan match player: %w", err)
+		}
+		if passwordHashNull.Valid {
+			user.PasswordHash = passwordHashNull.String
 		}
 
 		player.User = &user

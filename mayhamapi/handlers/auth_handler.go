@@ -8,6 +8,7 @@ import (
 	"mayhamapi/repository"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthHandler struct {
@@ -43,15 +44,26 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Get user by email
+	// Get user by email — always fetches the stored bcrypt hash
 	user, err := h.repo.GetUserByEmail(req.Email)
 	if err != nil {
+		// Return the same generic message whether the email is unknown or the
+		// password is wrong, to prevent user-enumeration attacks.
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	// TODO: In a real application, you would verify the password hash
-	// For now, we'll skip password verification
+	// Reject login if no password has been set yet (e.g. seeded rows).
+	if user.PasswordHash == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
+
+	// Constant-time bcrypt comparison — rejects wrong passwords and timing attacks.
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
 
 	// Generate JWT token
 	token, err := middleware.GenerateToken(user.ID, user.Email, user.IsAdmin)
@@ -81,11 +93,15 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// TODO: In a real application, you would hash the password
-	// For now, we'll skip password storage
+	// Hash the password with bcrypt (cost 12 — good balance of security vs latency).
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password"})
+		return
+	}
 
-	// Create user
-	user, err := h.repo.CreateUser(req.Email, req.Name, req.Handicap)
+	// Create user with the hashed password; the plaintext is never stored.
+	user, err := h.repo.CreateUser(req.Email, req.Name, string(hashedBytes), req.Handicap)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
