@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255),
     handicap DECIMAL(4,1),
     is_admin BOOLEAN DEFAULT false,
+    email_verified BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -268,6 +269,30 @@ CREATE INDEX IF NOT EXISTS idx_player_stats_tournament ON player_stats(tournamen
 CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id);
 CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members(group_id);
 CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
+
+-- Password reset tokens (single-use, 1-hour expiry)
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+    token_hash VARCHAR(64) UNIQUE NOT NULL, -- SHA-256 hex digest of the plaintext token
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id);
+
+-- Email verification tokens (single-use, 24-hour expiry)
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) NOT NULL UNIQUE,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_token_hash ON email_verification_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user_id ON email_verification_tokens(user_id);
 
 -- Sample match formats data
 INSERT INTO match_formats (name, description, players_per_side, scoring_type, score_input_type) VALUES

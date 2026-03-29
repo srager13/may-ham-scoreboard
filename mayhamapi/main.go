@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"mayhamapi/db"
+	"mayhamapi/email"
 	"mayhamapi/handlers"
 	"mayhamapi/middleware"
 	"mayhamapi/repository"
@@ -52,8 +53,11 @@ func main() {
 	wsHub := websocket.NewHub()
 	go wsHub.Run()
 
+	// Initialize email mailer (nil if SMTP env vars are not set)
+	mailer := email.NewMailer()
+
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(repo)
+	authHandler := handlers.NewAuthHandler(repo, mailer)
 	tournamentHandler := handlers.NewTournamentHandler(repo)
 	scoringHandler := handlers.NewScoringHandler(repo, scoringService)
 	groupHandler := handlers.NewGroupHandler(repo)
@@ -126,8 +130,12 @@ func setupRouter(
 		{
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/register", authHandler.Register)
+			auth.POST("/forgot-password", authHandler.ForgotPassword)
+			auth.POST("/reset-password", authHandler.ResetPassword)
+			auth.GET("/verify-email", authHandler.VerifyEmail)
 			auth.GET("/me", middleware.JWTAuth(), authHandler.GetCurrentUser)
 			auth.POST("/refresh", middleware.JWTAuth(), authHandler.RefreshToken)
+			auth.POST("/resend-verification", middleware.JWTAuth(), authHandler.ResendVerification)
 		}
 
 		// Protected routes (authentication required)

@@ -9,6 +9,7 @@ export interface User {
   name: string;
   handicap?: number;
   is_admin: boolean;
+  email_verified: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -441,6 +442,14 @@ class ApiClient {
 
   async getCurrentUser(): Promise<User> {
     return this.request<User>('/auth/me');
+  }
+
+  async verifyEmail(token: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/auth/verify-email?token=${encodeURIComponent(token)}`);
+  }
+
+  async resendVerificationEmail(): Promise<{ message: string }> {
+    return this.request<{ message: string }>('/auth/resend-verification', { method: 'POST' });
   }
 
   async getUsers(): Promise<User[]> {

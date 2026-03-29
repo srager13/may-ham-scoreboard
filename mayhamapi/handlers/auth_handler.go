@@ -1,8 +1,13 @@
 package handlers
 
 import (
+	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"time"
 
+	"mayhamapi/email"
 	"mayhamapi/middleware"
 	"mayhamapi/models"
 	"mayhamapi/repository"
@@ -12,11 +17,12 @@ import (
 )
 
 type AuthHandler struct {
-	repo *repository.Repository
+	repo   *repository.Repository
+	mailer *email.Mailer
 }
 
-func NewAuthHandler(repo *repository.Repository) *AuthHandler {
-	return &AuthHandler{repo: repo}
+func NewAuthHandler(repo *repository.Repository, mailer *email.Mailer) *AuthHandler {
+	return &AuthHandler{repo: repo, mailer: mailer}
 }
 
 type LoginRequest struct {
@@ -107,6 +113,23 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// Send verification email (best-effort — don't block registration if SMTP is down).
+	if h.mailer != nil {
+		plainToken, tokenErr := h.repo.CreateEmailVerificationToken(user.ID)
+		if tokenErr != nil {
+			log.Printf("Register: failed to create verification token for user %s: %v", user.ID, tokenErr)
+		} else {
+			baseURL := os.Getenv("APP_BASE_URL")
+			if baseURL == "" {
+				baseURL = "http://localhost:5173"
+			}
+			verifyURL := fmt.Sprintf("%s/verify-email?token=%s", baseURL, plainToken)
+			if mailErr := h.mailer.SendEmailVerificationEmail(user.Email, user.Name, verifyURL); mailErr != nil {
+				log.Printf("Register: failed to send verification email to %s: %v", user.Email, mailErr)
+			}
+		}
+	}
+
 	// Generate JWT token
 	token, err := middleware.GenerateToken(user.ID, user.Email, user.IsAdmin)
 	if err != nil {
@@ -170,4 +193,180 @@ func (h *AuthHandler) GetUsers(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, users)
+}
+
+// POST /api/v1/auth/forgot-password
+// Always responds 200 OK regardless of whether the email exists, to prevent
+// user-enumeration. Any internal errors are logged but not surfaced to the client.
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req struct {
+		Email string `json:"email" binding:"required,email"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Always return the same response so callers cannot enumerate registered emails.
+	ok := gin.H{"message": "If that email is registered you will receive a reset link shortly"}
+
+	if h.mailer == nil {
+		log.Println("ForgotPassword: SMTP not configured — cannot send reset email")
+		c.JSON(http.StatusOK, ok)
+		return
+	}
+
+	user, err := h.repo.GetUserByEmail(req.Email)
+	if err != nil {
+		// Unknown email — still return 200.
+		c.JSON(http.StatusOK, ok)
+		return
+	}
+
+	plainToken, err := h.repo.CreatePasswordResetToken(user.ID)
+	if err != nil {
+		log.Printf("ForgotPassword: failed to create reset token for user %s: %v", user.ID, err)
+		c.JSON(http.StatusOK, ok)
+		return
+	}
+
+	baseURL := os.Getenv("APP_BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:5173"
+	}
+	resetURL := fmt.Sprintf("%s/reset-password?token=%s", baseURL, plainToken)
+
+	if err := h.mailer.SendPasswordResetEmail(user.Email, user.Name, resetURL); err != nil {
+		log.Printf("ForgotPassword: failed to send reset email to %s: %v", user.Email, err)
+	}
+
+	c.JSON(http.StatusOK, ok)
+}
+
+// POST /api/v1/auth/reset-password
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req struct {
+		Token    string `json:"token" binding:"required"`
+		Password string `json:"password" binding:"required,min=6"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Look up the token by its hash.
+	token, err := h.repo.GetPasswordResetToken(req.Token)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired reset token"})
+		return
+	}
+
+	// Validate: not already used.
+	if token.UsedAt != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Reset token has already been used"})
+		return
+	}
+
+	// Validate: not expired.
+	if time.Now().After(token.ExpiresAt) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Reset token has expired"})
+		return
+	}
+
+	// Hash the new password.
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password"})
+		return
+	}
+
+	// Atomically mark token as used and update the password.
+	if err := h.repo.ConsumePasswordResetToken(token.ID, token.UserID, string(hashedBytes)); err != nil {
+		log.Printf("ResetPassword: failed to consume token %s: %v", token.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Password updated successfully"})
+}
+
+// GET /api/v1/auth/verify-email?token=<plaintext>
+func (h *AuthHandler) VerifyEmail(c *gin.Context) {
+	plainToken := c.Query("token")
+	if plainToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing token"})
+		return
+	}
+
+	token, err := h.repo.GetEmailVerificationToken(plainToken)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired verification token"})
+		return
+	}
+
+	if token.UsedAt != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Verification token has already been used"})
+		return
+	}
+
+	if time.Now().After(token.ExpiresAt) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Verification token has expired"})
+		return
+	}
+
+	if err := h.repo.ConsumeEmailVerificationToken(token.ID, token.UserID); err != nil {
+		log.Printf("VerifyEmail: failed to consume token %s: %v", token.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify email"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Email verified successfully"})
+}
+
+// POST /api/v1/auth/resend-verification
+// Protected — requires a valid JWT (user must be logged in).
+func (h *AuthHandler) ResendVerification(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	user, err := h.repo.GetUserByID(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	if user.EmailVerified {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email is already verified"})
+		return
+	}
+
+	if h.mailer == nil {
+		log.Println("ResendVerification: SMTP not configured — cannot send verification email")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Email service is not configured"})
+		return
+	}
+
+	plainToken, tokenErr := h.repo.CreateEmailVerificationToken(user.ID)
+	if tokenErr != nil {
+		log.Printf("ResendVerification: failed to create token for user %s: %v", user.ID, tokenErr)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create verification token"})
+		return
+	}
+
+	baseURL := os.Getenv("APP_BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:5173"
+	}
+	verifyURL := fmt.Sprintf("%s/verify-email?token=%s", baseURL, plainToken)
+
+	if mailErr := h.mailer.SendEmailVerificationEmail(user.Email, user.Name, verifyURL); mailErr != nil {
+		log.Printf("ResendVerification: failed to send email to %s: %v", user.Email, mailErr)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send verification email"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Verification email sent"})
 }

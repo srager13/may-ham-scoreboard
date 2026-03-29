@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Trophy, Users, BarChart3, Settings, AlertCircle, Shield, Menu, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, Link, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
+import { Trophy, Users, BarChart3, Settings, AlertCircle, Shield, Menu, X, CheckCircle } from 'lucide-react';
 import Leaderboard from './components/Leaderboard';
 import TournamentSetup from './components/TournamentSetup';
 import ScoreInterface from './components/ScoreInterface';
 import LandingPage from './components/LandingPage';
 import Groups from './components/Groups';
 import AdminPortal from './components/AdminPortal';
-import { AuthProvider, AuthModal, LoginButton, useAuth } from './components/Auth';
+import { AuthProvider, AuthModal, LoginButton, useAuth, EmailVerificationBanner } from './components/Auth';
 import { TournamentProvider } from './components/TournamentContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import { apiClient, ApiError } from './services/api';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -131,6 +132,73 @@ const ApiErrorNotification = () => {
 const GroupsWrapper: React.FC = () => {
   const { user } = useAuth();
   return <Groups user={user} />;
+};
+
+// Email verification landing page — handles /verify-email?token=xxx
+const VerifyEmailPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    const token = searchParams.get('token');
+    if (!token) {
+      setStatus('error');
+      setMessage('No verification token found in this link.');
+      return;
+    }
+
+    apiClient.verifyEmail(token)
+      .then(() => {
+        setStatus('success');
+        setMessage('Your email has been verified. You can now enjoy all features of Mayham Golf!');
+      })
+      .catch((err) => {
+        setStatus('error');
+        setMessage(err instanceof ApiError ? err.message : 'Verification failed. The link may have expired or already been used.');
+      });
+  }, [searchParams]);
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="bg-white rounded-lg shadow-md w-full max-w-md mx-4 p-8 text-center">
+        <Trophy className="h-12 w-12 text-green-600 mx-auto mb-4" />
+        {status === 'loading' && (
+          <>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Verifying your email...</p>
+          </>
+        )}
+        {status === 'success' && (
+          <>
+            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Email Verified!</h2>
+            <p className="text-gray-600 mb-6">{message}</p>
+            <button
+              onClick={() => navigate('/')}
+              className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700"
+            >
+              Go to App
+            </button>
+          </>
+        )}
+        {status === 'error' && (
+          <>
+            <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Verification Failed</h2>
+            <p className="text-gray-600 mb-6">{message}</p>
+            <button
+              onClick={() => navigate('/')}
+              className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700"
+            >
+              Go to App
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
 };
 
 function AppContent() {
@@ -267,6 +335,9 @@ function AppContent() {
 
           {/* API Error Notification */}
           <ApiErrorNotification />
+
+          {/* Email verification banner (shown when logged in but unverified) */}
+          <EmailVerificationBanner />
         </>
       )}
 
@@ -274,6 +345,7 @@ function AppContent() {
       <main className={isLandingPage ? "" : "max-w-7xl mx-auto py-6 sm:px-6 lg:px-8"}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route 
             path="/score" 

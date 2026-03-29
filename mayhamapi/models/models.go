@@ -11,14 +11,39 @@ import (
 // ============================================
 
 type User struct {
-	ID           string    `json:"id" db:"id"`
-	Email        string    `json:"email" db:"email"`
-	Name         string    `json:"name" db:"name"`
-	Handicap     *float64  `json:"handicap,omitempty" db:"handicap"`
-	IsAdmin      bool      `json:"is_admin" db:"is_admin"`
-	PasswordHash string    `json:"-" db:"password_hash"` // bcrypt hash; never serialised to JSON
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+	ID            string    `json:"id" db:"id"`
+	Email         string    `json:"email" db:"email"`
+	Name          string    `json:"name" db:"name"`
+	Handicap      *float64  `json:"handicap,omitempty" db:"handicap"`
+	IsAdmin       bool      `json:"is_admin" db:"is_admin"`
+	EmailVerified bool      `json:"email_verified" db:"email_verified"`
+	PasswordHash  string    `json:"-" db:"password_hash"` // bcrypt hash; never serialised to JSON
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// PasswordResetToken represents a single-use, time-limited password-reset token.
+// Only the SHA-256 hash of the plaintext token is persisted; the plaintext is
+// sent to the user by email and never stored.
+type PasswordResetToken struct {
+	ID        string     `json:"id" db:"id"`
+	UserID    string     `json:"user_id" db:"user_id"`
+	TokenHash string     `json:"-" db:"token_hash"`
+	ExpiresAt time.Time  `json:"expires_at" db:"expires_at"`
+	UsedAt    *time.Time `json:"-" db:"used_at"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+}
+
+// EmailVerificationToken represents a single-use, time-limited email-verification token.
+// Only the SHA-256 hash of the plaintext token is persisted; the plaintext is
+// sent to the user by email and never stored.
+type EmailVerificationToken struct {
+	ID        string     `json:"id" db:"id"`
+	UserID    string     `json:"user_id" db:"user_id"`
+	TokenHash string     `json:"-" db:"token_hash"`
+	ExpiresAt time.Time  `json:"expires_at" db:"expires_at"`
+	UsedAt    *time.Time `json:"-" db:"used_at"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 }
 
 type Group struct {

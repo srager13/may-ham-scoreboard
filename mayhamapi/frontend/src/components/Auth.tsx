@@ -1,6 +1,6 @@
 import React, { useState, useContext, createContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, Mail, UserPlus, LogIn, Eye, EyeOff, Trophy, X } from 'lucide-react';
+import { User, Lock, Mail, UserPlus, LogIn, Eye, EyeOff, Trophy, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { apiClient, ApiError, User as ApiUser } from '../services/api';
 import { useTournament } from './TournamentContext';
 
@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, name: string, password: string, handicap?: number) => Promise<void>;
   logout: () => void;
+  resendVerification: () => Promise<void>;
   loading: boolean;
   apiError: string | null;
 }
@@ -89,12 +90,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
+  const resendVerification = async () => {
+    await apiClient.resendVerificationEmail();
+  };
+
   const value = {
     user,
     isAuthenticated: !!user,
     login,
     register,
     logout,
+    resendVerification,
     loading,
     apiError,
   };
@@ -121,6 +127,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [registrationEmail, setRegistrationEmail] = useState<string | null>(null);
   
   const { login, register } = useAuth();
 
@@ -128,6 +135,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
     setFormData({ email: '', name: '', password: '', handicap: '' });
     setError(null);
     setShowPassword(false);
+    setRegistrationEmail(null);
   };
 
   const handleModeSwitch = (newMode: 'login' | 'register') => {
@@ -143,15 +151,15 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
     try {
       if (mode === 'login') {
         await login(formData.email, formData.password);
+        onClose();
+        resetForm();
+        if (onSuccess) onSuccess();
       } else {
         const handicap = formData.handicap ? parseFloat(formData.handicap) : undefined;
         await register(formData.email, formData.name, formData.password, handicap);
-      }
-      onClose();
-      resetForm();
-      // Call the onSuccess callback if provided
-      if (onSuccess) {
-        onSuccess();
+        // Show the "check your email" confirmation instead of closing immediately.
+        setRegistrationEmail(formData.email);
+        if (onSuccess) onSuccess();
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Authentication failed');
@@ -168,6 +176,45 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
   };
 
   if (!isOpen) return null;
+
+  // Post-registration confirmation screen
+  if (registrationEmail) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+          <div className="bg-gradient-to-r from-green-800 to-green-600 text-white p-6 rounded-t-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Trophy className="h-8 w-8 mr-3" />
+                <h2 className="text-xl font-bold">Account Created!</h2>
+              </div>
+              <button onClick={() => { onClose(); resetForm(); }} className="text-green-100 hover:text-white">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+          </div>
+          <div className="p-6 text-center">
+            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Check your inbox</h3>
+            <p className="text-gray-600 mb-2">
+              We sent a verification link to:
+            </p>
+            <p className="font-medium text-gray-900 mb-4">{registrationEmail}</p>
+            <p className="text-sm text-gray-500 mb-6">
+              Click the link in the email to verify your address. The link expires in 24 hours.
+              You can still use the app while unverified.
+            </p>
+            <button
+              onClick={() => { onClose(); resetForm(); }}
+              className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700"
+            >
+              Continue to App
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -432,4 +479,50 @@ const LoginButton: React.FC<LoginButtonProps> = ({ onOpenAuth }) => {
   );
 };
 
-export { AuthModal, LoginButton, UserProfile };
+// Banner shown to logged-in users whose email isn't verified yet
+const EmailVerificationBanner: React.FC = () => {
+  const { user, resendVerification } = useAuth();
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+
+  if (!user || user.email_verified) return null;
+
+  const handleResend = async () => {
+    setSending(true);
+    setSendError(null);
+    try {
+      await resendVerification();
+      setSent(true);
+    } catch (err) {
+      setSendError(err instanceof ApiError ? err.message : 'Failed to resend email');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="bg-yellow-50 border-b border-yellow-200">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0" />
+        <span className="text-sm text-yellow-800">
+          Please verify your email address ({user.email}).
+        </span>
+        {sent ? (
+          <span className="text-sm text-green-700 font-medium">Verification email sent!</span>
+        ) : (
+          <button
+            onClick={handleResend}
+            disabled={sending}
+            className="text-sm text-yellow-700 underline hover:text-yellow-900 disabled:opacity-50"
+          >
+            {sending ? 'Sending...' : 'Resend email'}
+          </button>
+        )}
+        {sendError && <span className="text-sm text-red-600">{sendError}</span>}
+      </div>
+    </div>
+  );
+};
+
+export { AuthModal, LoginButton, UserProfile, EmailVerificationBanner };

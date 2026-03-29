@@ -1,10 +1,15 @@
 package repository
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"mayhamapi/db"
 	"mayhamapi/models"
+	"time"
 )
 
 type Repository struct {
@@ -887,13 +892,13 @@ func (r *Repository) CreateUser(email, name, passwordHash string, handicap *floa
 	query := `
 		INSERT INTO users (email, name, password_hash, handicap, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, email, name, password_hash, handicap, is_admin, created_at, updated_at
+		RETURNING id, email, name, password_hash, handicap, is_admin, email_verified, created_at, updated_at
 	`
 
 	var user models.User
 	var passwordHashNull sql.NullString
 	err := r.db.QueryRow(query, email, name, passwordHash, handicap).Scan(
-		&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.EmailVerified, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if passwordHashNull.Valid {
 		user.PasswordHash = passwordHashNull.String
@@ -907,12 +912,12 @@ func (r *Repository) CreateUser(email, name, passwordHash string, handicap *floa
 }
 
 func (r *Repository) GetUserByEmail(email string) (*models.User, error) {
-	query := `SELECT id, email, name, password_hash, handicap, is_admin, created_at, updated_at FROM users WHERE email = $1`
+	query := `SELECT id, email, name, password_hash, handicap, is_admin, email_verified, created_at, updated_at FROM users WHERE email = $1`
 
 	var user models.User
 	var passwordHashNull sql.NullString
 	err := r.db.QueryRow(query, email).Scan(
-		&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.EmailVerified, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if passwordHashNull.Valid {
 		user.PasswordHash = passwordHashNull.String
@@ -929,12 +934,12 @@ func (r *Repository) GetUserByEmail(email string) (*models.User, error) {
 }
 
 func (r *Repository) GetUserByID(userID string) (*models.User, error) {
-	query := `SELECT id, email, name, password_hash, handicap, is_admin, created_at, updated_at FROM users WHERE id = $1`
+	query := `SELECT id, email, name, password_hash, handicap, is_admin, email_verified, created_at, updated_at FROM users WHERE id = $1`
 
 	var user models.User
 	var passwordHashNull sql.NullString
 	err := r.db.QueryRow(query, userID).Scan(
-		&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.EmailVerified, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if passwordHashNull.Valid {
 		user.PasswordHash = passwordHashNull.String
@@ -951,7 +956,7 @@ func (r *Repository) GetUserByID(userID string) (*models.User, error) {
 }
 
 func (r *Repository) GetAllUsers() ([]*models.User, error) {
-	query := `SELECT id, email, name, password_hash, handicap, is_admin, created_at, updated_at FROM users ORDER BY name ASC`
+	query := `SELECT id, email, name, password_hash, handicap, is_admin, email_verified, created_at, updated_at FROM users ORDER BY name ASC`
 
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -964,7 +969,7 @@ func (r *Repository) GetAllUsers() ([]*models.User, error) {
 		var user models.User
 		var passwordHashNull sql.NullString
 		err := rows.Scan(
-			&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+			&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.EmailVerified, &user.CreatedAt, &user.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
@@ -984,7 +989,7 @@ func (r *Repository) GetAllUsers() ([]*models.User, error) {
 
 func (r *Repository) GetGroupUsers(groupID string) ([]*models.User, error) {
 	query := `
-		SELECT u.id, u.email, u.name, u.password_hash, u.handicap, u.is_admin, u.created_at, u.updated_at 
+		SELECT u.id, u.email, u.name, u.password_hash, u.handicap, u.is_admin, u.email_verified, u.created_at, u.updated_at 
 		FROM users u
 		JOIN group_members gm ON u.id = gm.user_id
 		WHERE gm.group_id = $1
@@ -1002,7 +1007,7 @@ func (r *Repository) GetGroupUsers(groupID string) ([]*models.User, error) {
 		var user models.User
 		var passwordHashNull sql.NullString
 		err := rows.Scan(
-			&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+			&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.EmailVerified, &user.CreatedAt, &user.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
@@ -1902,4 +1907,174 @@ ORDER BY hole_number
 	}
 
 	return holes, nil
+}
+
+// ============================================
+// Password Reset Repository Methods
+// ============================================
+
+// CreatePasswordResetToken generates a cryptographically random plaintext token,
+// stores only its SHA-256 hash in the database, and returns the plaintext token
+// to be embedded in the reset link sent to the user.
+func (r *Repository) CreatePasswordResetToken(userID string) (string, error) {
+	// Generate 32 random bytes → 43-char base64url plaintext token.
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("failed to generate token: %w", err)
+	}
+	plaintext := base64.RawURLEncoding.EncodeToString(buf)
+
+	// Hash for storage — we never persist the plaintext.
+	sum := sha256.Sum256([]byte(plaintext))
+	tokenHash := hex.EncodeToString(sum[:])
+
+	expiresAt := time.Now().Add(time.Hour)
+
+	query := `
+		INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at)
+		VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+	`
+	if _, err := r.db.Exec(query, userID, tokenHash, expiresAt); err != nil {
+		return "", fmt.Errorf("failed to store reset token: %w", err)
+	}
+
+	return plaintext, nil
+}
+
+// GetPasswordResetToken looks up a valid (unexpired, unused) token by its hash.
+func (r *Repository) GetPasswordResetToken(plaintext string) (*models.PasswordResetToken, error) {
+	sum := sha256.Sum256([]byte(plaintext))
+	tokenHash := hex.EncodeToString(sum[:])
+
+	query := `
+		SELECT id, user_id, token_hash, expires_at, used_at, created_at
+		FROM password_reset_tokens
+		WHERE token_hash = $1
+	`
+	var t models.PasswordResetToken
+	var usedAt sql.NullTime
+	err := r.db.QueryRow(query, tokenHash).Scan(
+		&t.ID, &t.UserID, &t.TokenHash, &t.ExpiresAt, &usedAt, &t.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("token not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up reset token: %w", err)
+	}
+	if usedAt.Valid {
+		t.UsedAt = &usedAt.Time
+	}
+	return &t, nil
+}
+
+// ConsumePasswordResetToken atomically marks the token as used and updates the
+// user's password hash in a single transaction, preventing race conditions.
+func (r *Repository) ConsumePasswordResetToken(tokenID, userID, newPasswordHash string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Mark token as used.
+	_, err = tx.Exec(
+		`UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1`,
+		tokenID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to mark token as used: %w", err)
+	}
+
+	// Update the user's password.
+	_, err = tx.Exec(
+		`UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+		newPasswordHash, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// CreateEmailVerificationToken generates a cryptographically random plaintext token,
+// stores only its SHA-256 hash in the database, and returns the plaintext token
+// to be embedded in the verification link sent to the user.
+func (r *Repository) CreateEmailVerificationToken(userID string) (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("failed to generate token: %w", err)
+	}
+	plaintext := base64.RawURLEncoding.EncodeToString(buf)
+
+	sum := sha256.Sum256([]byte(plaintext))
+	tokenHash := hex.EncodeToString(sum[:])
+
+	expiresAt := time.Now().Add(24 * time.Hour)
+
+	query := `
+		INSERT INTO email_verification_tokens (user_id, token_hash, expires_at, created_at)
+		VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+	`
+	if _, err := r.db.Exec(query, userID, tokenHash, expiresAt); err != nil {
+		return "", fmt.Errorf("failed to store verification token: %w", err)
+	}
+
+	return plaintext, nil
+}
+
+// GetEmailVerificationToken looks up an unexpired, unused token by its hash.
+func (r *Repository) GetEmailVerificationToken(plaintext string) (*models.EmailVerificationToken, error) {
+	sum := sha256.Sum256([]byte(plaintext))
+	tokenHash := hex.EncodeToString(sum[:])
+
+	query := `
+		SELECT id, user_id, token_hash, expires_at, used_at, created_at
+		FROM email_verification_tokens
+		WHERE token_hash = $1
+	`
+	var t models.EmailVerificationToken
+	var usedAt sql.NullTime
+	err := r.db.QueryRow(query, tokenHash).Scan(
+		&t.ID, &t.UserID, &t.TokenHash, &t.ExpiresAt, &usedAt, &t.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("token not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up verification token: %w", err)
+	}
+	if usedAt.Valid {
+		t.UsedAt = &usedAt.Time
+	}
+	return &t, nil
+}
+
+// ConsumeEmailVerificationToken atomically marks the token as used and sets
+// email_verified = true on the user in a single transaction.
+func (r *Repository) ConsumeEmailVerificationToken(tokenID, userID string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
+		`UPDATE email_verification_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1`,
+		tokenID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to mark token as used: %w", err)
+	}
+
+	_, err = tx.Exec(
+		`UPDATE users SET email_verified = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to set email_verified: %w", err)
+	}
+
+	return tx.Commit()
 }
