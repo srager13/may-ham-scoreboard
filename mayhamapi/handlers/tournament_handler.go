@@ -105,6 +105,11 @@ func (h *TournamentHandler) GetUserTournaments(c *gin.Context) {
 		return
 	}
 
+	// Ensure we send [] not null when the user has no tournaments.
+	if tournaments == nil {
+		tournaments = []models.Tournament{}
+	}
+
 	c.JSON(http.StatusOK, tournaments)
 }
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { apiClient, Tournament } from '../services/api';
+import { apiClient, Tournament, ApiError } from '../services/api';
 import { useAuth } from './Auth';
 
 interface TournamentContextType {
@@ -63,6 +63,14 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
   }, [selectedTournamentId, tournaments]);
 
   const refreshTournaments = async () => {
+    // Skip fetching if user is not authenticated
+    if (!isAuthenticated) {
+      setTournaments([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -77,8 +85,14 @@ export const TournamentProvider: React.FC<TournamentProviderProps> = ({ children
         setError('You are not a member of any tournaments.');
       }
     } catch (err) {
-      console.error('Error loading tournaments:', err);
-      setError('Failed to load tournaments. Please make sure you are logged in.');
+      // Handle 401 errors silently (user not logged in)
+      if (err instanceof ApiError && err.status === 401) {
+        setTournaments([]);
+        setError(null);
+      } else {
+        console.error('Error loading tournaments:', err);
+        setError('Failed to load tournaments. Please make sure you are logged in.');
+      }
     } finally {
       setLoading(false);
     }
