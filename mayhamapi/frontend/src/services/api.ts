@@ -452,6 +452,20 @@ class ApiClient {
     return this.request<{ message: string }>('/auth/resend-verification', { method: 'POST' });
   }
 
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(token: string, password: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    });
+  }
+
   async getUsers(): Promise<User[]> {
     return this.request<User[]>('/users');
   }

@@ -7,7 +7,7 @@ import ScoreInterface from './components/ScoreInterface';
 import LandingPage from './components/LandingPage';
 import Groups from './components/Groups';
 import AdminPortal from './components/AdminPortal';
-import { AuthProvider, AuthModal, LoginButton, useAuth, EmailVerificationBanner } from './components/Auth';
+import { AuthProvider, AuthModal, LoginButton, useAuth, EmailVerificationBanner, ForgotPasswordPage } from './components/Auth';
 import { TournamentProvider } from './components/TournamentContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { apiClient, ApiError } from './services/api';
@@ -346,6 +346,7 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route 
             path="/score" 
