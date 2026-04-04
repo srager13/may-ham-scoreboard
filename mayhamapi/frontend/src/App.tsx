@@ -346,7 +346,7 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ForgotPasswordPage />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route 
             path="/score" 

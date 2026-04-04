@@ -377,7 +377,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
             {mode === 'login' && (
               <button
                 type="button"
-                onClick={() => { onClose(); window.location.href = '/forgot-password'; }}
+                onClick={() => { onClose(); window.location.href = '/reset-password'; }}
                 className="text-gray-500 hover:text-gray-700 text-sm"
               >
                 Forgot password?
