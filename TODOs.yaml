@@ -5,13 +5,10 @@ TODOs:
         - Fix websocket
         - Add real admin page
             - Add/register users? 
-        - Auth - add actual passwords
-          - have way to stay logged in
         - Log in
           - find/set tournament automatically (requires refresh currently)
 
     - LEADERBOARD:
-        - Make it more obvious when a team has won
         - Implement individual statistics
         - Show live matches
 
