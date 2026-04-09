@@ -35,23 +35,23 @@ INSERT INTO match_formats (name, description, players_per_side, scoring_type, sc
 ON CONFLICT (name) DO NOTHING;
 
 -- Add test users
-INSERT INTO users (email, name, handicap, is_admin, created_at, updated_at) VALUES
-    ('scott.rager@mayhamgolf.com', 'Scott Rager', 12.5, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('sean.riffle@mayhamgolf.com', 'Sean Riffle', 2.5, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('michael.kearns@mayhamgolf.com', 'Michael Kearns', 15.0, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('kyle.dowler@mayhamgolf.com', 'Kyle Dowler', 9.7, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('jeremy.virgin@mayhamgolf.com', 'Jeremy Virgin', 14.2, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('sean.lohrer@mayhamgolf.com', 'Sean Lohrer', 15.1, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('rob.lessig@mayhamgolf.com', 'Rob Lessig', 2.6, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('brian.riffle@mayhamgolf.com', 'Brian Riffle', 10.2, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('alan.waters@mayhamgolf.com', 'Alan Waters', 0.9, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('brian.marquette@mayhamgolf.com', 'Brian Marquette', 1.5, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('kevin.kilgour@mayhamgolf.com', 'Kevin Kilgour', 13.9, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('marty.gudewicz@mayhamgolf.com', 'Marty Gudewicz', 11.4, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('jay.gudewicz@mayhamgolf.com', 'Jay Gudewicz', 11.4, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('jared.moser@mayhamgolf.com', 'Jared Moser', 8.4, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('jeremey.teckmeyer@mayhamgolf.com', 'Jeremy Teckmeyer', 14.3, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('garrett.herbert@mayhamgolf.com', 'Garrett Herbert', 16.5, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+INSERT INTO users (email, name, password_hash, handicap, is_admin, created_at, updated_at) VALUES
+    ('srager13@gmail.com', 'Scott Rager', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 12.5, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('sean.riffle@mayhamgolf.com', 'Sean Riffle', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 2.5, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('michael.kearns@mayhamgolf.com', 'Michael Kearns', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 15.0, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('kyle.dowler@mayhamgolf.com', 'Kyle Dowler', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 9.7, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('jeremy.virgin@mayhamgolf.com', 'Jeremy Virgin', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 14.2, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('sean.lohrer@mayhamgolf.com', 'Sean Lohrer', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 15.1, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('rob.lessig@mayhamgolf.com', 'Rob Lessig', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 2.6, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('brian.riffle@mayhamgolf.com', 'Brian Riffle', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 10.2, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('alan.waters@mayhamgolf.com', 'Alan Waters', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 0.9, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('brian.marquette@mayhamgolf.com', 'Brian Marquette', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 1.5, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('kevin.kilgour@mayhamgolf.com', 'Kevin Kilgour', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 13.9, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('marty.gudewicz@mayhamgolf.com', 'Marty Gudewicz', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 11.4, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('jay.gudewicz@mayhamgolf.com', 'Jay Gudewicz', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 11.4, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('jared.moser@mayhamgolf.com', 'Jared Moser', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 8.4, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('jeremey.teckmeyer@mayhamgolf.com', 'Jeremy Teckmeyer', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 14.3, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('garrett.herbert@mayhamgolf.com', 'Garrett Herbert', '$2a$12$gd6/cw4AdEkg/gfktz4.a.xOa4sdhGS0koS8TGpkYl3s5x5zPalAO', 16.5, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     -- ('justin.fleischmann@mayhamgolf.com', 'Justin Fleischmann', 5.2, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     -- ('brett.reimann@mayhamgolf.com', 'Brett Reimann', 15.7, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT (email) DO UPDATE SET
