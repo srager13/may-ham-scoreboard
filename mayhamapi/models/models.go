@@ -47,12 +47,14 @@ type EmailVerificationToken struct {
 }
 
 type Group struct {
-	ID          string    `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
-	Description *string   `json:"description,omitempty" db:"description"`
-	CreatedBy   string    `json:"created_by" db:"created_by"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+	ID           string    `json:"id" db:"id"`
+	Name         string    `json:"name" db:"name"`
+	Description  *string   `json:"description,omitempty" db:"description"`
+	IsPublic     bool      `json:"is_public" db:"is_public"`
+	PasswordHash string    `json:"-" db:"password_hash"`
+	CreatedBy    string    `json:"created_by" db:"created_by"`
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type GroupMember struct {
@@ -62,6 +64,28 @@ type GroupMember struct {
 	Role      string    `json:"role" db:"role"`
 	User      *User     `json:"user,omitempty"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
+}
+
+type GroupInvitation struct {
+	ID        string     `json:"id" db:"id"`
+	GroupID   string     `json:"group_id" db:"group_id"`
+	InvitedBy string     `json:"invited_by" db:"invited_by"`
+	Email     string     `json:"email" db:"email"`
+	Token     string     `json:"token" db:"token"`
+	ExpiresAt time.Time  `json:"expires_at" db:"expires_at"`
+	UsedAt    *time.Time `json:"used_at,omitempty" db:"used_at"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+}
+
+type GroupJoinRequest struct {
+	ID         string    `json:"id" db:"id"`
+	GroupID    string    `json:"group_id" db:"group_id"`
+	UserID     string    `json:"user_id" db:"user_id"`
+	Status     string    `json:"status" db:"status"`
+	ReviewedBy *string   `json:"reviewed_by,omitempty" db:"reviewed_by"`
+	User       *User     `json:"user,omitempty"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type Tournament struct {
@@ -295,11 +319,32 @@ type HoleResult struct {
 type CreateGroupRequest struct {
 	Name        string  `json:"name" binding:"required"`
 	Description *string `json:"description,omitempty"`
+	IsPublic    *bool   `json:"is_public,omitempty"`
+	Password    *string `json:"password,omitempty"`
+}
+
+type UpdateGroupRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	IsPublic    *bool   `json:"is_public,omitempty"`
+	Password    *string `json:"password,omitempty"`
 }
 
 type AddGroupMemberRequest struct {
 	UserID string `json:"user_id" binding:"required"`
 	Role   string `json:"role,omitempty"`
+}
+
+type JoinGroupRequest struct {
+	Password *string `json:"password,omitempty"`
+}
+
+type CreateInvitationRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type UpdateMemberRoleRequest struct {
+	Role string `json:"role" binding:"required"`
 }
 
 type CreateTournamentRequest struct {

@@ -152,6 +152,7 @@ export interface Group {
   id: string;
   name: string;
   description?: string;
+  is_public: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -164,6 +165,32 @@ export interface GroupMember {
   role: string;
   created_at: string;
   user?: User;
+}
+
+export interface GroupInvitation {
+  id: string;
+  group_id: string;
+  invited_by: string;
+  email: string;
+  token: string;
+  expires_at: string;
+  used_at?: string;
+  created_at: string;
+}
+
+export interface GroupJoinRequest {
+  id: string;
+  group_id: string;
+  user_id: string;
+  status: string;
+  reviewed_by?: string;
+  user?: User;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SearchGroupResult extends Group {
+  is_member: boolean;
 }
 
 export interface GolfCourse {
@@ -248,6 +275,23 @@ export interface LeaderboardData {
 export interface CreateGroupRequest {
   name: string;
   description?: string;
+  is_public?: boolean;
+  password?: string;
+}
+
+export interface UpdateGroupRequest {
+  name?: string;
+  description?: string;
+  is_public?: boolean;
+  password?: string;
+}
+
+export interface JoinGroupRequest {
+  password?: string;
+}
+
+export interface CreateInvitationRequest {
+  email: string;
 }
 
 export interface AddGroupMemberRequest {
@@ -655,6 +699,76 @@ class ApiClient {
 
   async getGroupUsers(groupId: string): Promise<User[]> {
     return this.request<User[]>(`/groups/${groupId}/users`);
+  }
+
+  async searchGroups(query: string): Promise<SearchGroupResult[]> {
+    return this.request<SearchGroupResult[]>(`/groups/search?q=${encodeURIComponent(query)}`);
+  }
+
+  async getGroupById(groupId: string): Promise<{ group: Group; is_member: boolean; is_admin: boolean }> {
+    return this.request<{ group: Group; is_member: boolean; is_admin: boolean }>(`/groups/${groupId}`);
+  }
+
+  async updateGroup(groupId: string, data: UpdateGroupRequest): Promise<Group> {
+    return this.request<Group>(`/groups/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async joinGroup(groupId: string, data?: JoinGroupRequest): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/groups/${groupId}/join`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    });
+  }
+
+  async requestToJoinGroup(groupId: string): Promise<GroupJoinRequest> {
+    return this.request<GroupJoinRequest>(`/groups/${groupId}/request-join`, {
+      method: 'POST',
+    });
+  }
+
+  async getGroupJoinRequests(groupId: string): Promise<GroupJoinRequest[]> {
+    return this.request<GroupJoinRequest[]>(`/groups/${groupId}/join-requests`);
+  }
+
+  async approveJoinRequest(groupId: string, requestId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/groups/${groupId}/join-requests/${requestId}/approve`, {
+      method: 'POST',
+    });
+  }
+
+  async rejectJoinRequest(groupId: string, requestId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/groups/${groupId}/join-requests/${requestId}/reject`, {
+      method: 'POST',
+    });
+  }
+
+  async createGroupInvitation(groupId: string, data: CreateInvitationRequest): Promise<{ invitation: GroupInvitation; invite_link: string }> {
+    return this.request<{ invitation: GroupInvitation; invite_link: string }>(`/groups/${groupId}/invitations`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async acceptGroupInvitation(token: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/groups/join?token=${encodeURIComponent(token)}`, {
+      method: 'GET',
+    });
+  }
+
+  async removeGroupMember(groupId: string, userId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/groups/${groupId}/members/${userId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async updateMemberRole(groupId: string, userId: string, role: string): Promise<GroupMember> {
+    return this.request<GroupMember>(`/groups/${groupId}/members/${userId}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    });
   }
 
   // Delete methods

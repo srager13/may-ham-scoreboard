@@ -163,3 +163,33 @@ If you did not create this account, you can safely ignore this email.
 — The Mayham Golf Team
 `, displayName, verifyURL)
 }
+
+// SendGroupInvitationEmail sends a group invitation to the given address.
+func (m *Mailer) SendGroupInvitationEmail(toEmail, toName, groupName, inviteLink string) error {
+	subject := fmt.Sprintf("Mayham Golf – You've been invited to join %s", groupName)
+
+	displayName := toName
+	if displayName == "" {
+		displayName = toEmail
+	}
+
+	body := buildGroupInvitationEmailBody(displayName, groupName, inviteLink)
+	msg := buildMIMEMessage(m.from, toEmail, subject, body)
+
+	return m.send(toEmail, msg)
+}
+
+func buildGroupInvitationEmailBody(displayName, groupName, inviteLink string) string {
+	return fmt.Sprintf(`Hi %s,
+
+You've been invited to join %s on Mayham Golf!
+
+Click the link below to join the group:
+
+  %s
+
+This invitation expires in 7 days.
+
+— The Mayham Golf Team
+`, displayName, groupName, inviteLink)
+}

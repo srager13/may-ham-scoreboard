@@ -9,7 +9,10 @@ import (
 	"fmt"
 	"mayhamapi/db"
 	"mayhamapi/models"
+	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Repository struct {
@@ -18,6 +21,14 @@ type Repository struct {
 
 func NewRepository(database *db.DB) *Repository {
 	return &Repository{db: database}
+}
+
+func hashPassword(password string) (string, error) {
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if err != nil {
+		return "", err
+	}
+	return string(hashedBytes), nil
 }
 
 // ============================================
@@ -1110,25 +1121,44 @@ func (r *Repository) GetAllMatchFormats() ([]map[string]interface{}, error) {
 // ============================================
 
 func (r *Repository) CreateGroup(req *models.CreateGroupRequest, createdBy string) (*models.Group, error) {
+	isPublic := true
+	if req.IsPublic != nil {
+		isPublic = *req.IsPublic
+	}
+
+	var passwordHashVal string
+	var passwordHashNull sql.NullString
+	if req.Password != nil && *req.Password != "" {
+		hash, err := hashPassword(*req.Password)
+		if err != nil {
+			return nil, fmt.Errorf("failed to hash password: %w", err)
+		}
+		passwordHashVal = hash
+		passwordHashNull = sql.NullString{String: passwordHashVal, Valid: true}
+	}
+
 	query := `
-		INSERT INTO groups (name, description, created_by, created_at, updated_at)
-		VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, name, description, created_by, created_at, updated_at
+		INSERT INTO groups (name, description, is_public, password_hash, created_by, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, name, description, is_public, password_hash, created_by, created_at, updated_at
 	`
 
 	var group models.Group
-	err := r.db.QueryRow(query, req.Name, req.Description, createdBy).Scan(
-		&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt,
+	err := r.db.QueryRow(query, req.Name, req.Description, isPublic, passwordHashNull, createdBy).Scan(
+		&group.ID, &group.Name, &group.Description, &group.IsPublic, &passwordHashNull, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt,
 	)
+	if passwordHashNull.Valid {
+		group.PasswordHash = passwordHashNull.String
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create group: %w", err)
 	}
 
-	// Add creator as admin
-	_, err = r.AddGroupMember(group.ID, createdBy, "admin")
+	// Add creator as owner
+	_, err = r.AddGroupMember(group.ID, createdBy, "owner")
 	if err != nil {
-		return nil, fmt.Errorf("failed to add creator as admin: %w", err)
+		return nil, fmt.Errorf("failed to add creator as owner: %w", err)
 	}
 
 	return &group, nil
@@ -1136,7 +1166,7 @@ func (r *Repository) CreateGroup(req *models.CreateGroupRequest, createdBy strin
 
 func (r *Repository) GetUserGroups(userID string) ([]models.Group, error) {
 	query := `
-		SELECT g.id, g.name, g.description, g.created_by, g.created_at, g.updated_at 
+		SELECT g.id, g.name, g.description, g.is_public, g.password_hash, g.created_by, g.created_at, g.updated_at 
 		FROM groups g
 		JOIN group_members gm ON g.id = gm.group_id
 		WHERE gm.user_id = $1
@@ -1152,8 +1182,44 @@ func (r *Repository) GetUserGroups(userID string) ([]models.Group, error) {
 	var groups []models.Group
 	for rows.Next() {
 		var group models.Group
+		var passwordHashNull sql.NullString
 		err := rows.Scan(
-			&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt,
+			&group.ID, &group.Name, &group.Description, &group.IsPublic, &passwordHashNull, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan group: %w", err)
+		}
+		if passwordHashNull.Valid {
+			group.PasswordHash = passwordHashNull.String
+		}
+		groups = append(groups, group)
+	}
+
+	return groups, nil
+}
+
+func (r *Repository) SearchGroups(queryStr string) ([]models.Group, error) {
+	query := `
+		SELECT g.id, g.name, g.description, g.is_public, g.password_hash, g.created_by, g.created_at, g.updated_at 
+		FROM groups g
+		WHERE g.is_public = true 
+		AND (g.name ILIKE '%' || $1 || '%' OR g.description ILIKE '%' || $1 || '%')
+		ORDER BY g.name ASC
+		LIMIT 50
+	`
+
+	rows, err := r.db.Query(query, queryStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search groups: %w", err)
+	}
+	defer rows.Close()
+
+	var groups []models.Group
+	for rows.Next() {
+		var group models.Group
+		var passwordHashNull sql.NullString
+		err := rows.Scan(
+			&group.ID, &group.Name, &group.Description, &group.IsPublic, &passwordHashNull, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan group: %w", err)
@@ -1162,6 +1228,72 @@ func (r *Repository) GetUserGroups(userID string) ([]models.Group, error) {
 	}
 
 	return groups, nil
+}
+
+func (r *Repository) GetGroupByID(groupID string) (*models.Group, error) {
+	query := `
+		SELECT g.id, g.name, g.description, g.is_public, g.password_hash, g.created_by, g.created_at, g.updated_at
+		FROM groups g
+		WHERE g.id = $1
+	`
+
+	var group models.Group
+	var passwordHashNull sql.NullString
+	err := r.db.QueryRow(query, groupID).Scan(
+		&group.ID, &group.Name, &group.Description, &group.IsPublic, &passwordHashNull, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("group not found")
+		}
+		return nil, fmt.Errorf("failed to get group: %w", err)
+	}
+	if passwordHashNull.Valid {
+		group.PasswordHash = passwordHashNull.String
+	}
+
+	return &group, nil
+}
+
+func (r *Repository) UpdateGroup(groupID string, req *models.UpdateGroupRequest) (*models.Group, error) {
+	var passwordHashForUpdate sql.NullString
+	if req.Password != nil {
+		if *req.Password == "" {
+			passwordHashForUpdate = sql.NullString{String: "", Valid: true}
+		} else {
+			hash, err := hashPassword(*req.Password)
+			if err != nil {
+				return nil, fmt.Errorf("failed to hash password: %w", err)
+			}
+			passwordHashForUpdate = sql.NullString{String: hash, Valid: true}
+		}
+	}
+
+	query := `
+		UPDATE groups SET 
+			name = COALESCE($1, name),
+			description = COALESCE($2, description),
+			is_public = COALESCE($3, is_public),
+			password_hash = CASE WHEN $5 IS NOT NULL THEN $5 ELSE password_hash END,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = $4
+		RETURNING id, name, description, is_public, password_hash, created_by, created_at, updated_at
+	`
+
+	var group models.Group
+	var passwordHashNull sql.NullString
+	err := r.db.QueryRow(query, req.Name, req.Description, req.IsPublic, groupID, passwordHashForUpdate).Scan(
+		&group.ID, &group.Name, &group.Description, &group.IsPublic, &passwordHashNull, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt,
+	)
+	if passwordHashNull.Valid {
+		group.PasswordHash = passwordHashNull.String
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to update group: %w", err)
+	}
+
+	return &group, nil
 }
 
 func (r *Repository) GetGroupMembers(groupID string) ([]*models.GroupMember, error) {
@@ -1226,7 +1358,7 @@ func (r *Repository) AddGroupMember(groupID, userID, role string) (*models.Group
 }
 
 func (r *Repository) IsGroupAdmin(groupID, userID string) (bool, error) {
-	query := `SELECT COUNT(*) FROM group_members WHERE group_id = $1 AND user_id = $2 AND role = 'admin'`
+	query := `SELECT COUNT(*) FROM group_members WHERE group_id = $1 AND user_id = $2 AND role IN ('owner', 'admin')`
 
 	var count int
 	err := r.db.QueryRow(query, groupID, userID).Scan(&count)
@@ -1235,6 +1367,334 @@ func (r *Repository) IsGroupAdmin(groupID, userID string) (bool, error) {
 	}
 
 	return count > 0, nil
+}
+
+func (r *Repository) IsGroupOwner(groupID, userID string) (bool, error) {
+	query := `SELECT COUNT(*) FROM group_members WHERE group_id = $1 AND user_id = $2 AND role = 'owner'`
+
+	var count int
+	err := r.db.QueryRow(query, groupID, userID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check group owner status: %w", err)
+	}
+
+	return count > 0, nil
+}
+
+func (r *Repository) GetGroupMemberRole(groupID, userID string) (string, error) {
+	query := `SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2`
+
+	var role string
+	err := r.db.QueryRow(query, groupID, userID).Scan(&role)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to get member role: %w", err)
+	}
+
+	return role, nil
+}
+
+func (r *Repository) RemoveGroupMember(groupID, userID string) error {
+	query := `DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`
+
+	_, err := r.db.Exec(query, groupID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to remove group member: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) UpdateGroupMemberRole(groupID, userID, newRole string) (*models.GroupMember, error) {
+	query := `
+		UPDATE group_members SET role = $3
+		WHERE group_id = $1 AND user_id = $2
+		RETURNING id, group_id, user_id, role, created_at
+	`
+
+	var member models.GroupMember
+	err := r.db.QueryRow(query, groupID, userID, newRole).Scan(
+		&member.ID, &member.GroupID, &member.UserID, &member.Role, &member.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update member role: %w", err)
+	}
+
+	return &member, nil
+}
+
+func (r *Repository) JoinGroup(groupID, userID string, password *string) error {
+	group, err := r.GetGroupByID(groupID)
+	if err != nil {
+		return err
+	}
+
+	if !group.IsPublic {
+		if group.PasswordHash == "" {
+			return fmt.Errorf("private group requires password or invitation")
+		}
+		if password == nil || *password == "" {
+			return fmt.Errorf("password required to join private group")
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(group.PasswordHash), []byte(*password)); err != nil {
+			return fmt.Errorf("invalid password")
+		}
+	}
+
+	_, err = r.AddGroupMember(groupID, userID, "member")
+	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key") {
+			return fmt.Errorf("user is already a member of this group")
+		}
+		return fmt.Errorf("failed to join group: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) CreateGroupInvitation(groupID, invitedBy, email string) (*models.GroupInvitation, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return nil, fmt.Errorf("failed to generate token: %w", err)
+	}
+	token := base64.RawURLEncoding.EncodeToString(buf)
+
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+
+	query := `
+		INSERT INTO group_invitations (group_id, invited_by, email, token, expires_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+		RETURNING id, group_id, invited_by, email, token, expires_at, used_at, created_at
+	`
+
+	var invitation models.GroupInvitation
+	var usedAt sql.NullTime
+	err := r.db.QueryRow(query, groupID, invitedBy, email, token, expiresAt).Scan(
+		&invitation.ID, &invitation.GroupID, &invitation.InvitedBy, &invitation.Email,
+		&invitation.Token, &invitation.ExpiresAt, &usedAt, &invitation.CreatedAt,
+	)
+	if usedAt.Valid {
+		invitation.UsedAt = &usedAt.Time
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create invitation: %w", err)
+	}
+
+	return &invitation, nil
+}
+
+func (r *Repository) GetGroupInvitationByToken(token string) (*models.GroupInvitation, error) {
+	query := `
+		SELECT id, group_id, invited_by, email, token, expires_at, used_at, created_at
+		FROM group_invitations
+		WHERE token = $1
+	`
+
+	var invitation models.GroupInvitation
+	var usedAt sql.NullTime
+	err := r.db.QueryRow(query, token).Scan(
+		&invitation.ID, &invitation.GroupID, &invitation.InvitedBy, &invitation.Email,
+		&invitation.Token, &invitation.ExpiresAt, &usedAt, &invitation.CreatedAt,
+	)
+	if usedAt.Valid {
+		invitation.UsedAt = &usedAt.Time
+	}
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("invitation not found")
+		}
+		return nil, fmt.Errorf("failed to get invitation: %w", err)
+	}
+
+	if invitation.UsedAt != nil {
+		return nil, fmt.Errorf("invitation has already been used")
+	}
+
+	if time.Now().After(invitation.ExpiresAt) {
+		return nil, fmt.Errorf("invitation has expired")
+	}
+
+	return &invitation, nil
+}
+
+func (r *Repository) AcceptGroupInvitation(invitationID, userID string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
+		`UPDATE group_invitations SET used_at = CURRENT_TIMESTAMP WHERE id = $1`,
+		invitationID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to mark invitation as used: %w", err)
+	}
+
+	_, err = tx.Exec(
+		`INSERT INTO group_members (group_id, user_id, role, created_at)
+		 SELECT group_id, $1, 'member', CURRENT_TIMESTAMP
+		 WHERE NOT EXISTS (SELECT 1 FROM group_members WHERE group_id = (SELECT group_id FROM group_invitations WHERE id = $2) AND user_id = $1)`,
+		userID, invitationID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to add user to group: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+func (r *Repository) CreateGroupJoinRequest(groupID, userID string) (*models.GroupJoinRequest, error) {
+	query := `
+		INSERT INTO group_join_requests (group_id, user_id, status, created_at, updated_at)
+		VALUES ($1, $2, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		ON CONFLICT (group_id, user_id) 
+		DO UPDATE SET status = 'pending', updated_at = CURRENT_TIMESTAMP
+		WHERE group_join_requests.status IN ('rejected')
+		RETURNING id, group_id, user_id, status, reviewed_by, created_at, updated_at
+	`
+
+	var request models.GroupJoinRequest
+	var reviewedBy sql.NullString
+	err := r.db.QueryRow(query, groupID, userID).Scan(
+		&request.ID, &request.GroupID, &request.UserID, &request.Status,
+		&reviewedBy, &request.CreatedAt, &request.UpdatedAt,
+	)
+	if reviewedBy.Valid {
+		request.ReviewedBy = &reviewedBy.String
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create join request: %w", err)
+	}
+
+	return &request, nil
+}
+
+func (r *Repository) GetGroupJoinRequests(groupID string) ([]models.GroupJoinRequest, error) {
+	query := `
+		SELECT gjr.id, gjr.group_id, gjr.user_id, gjr.status, gjr.reviewed_by, gjr.created_at, gjr.updated_at,
+		       u.id, u.email, u.name, u.password_hash, u.handicap, u.is_admin, u.created_at, u.updated_at
+		FROM group_join_requests gjr
+		JOIN users u ON gjr.user_id = u.id
+		WHERE gjr.group_id = $1 AND gjr.status = 'pending'
+		ORDER BY gjr.created_at ASC
+	`
+
+	rows, err := r.db.Query(query, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get join requests: %w", err)
+	}
+	defer rows.Close()
+
+	var requests []models.GroupJoinRequest
+	for rows.Next() {
+		var request models.GroupJoinRequest
+		var user models.User
+		var reviewedBy sql.NullString
+		var passwordHashNull sql.NullString
+
+		err := rows.Scan(
+			&request.ID, &request.GroupID, &request.UserID, &request.Status,
+			&reviewedBy, &request.CreatedAt, &request.UpdatedAt,
+			&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan join request: %w", err)
+		}
+		if reviewedBy.Valid {
+			request.ReviewedBy = &reviewedBy.String
+		}
+		request.User = &user
+		requests = append(requests, request)
+	}
+
+	return requests, nil
+}
+
+func (r *Repository) GetUserJoinRequest(groupID, userID string) (*models.GroupJoinRequest, error) {
+	query := `
+		SELECT id, group_id, user_id, status, reviewed_by, created_at, updated_at
+		FROM group_join_requests
+		WHERE group_id = $1 AND user_id = $2
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+
+	var request models.GroupJoinRequest
+	var reviewedBy sql.NullString
+	err := r.db.QueryRow(query, groupID, userID).Scan(
+		&request.ID, &request.GroupID, &request.UserID, &request.Status,
+		&reviewedBy, &request.CreatedAt, &request.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get join request: %w", err)
+	}
+	if reviewedBy.Valid {
+		request.ReviewedBy = &reviewedBy.String
+	}
+
+	return &request, nil
+}
+
+func (r *Repository) ApproveJoinRequest(requestID, reviewedBy string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var groupID, userID string
+	err = tx.QueryRow(
+		`SELECT group_id, user_id FROM group_join_requests WHERE id = $1`,
+		requestID,
+	).Scan(&groupID, &userID)
+	if err != nil {
+		return fmt.Errorf("failed to get request: %w", err)
+	}
+
+	_, err = tx.Exec(
+		`UPDATE group_join_requests SET status = 'approved', reviewed_by = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+		reviewedBy, requestID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update request status: %w", err)
+	}
+
+	_, err = tx.Exec(
+		`INSERT INTO group_members (group_id, user_id, role, created_at)
+		 VALUES ($1, $2, 'member', CURRENT_TIMESTAMP)
+		 ON CONFLICT (group_id, user_id) DO NOTHING`,
+		groupID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to add user to group: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+func (r *Repository) RejectJoinRequest(requestID, reviewedBy string) error {
+	query := `
+		UPDATE group_join_requests 
+		SET status = 'rejected', reviewed_by = $1, updated_at = CURRENT_TIMESTAMP 
+		WHERE id = $2
+	`
+
+	_, err := r.db.Exec(query, reviewedBy, requestID)
+	if err != nil {
+		return fmt.Errorf("failed to reject join request: %w", err)
+	}
+
+	return nil
 }
 
 // ============================================
