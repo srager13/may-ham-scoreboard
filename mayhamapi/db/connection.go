@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"sort"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -53,6 +55,7 @@ func (db *DB) Close() error {
 func (db *DB) RunMigrations() error {
 	log.Println("Running database migrations...")
 
+	// Run main schema first
 	migrationSQL, err := os.ReadFile("db/golf_db_schema.sql")
 	if err != nil {
 		return fmt.Errorf("failed to read migration file: %w", err)
@@ -60,6 +63,24 @@ func (db *DB) RunMigrations() error {
 
 	if _, err := db.Exec(string(migrationSQL)); err != nil {
 		return fmt.Errorf("failed to execute migrations: %w", err)
+	}
+
+	// Run all migration files in order
+	files, err := filepath.Glob("db/migrations/*.sql")
+	if err != nil {
+		return fmt.Errorf("failed to find migration files: %w", err)
+	}
+	sort.Strings(files)
+
+	for _, file := range files {
+		log.Printf("Running migration: %s", file)
+		migrationSQL, err := os.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("failed to read migration file %s: %w", file, err)
+		}
+		if _, err := db.Exec(string(migrationSQL)); err != nil {
+			return fmt.Errorf("failed to execute migration %s: %w", file, err)
+		}
 	}
 
 	log.Println("Database migrations completed successfully")
