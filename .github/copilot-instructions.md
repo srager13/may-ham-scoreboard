@@ -74,10 +74,23 @@ TypeScript interfaces in [api.ts](../mayhamapi/frontend/src/services/api.ts) **m
 - TypeScript: `snake_case` properties (NOT camelCase) to match API responses
 
 ### Authentication
-- **JWT tokens** stored in localStorage as `token`
-- **No real passwords yet** - development uses simple email-based auth (see TODOs.yaml)
-- **Claims structure**: UserID, Email, IsAdmin in [middleware/auth.go](../mayhamapi/middleware/auth.go)
+- Backend uses JWT for protected APIs. The login endpoint is `POST /api/v1/auth/login` and returns `{ token, user }` on success.
+- Frontend ApiClient (mayhamapi/frontend/src/services/api.ts) stores the JWT in `localStorage` under the key `auth_token` and adds an `Authorization: Bearer <token>` header for protected requests.
+- Claims structure: UserID, Email, IsAdmin in [middleware/auth.go](../mayhamapi/middleware/auth.go)
 
+Development credentials (dev site)
+- The repository includes `mayhamapi/.env.development` which sets `APP_BASE_URL=https://dev.mayhamscoreboard.com` and convenience variables `LOGIN_EMAIL` and `LOGIN_PASSWORD` for development.
+- When developing or debugging the site at `https://dev.mayhamscoreboard.com` (or a local server using `.env.development`), use the credentials from `.env.development` to authenticate. Example workflow:
+  1. Start the backend with the development env file: `ENV_FILE=.env.development make run` (Makefile default uses `.env.development`).
+  2. Obtain a token by POSTing to the login endpoint (substitute values from `.env.development`):
+     curl -s -X POST "https://dev.mayhamscoreboard.com/api/v1/auth/login" -H "Content-Type: application/json" -d '{"email":"srager13@gmail.com","password":"mayham"}'
+     The response will include `{ "token": "<jwt>", "user": { ... } }`.
+  3. To authenticate the browser UI during debugging, set the token in the console:
+     localStorage.setItem('auth_token', '<jwt>')
+     Then refresh the page; the frontend will use the token for protected API calls.
+  4. When making script-based API calls, include the header `Authorization: Bearer <jwt>`.
+
+Security note: `.env.development` and its LOGIN_* values are for local/dev convenience only. Do not commit production secrets or leak credentials; keep any changes to dev-only files out of production commits.
 ### Match Formats & Scoring
 Each format has unique calculation logic in [scoring/service.go](../mayhamapi/scoring/service.go):
 - **Match Play**: Head-to-head, win/lose/halve per hole
