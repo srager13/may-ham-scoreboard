@@ -73,7 +73,10 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
       const result = await apiClient.getGroupById(groupId);
       setSelectedGroup(result.group);
       setIsGroupAdmin(result.is_admin);
-      setIsGroupOwner(result.group.is_public === false || result.group.created_by === user?.id);
+      // A user is the owner only if they created the group. Previous logic treated
+      // private groups as owned by everyone which caused incorrect UI/permission
+      // gating and runtime mismatches. Keep ownership strictly to the creator.
+      setIsGroupOwner(result.group.created_by === user?.id);
     } catch (err) {
       console.error('Failed to load group details:', err);
     }
@@ -82,7 +85,8 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
   const loadJoinRequests = async (groupId: string) => {
     try {
       const requests = await apiClient.getGroupJoinRequests(groupId);
-      setJoinRequests(requests);
+      // Ensure we always have an array (API may return null/undefined)
+      setJoinRequests(Array.isArray(requests) ? requests : []);
     } catch (err) {
       console.error('Failed to load join requests:', err);
       setJoinRequests([]);
@@ -120,7 +124,7 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
   const loadGroupMembers = async (groupId: string) => {
     try {
       const result = await apiClient.getGroupMembers(groupId);
-      // Ensure we always have an array for members
+      // Ensure we always have an array for members and joinRequests
       setGroupMembers(Array.isArray(result.members) ? result.members : []);
       setIsGroupAdmin(result.is_admin || false);
     } catch (err) {
@@ -602,7 +606,7 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
                     <p className="text-sm text-gray-600 mt-1">{group.description}</p>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    Created {new Date(group.created_at).toLocaleDateString()}
+                    Created {group.created_at ? new Date(group.created_at).toLocaleDateString() : 'Unknown'}
                   </p>
                 </div>
               ))}
@@ -626,7 +630,7 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
                     </span>
                   </div>
                 </div>
-                {isGroupAdmin && (
+                {(isGroupAdmin || isGroupOwner) && (
                   <div className="flex space-x-2">
                     <button
                       onClick={() => {
@@ -651,8 +655,12 @@ export const Groups: React.FC<GroupsProps> = ({ user }) => {
                 )}
               </div>
 
-              {/* Edit Group Form */}
-              {showEditForm && isGroupOwner && (
+               {/* Edit Group Form */}
+               {/* Allow the edit form for owners or admins (visibility controlled by the
+                   button above). This aligns the button visibility with the form
+                   rendering and avoids cases where a button is clickable but
+                   the form is hidden causing confusing state. */}
+               {showEditForm && (isGroupOwner || isGroupAdmin) && (
                 <div className="mb-4 p-4 bg-gray-50 rounded-md">
                   <h4 className="font-medium mb-3">Edit Group</h4>
                   <form onSubmit={handleUpdateGroup} className="space-y-3">
