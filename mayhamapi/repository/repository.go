@@ -288,16 +288,19 @@ func (r *Repository) GetRoundsByTournament(tournamentID string) ([]models.Round,
 // ============================================
 
 func (r *Repository) CreatePairing(roundID string, req *models.CreatePairingRequest) (*models.Pairing, error) {
+	// Determine the tee to use for this pairing. If the request does not
+	// provide one, try to use the round default. If there is no default,
+	// allow creating a pairing without a tee (the DB column is nullable).
 	teeID := req.GolfCourseTeeID
 	if teeID == nil {
 		defaultTeeID, err := r.getDefaultTeeIDForRound(roundID)
 		if err != nil {
 			return nil, err
 		}
-		if defaultTeeID == nil {
-			return nil, fmt.Errorf("golf_course_tee_id is required for pairings without a default tee")
+		if defaultTeeID != nil {
+			teeID = defaultTeeID
 		}
-		teeID = defaultTeeID
+		// If defaultTeeID is nil we intentionally allow teeID to remain nil.
 	}
 
 	query := `
