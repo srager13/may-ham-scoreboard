@@ -319,9 +319,18 @@ func TestMain(m *testing.M) {
 		envFile = ".env.test"
 	}
 
-	// Best-effort load; if the file is missing we still let tests run and
-	// rely on environment or defaults in code.
-	_ = godotenv.Load(envFile)
+	// Best-effort load and overwrite any existing environment variables so
+	// tests always use the test env values when ENV_FILE is set (or default
+	// .env.test). We use Overload to ensure variables from the test file
+	// override variables exported by the parent process (for example when
+	// deploy.sh already sourced .env.production).
+	// Debug: print DB_PASSWORD before and after Overload so we can verify behavior
+	// when tests are invoked from a process that already exported production envs.
+	fmt.Printf("[TESTMAIN] before overload DB_PASSWORD=%q\n", os.Getenv("DB_PASSWORD"))
+	if err := godotenv.Overload(envFile); err != nil {
+		fmt.Printf("[TESTMAIN] godotenv.Overload error: %v\n", err)
+	}
+	fmt.Printf("[TESTMAIN] after overload DB_PASSWORD=%q (ENV_FILE=%s)\n", os.Getenv("DB_PASSWORD"), envFile)
 
 	os.Exit(m.Run())
 }

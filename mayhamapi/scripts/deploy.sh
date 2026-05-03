@@ -49,7 +49,12 @@ fi
 log_info "Step 1: Running tests..."
 cd "$PROJECT_ROOT"
 
-if make test-integration; then
+# Run integration tests in a clean DB environment so production .env values
+# (sourced above) don't leak into the test process. We unset DB-related
+# variables and force ENV_FILE to .env.test so the test binary loads the
+# intended test credentials.
+if env -u DB_HOST -u DB_PORT -u DB_USER -u DB_PASSWORD -u DB_NAME -u DB_SSL_MODE \
+    ENV_FILE=.env.test make test-integration; then
     log_success "Tests passed"
 else
     log_error "Tests failed - aborting deployment"
