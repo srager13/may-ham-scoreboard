@@ -1,0 +1,105 @@
+INFO  2026-05-02T11:20:50 +74ms service=default directory=/root/may-ham-scoreboard creating instance
+INFO  2026-05-02T11:20:50 +7ms service=project directory=/root/may-ham-scoreboard fromDirectory
+INFO  2026-05-02T11:20:50 +22ms service=server method=GET path=/session request
+INFO  2026-05-02T11:20:50 +1ms service=server status=started method=GET path=/session request
+INFO  2026-05-02T11:20:50 +0ms service=server method=GET path=/config/providers request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/config/providers request
+INFO  2026-05-02T11:20:50 +0ms service=server method=GET path=/provider request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/provider request
+INFO  2026-05-02T11:20:50 +0ms service=server method=GET path=/agent request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/agent request
+INFO  2026-05-02T11:20:50 +0ms service=server method=GET path=/config request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/config request
+INFO  2026-05-02T11:20:50 +63ms service=db path=/root/.local/share/opencode/opencode.db opening database
+INFO  2026-05-02T11:20:50 +4ms service=db count=10 mode=bundled applying migrations
+INFO  2026-05-02T11:20:50 +9ms service=default directory=/root/may-ham-scoreboard bootstrapping
+INFO  2026-05-02T11:20:50 +20ms service=config path=/root/.config/opencode/config.json loading
+INFO  2026-05-02T11:20:50 +1ms service=config path=/root/.config/opencode/opencode.json loading
+INFO  2026-05-02T11:20:50 +7ms service=config path=/root/.config/opencode/opencode.jsonc loading
+INFO  2026-05-02T11:20:50 +1ms service=config path=/root/may-ham-scoreboard/opencode.json loading
+INFO  2026-05-02T11:20:50 +11ms service=config path=/root/.opencode/opencode.jsonc loading
+INFO  2026-05-02T11:20:50 +0ms service=config path=/root/.opencode/opencode.json loading
+INFO  2026-05-02T11:20:50 +6ms service=plugin name=CodexAuthPlugin loading internal plugin
+INFO  2026-05-02T11:20:50 +1ms service=plugin name=CopilotAuthPlugin loading internal plugin
+INFO  2026-05-02T11:20:50 +1ms service=plugin name=gitlabAuthPlugin loading internal plugin
+INFO  2026-05-02T11:20:50 +0ms service=plugin name=PoeAuthPlugin loading internal plugin
+INFO  2026-05-02T11:20:50 +0ms service=bus type=* subscribing
+INFO  2026-05-02T11:20:50 +3ms service=bus type=session.updated subscribing
+INFO  2026-05-02T11:20:50 +1ms service=bus type=message.updated subscribing
+INFO  2026-05-02T11:20:50 +1ms service=bus type=message.part.updated subscribing
+INFO  2026-05-02T11:20:50 +0ms service=bus type=session.diff subscribing
+INFO  2026-05-02T11:20:50 +2ms service=format init
+INFO  2026-05-02T11:20:50 +2ms service=lsp serverIds=deno, typescript, vue, eslint, oxlint, biome, gopls, ruby-lsp, pyright, elixir-ls, zls, csharp, fsharp, sourcekit-lsp, rust, clangd, svelte, astro, jdtls, kotlin-ls, yaml-ls, lua-ls, php intelephense, prisma, dart, ocaml-lsp, bash, terraform, texlab, dockerfile, gleam, clojure-lsp, nixd, tinymist, haskell-language-server, julials enabled LSP servers
+INFO  2026-05-02T11:20:50 +1ms service=file init
+INFO  2026-05-02T11:20:50 +6ms service=file.watcher directory=/root/may-ham-scoreboard init
+INFO  2026-05-02T11:20:50 +2ms service=file.watcher directory=/root/may-ham-scoreboard platform=linux backend=inotify watcher backend
+INFO  2026-05-02T11:20:50 +7ms service=bus type=command.executed subscribing
+INFO  2026-05-02T11:20:50 +1ms service=bus type=* subscribing
+INFO  2026-05-02T11:20:50 +16ms service=server status=started providers
+INFO  2026-05-02T11:20:50 +5ms service=provider status=started state
+INFO  2026-05-02T11:20:50 +9ms service=server status=completed duration=180 method=GET path=/config request
+INFO  2026-05-02T11:20:50 +0ms service=server status=completed duration=180 method=GET path=/session request
+INFO  2026-05-02T11:20:50 +44ms service=provider init
+INFO  2026-05-02T11:20:50 +16ms service=vcs branch=add-group-owners-invitation-request-approval initialized
+INFO  2026-05-02T11:20:50 +0ms service=bus type=file.watcher.updated subscribing
+INFO  2026-05-02T11:20:50 +41ms service=skill count=0 init
+INFO  2026-05-02T11:20:50 +4ms service=server status=completed duration=285 method=GET path=/agent request
+INFO  2026-05-02T11:20:50 +7ms service=provider providerID=github-copilot found
+INFO  2026-05-02T11:20:50 +0ms service=provider providerID=opencode found
+INFO  2026-05-02T11:20:50 +0ms service=provider status=completed duration=121 state
+INFO  2026-05-02T11:20:50 +68ms service=server status=completed duration=194 providers
+INFO  2026-05-02T11:20:50 +2ms service=server status=completed duration=362 method=GET path=/provider request
+INFO  2026-05-02T11:20:50 +0ms service=server status=completed duration=362 method=GET path=/config/providers request
+INFO  2026-05-02T11:20:50 +132ms service=server method=GET path=/command request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/command request
+INFO  2026-05-02T11:20:50 +23ms service=mcp key=chrome-devtools type=local found
+INFO  2026-05-02T11:20:50 +27ms service=server method=GET path=/lsp request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/lsp request
+INFO  2026-05-02T11:20:50 +1ms service=server status=completed duration=1 method=GET path=/lsp request
+INFO  2026-05-02T11:20:50 +1ms service=server method=GET path=/mcp request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/mcp request
+INFO  2026-05-02T11:20:50 +1ms service=server method=GET path=/experimental/resource request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/experimental/resource request
+INFO  2026-05-02T11:20:50 +1ms service=server method=GET path=/formatter request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/formatter request
+INFO  2026-05-02T11:20:50 +9ms service=server method=GET path=/session/status request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/session/status request
+INFO  2026-05-02T11:20:50 +2ms service=server status=completed duration=2 method=GET path=/session/status request
+INFO  2026-05-02T11:20:50 +1ms service=server method=GET path=/provider/auth request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/provider/auth request
+INFO  2026-05-02T11:20:50 +3ms service=server status=completed duration=3 method=GET path=/provider/auth request
+INFO  2026-05-02T11:20:50 +2ms service=server method=GET path=/vcs request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/vcs request
+INFO  2026-05-02T11:20:50 +2ms service=server status=completed duration=2 method=GET path=/vcs request
+INFO  2026-05-02T11:20:50 +1ms service=server method=GET path=/path request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/path request
+INFO  2026-05-02T11:20:50 +0ms service=server status=completed duration=0 method=GET path=/path request
+INFO  2026-05-02T11:20:50 +0ms service=server method=GET path=/experimental/workspace request
+INFO  2026-05-02T11:20:50 +0ms service=server status=started method=GET path=/experimental/workspace request
+INFO  2026-05-02T11:20:50 +3ms service=server status=completed duration=3 method=GET path=/experimental/workspace request
+INFO  2026-05-02T11:20:50 +5ms service=bus type=installation.update-available publishing
+INFO  2026-05-02T11:20:50 +11ms service=server status=completed duration=39 method=GET path=/formatter request
+INFO  2026-05-02T11:20:52 +1364ms service=mcp key=chrome-devtools mcp stderr: chrome-devtools-mcp exposes content of the browser instance to the MCP clients allowing them to inspect,
+debug, and modify any data in the browser or DevTools.
+Avoid sharing sensitive or personal information that you do not want to share with MCP clients.
+
+INFO  2026-05-02T11:20:52 +6ms service=mcp key=chrome-devtools mcp stderr: Performance tools may send trace URLs to the Google CrUX API to fetch real-user experience data. To disable, run with --no-performance-crux.
+
+Google collects usage statistics to improve Chrome DevTools MCP. To opt-out, run with --no-usage-statistics.
+For more details, visit: https://github.com/ChromeDevTools/chrome-devtools-mcp#usage-statistics
+
+INFO  2026-05-02T11:20:52 +78ms service=mcp key=chrome-devtools toolCount=29 create() successfully created client
+INFO  2026-05-02T11:20:52 +4ms service=server status=completed duration=1493 method=GET path=/mcp request
+ERROR 2026-05-02T11:20:52 +19ms service=mcp clientName=chrome-devtools error=MCP error -32601: Method not found failed to get resources
+ERROR 2026-05-02T11:20:52 +0ms service=mcp clientName=chrome-devtools error=MCP error -32601: Method not found failed to get prompts
+INFO  2026-05-02T11:20:52 +1ms service=server status=completed duration=1512 method=GET path=/experimental/resource request
+INFO  2026-05-02T11:20:52 +0ms service=server status=completed duration=1565 method=GET path=/command request
+INFO  2026-05-02T11:22:01 +69260ms service=snapshot prune=7.days cleanup
+INFO  2026-05-02T11:22:09 +8489ms service=default worker shutting down
+INFO  2026-05-02T11:22:09 +0ms service=bus type=* unsubscribing
+INFO  2026-05-02T11:22:09 +2ms service=default disposing all instances
+INFO  2026-05-02T11:22:09 +1ms service=default directory=/root/may-ham-scoreboard disposing instance
+INFO  2026-05-02T11:22:09 +0ms service=state key=/root/may-ham-scoreboard waiting for state disposal to complete
+INFO  2026-05-02T11:22:09 +1ms service=bus type=* unsubscribing
+INFO  2026-05-02T11:22:09 +3ms service=bus type=file.watcher.updated unsubscribing
+INFO  2026-05-02T11:22:09 +4ms service=state key=/root/may-ham-scoreboard state disposal completed

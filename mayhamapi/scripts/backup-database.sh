@@ -19,10 +19,11 @@ RETENTION_MONTHS=12
 
 log_info "Starting database backup for $ENVIRONMENT environment"
 
+
 # Load environment variables
 load_env_file "$ENV_FILE"
 
-# Check PostgreSQL
+# Check PostgreSQL service
 check_postgres
 
 # Create backup directories
@@ -30,18 +31,25 @@ ensure_backup_dir "$BACKUP_ROOT/daily"
 ensure_backup_dir "$BACKUP_ROOT/weekly"
 ensure_backup_dir "$BACKUP_ROOT/monthly"
 
+# Allow using a dedicated backup user if set in the env file. This avoids
+# using the postgres superuser for backups. If not set, fall back to the
+# main DB credentials (for backward compatibility).
+BACKUP_USER="${BACKUP_DB_USER:-$DB_USER}"
+BACKUP_PASS="${BACKUP_DB_PASSWORD:-$DB_PASSWORD}"
+
 # Generate backup filename
 TIMESTAMP=$(get_timestamp)
 BACKUP_FILE="$BACKUP_ROOT/daily/${DB_NAME}_${TIMESTAMP}.sql"
 BACKUP_FILE_GZ="${BACKUP_FILE}.gz"
 
 log_info "Backing up database: $DB_NAME"
+log_info "Using backup user: $BACKUP_USER"
 log_info "Backup file: $BACKUP_FILE_GZ"
 
-# Create backup
-PGPASSWORD="$DB_PASSWORD" pg_dump \
+# Create backup using the selected credentials
+PGPASSWORD="$BACKUP_PASS" pg_dump \
     -h "$DB_HOST" \
-    -U "$DB_USER" \
+    -U "$BACKUP_USER" \
     -d "$DB_NAME" \
     -F plain \
     --no-owner \

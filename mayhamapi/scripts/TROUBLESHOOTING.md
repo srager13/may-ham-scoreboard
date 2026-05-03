@@ -138,7 +138,14 @@ sudo journalctl -u golf-api -f
 ./verify-deployment.sh production
 
 # Manual test
-PGPASSWORD=your_password psql -h localhost -U mayham_prod_user -d mayham_prod -c "SELECT version();"
+    PGPASSWORD=your_password psql -h localhost -U mayham_prod_user -d mayham_prod -c "SELECT version();"
+
+If you prefer to use a dedicated backup user, run:
+
+    psql -U postgres -f setup-backup-user.sql
+
+Then update .env.production BACKUP_DB_USER and BACKUP_DB_PASSWORD with the
+values used when creating the user.
 ```
 
 ### Check File Permissions

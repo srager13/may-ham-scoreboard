@@ -1,0 +1,14 @@
+INFO  2026-05-02T01:44:45 +526ms service=default version=1.3.13 args=[] opencode
+INFO  2026-05-02T01:44:45 +2ms service=default directory=/root/may-ham-scoreboard creating instance
+INFO  2026-05-02T01:44:45 +7ms service=project directory=/root/may-ham-scoreboard fromDirectory
+INFO  2026-05-02T01:44:45 +80ms service=db path=/root/.local/share/opencode/opencode.db opening database
+INFO  2026-05-02T01:44:45 +17ms service=db count=10 mode=bundled applying migrations
+INFO  2026-05-02T01:44:45 +67ms service=config path=/root/.config/opencode/config.json loading
+INFO  2026-05-02T01:44:45 +1ms service=config path=/root/.config/opencode/opencode.json loading
+ERROR 2026-05-02T01:44:45 +21ms service=default path=/root/.config/opencode/opencode.json issues=[{"code":"invalid_union","errors":[[{"expected":"string","code":"invalid_type","path":["url"],"message":"Invalid input: expected string, received undefined"},{"code":"unrecognized_keys","keys":["address"],"path":[],"message":"Unrecognized key: \"address\""}],[{"expected":"boolean","code":"invalid_type","path":["enabled"],"message":"Invalid input: expected boolean, received undefined"},{"code":"unrecognized_keys","keys":["type","address"],"path":[],"message":"Unrecognized keys: \"type\", \"address\""}]],"path":["mcp","chrome-devtools"],"message":"Invalid input"}] name=ConfigInvalidError message=ConfigInvalidError stack=ConfigInvalidError: ConfigInvalidError
+    at <anonymous> (/$bunfs/root/src/index.js:285820:38)
+    at ~effect/Effect/successCont (/$bunfs/root/src/index.js:23376:32)
+    at runLoop (/$bunfs/root/src/index.js:23202:109)
+    at evaluate (/$bunfs/root/src/index.js:23172:32)
+    at <anonymous> (/$bunfs/root/src/index.js:23334:26)
+    at processTicksAndRejections (native:7:39) fatal

@@ -1,0 +1,10 @@
+{
+    "configurations": [
+        {
+            "type": "chrome",
+            "name": "https://dev.mayhamscoreboard.com",
+            "request": "launch",
+            "url": "https://dev.mayhamscoreboard.com"
+        }
+    ]
+}
