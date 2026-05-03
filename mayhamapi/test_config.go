@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"github.com/joho/godotenv"
 	"log"
 	"os"
 	"testing"
@@ -308,4 +309,19 @@ func getEnvWithDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// TestMain loads environment variables from ENV_FILE (or .env.test by default)
+// so integration tests pick up the correct DB credentials when run via the Makefile.
+func TestMain(m *testing.M) {
+	envFile := os.Getenv("ENV_FILE")
+	if envFile == "" {
+		envFile = ".env.test"
+	}
+
+	// Best-effort load; if the file is missing we still let tests run and
+	// rely on environment or defaults in code.
+	_ = godotenv.Load(envFile)
+
+	os.Exit(m.Run())
 }

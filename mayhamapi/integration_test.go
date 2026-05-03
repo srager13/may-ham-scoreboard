@@ -17,11 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMain(m *testing.M) {
-	// Set Gin to test mode
-	gin.SetMode(gin.TestMode)
-	m.Run()
-}
+// TestMain is defined in test_config.go; it sets up environment and test mode.
 
 func TestGetPairingsByRound_Integration(t *testing.T) {
 	// Setup test database
