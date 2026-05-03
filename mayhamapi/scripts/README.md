@@ -46,7 +46,8 @@ All scripts are executable and production-ready:
    - Builds backend and frontend
    - Backs up database
    - Stops service safely
-   - Deploys new version
+   - Deploys new version (including the full `db/` directory so runtime
+     migrations and SQL files are available to the running binary)
    - Starts service
    - Runs verification
    - Auto-rollback on failure

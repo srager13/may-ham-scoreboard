@@ -131,9 +131,11 @@ sudo chown golftournament:golftournament "$DEPLOY_DIR/backend/mayhamapi"
 sudo chmod +x "$DEPLOY_DIR/backend/mayhamapi"
 
 cd "$PROJECT_ROOT"
-# Ensure the backend db directory exists before copying the schema
+# Ensure the backend db directory exists before copying the schema and migrations
+sudo rm -rf "$DEPLOY_DIR/backend/db" || true
 sudo mkdir -p "$DEPLOY_DIR/backend/db"
-sudo cp "db/golf_db_schema.sql" "$DEPLOY_DIR/backend/db/golf_db_schema.sql"
+# Copy the whole db directory so migrations are available to the running binary
+sudo cp -a "db/." "$DEPLOY_DIR/backend/db/"
 sudo chown -R golftournament:golftournament "$DEPLOY_DIR/backend/db"
 log_success "Backend binary and DB schema deployed"
 
