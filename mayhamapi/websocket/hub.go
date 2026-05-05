@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
-	
+
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -29,19 +29,19 @@ type Client struct {
 type Hub struct {
 	// Registered clients by tournament ID
 	tournaments map[string]map[*Client]bool
-	
+
 	// Register requests from clients
 	register chan *Client
-	
+
 	// Unregister requests from clients
 	unregister chan *Client
-	
+
 	// Inbound messages from clients
 	broadcast chan []byte
-	
+
 	// Tournament-specific broadcasts
 	tournamentBroadcast chan *TournamentMessage
-	
+
 	mutex sync.RWMutex
 }
 
@@ -59,9 +59,9 @@ type WebSocketMessage struct {
 func NewHub() *Hub {
 	return &Hub{
 		tournaments:         make(map[string]map[*Client]bool),
-		register:           make(chan *Client),
-		unregister:         make(chan *Client),
-		broadcast:          make(chan []byte, 256),
+		register:            make(chan *Client),
+		unregister:          make(chan *Client),
+		broadcast:           make(chan []byte, 256),
 		tournamentBroadcast: make(chan *TournamentMessage, 256),
 	}
 }
@@ -76,9 +76,9 @@ func (h *Hub) Run() {
 			}
 			h.tournaments[client.tournamentID][client] = true
 			h.mutex.Unlock()
-			
+
 			log.Printf("Client registered for tournament %s", client.tournamentID)
-			
+
 			// Send welcome message
 			message := WebSocketMessage{
 				Type: "connected",
@@ -94,11 +94,11 @@ func (h *Hub) Run() {
 				close(client.send)
 				h.removeClient(client)
 			}
-			
+
 		case client := <-h.unregister:
 			h.removeClient(client)
 			log.Printf("Client unregistered from tournament %s", client.tournamentID)
-			
+
 		case message := <-h.broadcast:
 			// Broadcast to all clients in all tournaments
 			h.mutex.RLock()
@@ -113,7 +113,7 @@ func (h *Hub) Run() {
 				}
 			}
 			h.mutex.RUnlock()
-			
+
 		case tournamentMsg := <-h.tournamentBroadcast:
 			// Broadcast to specific tournament
 			h.mutex.RLock()
@@ -122,7 +122,7 @@ func (h *Hub) Run() {
 					Type: tournamentMsg.Type,
 					Data: tournamentMsg.Data,
 				})
-				
+
 				for client := range clients {
 					select {
 					case client.send <- messageData:
@@ -148,7 +148,7 @@ func (h *Hub) removeClientUnsafe(client *Client) {
 		if _, exists := clients[client]; exists {
 			delete(clients, client)
 			close(client.send)
-			
+
 			// Clean up empty tournament rooms
 			if len(clients) == 0 {
 				delete(h.tournaments, client.tournamentID)
@@ -160,18 +160,18 @@ func (h *Hub) removeClientUnsafe(client *Client) {
 func (h *Hub) HandleWebSocket(c *gin.Context) {
 	tournamentID := c.Param("tournament_id")
 	userID := c.Query("user_id") // Get user ID from query parameter
-	
+
 	if tournamentID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Tournament ID is required"})
 		return
 	}
-	
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade error: %v", err)
 		return
 	}
-	
+
 	client := &Client{
 		conn:         conn,
 		send:         make(chan []byte, 256),
@@ -179,9 +179,9 @@ func (h *Hub) HandleWebSocket(c *gin.Context) {
 		tournamentID: tournamentID,
 		userID:       userID,
 	}
-	
+
 	client.hub.register <- client
-	
+
 	// Start goroutines for reading and writing
 	go client.writePump()
 	go client.readPump()
@@ -193,7 +193,7 @@ func (h *Hub) BroadcastToTournament(tournamentID, messageType string, data inter
 		Type:         messageType,
 		Data:         data,
 	}
-	
+
 	select {
 	case h.tournamentBroadcast <- message:
 	default:
@@ -206,13 +206,13 @@ func (h *Hub) BroadcastToAll(messageType string, data interface{}) {
 		Type: messageType,
 		Data: data,
 	}
-	
+
 	messageData, err := json.Marshal(message)
 	if err != nil {
 		log.Printf("Error marshaling broadcast message: %v", err)
 		return
 	}
-	
+
 	select {
 	case h.broadcast <- messageData:
 	default:
@@ -226,7 +226,7 @@ func (c *Client) readPump() {
 		c.hub.unregister <- c
 		c.conn.Close()
 	}()
-	
+
 	for {
 		_, _, err := c.conn.ReadMessage()
 		if err != nil {
@@ -243,7 +243,7 @@ func (c *Client) readPump() {
 // Client write pump
 func (c *Client) writePump() {
 	defer c.conn.Close()
-	
+
 	for {
 		select {
 		case message, ok := <-c.send:
@@ -251,7 +251,7 @@ func (c *Client) writePump() {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-			
+
 			c.conn.WriteMessage(websocket.TextMessage, message)
 		}
 	}
@@ -261,7 +261,7 @@ func (c *Client) writePump() {
 func (h *Hub) GetTournamentClientCount(tournamentID string) int {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-	
+
 	if clients, exists := h.tournaments[tournamentID]; exists {
 		return len(clients)
 	}

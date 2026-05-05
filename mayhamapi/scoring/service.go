@@ -352,6 +352,8 @@ func (s *ScoringService) calculateHoleResult(match *models.Match, holeNumber int
 
 	// Route to appropriate scoring method based on format type
 	switch matchFormat.ScoringType {
+	case "combined_scores":
+		return s.calculateCombinedScoresHole(match, holeNumber, scores)
 	case "match_play":
 		return s.calculateMatchPlayHole(match, holeNumber, scores)
 	case "scramble":
@@ -683,4 +685,113 @@ func (s *ScoringService) calculateShambleHole(match *models.Match, holeNumber in
 	// Shamble: all team members tee off, select best drive, then play individual ball from there
 	// For scoring purposes, this is essentially best ball - take the best score from each team
 	return s.calculateBestBallHole(match, holeNumber, scores)
+}
+
+// calculateCombinedScoresHole implements the "2v2 Combined Scores" format.
+// Each team has two players; their scores for the hole are summed. For Stableford
+// tournaments we expect the Score objects to have StablefordPoints populated and
+// a higher team sum wins. For gross scoring (no StablefordPoints), the lower
+// stroke total wins.
+func (s *ScoringService) calculateCombinedScoresHole(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
+	team1Scores := []int{}
+	team2Scores := []int{}
+
+	// Create maps for quick lookup using match players
+	team1UserIDs := make(map[string]bool)
+	team2UserIDs := make(map[string]bool)
+	for _, player := range match.Players {
+		switch player.TeamID {
+		case match.Team1ID:
+			team1UserIDs[player.UserID] = true
+		case match.Team2ID:
+			team2UserIDs[player.UserID] = true
+		}
+	}
+
+	// Determine if Stableford points are present on any score
+	useStableford := false
+	for _, sc := range scores {
+		if sc.StablefordPoints != nil {
+			useStableford = true
+			break
+		}
+	}
+
+	// Group and sum appropriate values per team
+	team1Sum := 0
+	team2Sum := 0
+	for _, sc := range scores {
+		if team1UserIDs[sc.UserID] {
+			if useStableford {
+				if sc.StablefordPoints == nil {
+					return nil, fmt.Errorf("missing stableford points for player %s in stableford match", sc.UserID)
+				}
+				team1Sum += *sc.StablefordPoints
+			} else {
+				team1Sum += sc.Strokes
+			}
+			team1Scores = append(team1Scores, sc.Strokes)
+		} else if team2UserIDs[sc.UserID] {
+			if useStableford {
+				if sc.StablefordPoints == nil {
+					return nil, fmt.Errorf("missing stableford points for player %s in stableford match", sc.UserID)
+				}
+				team2Sum += *sc.StablefordPoints
+			} else {
+				team2Sum += sc.Strokes
+			}
+			team2Scores = append(team2Scores, sc.Strokes)
+		}
+	}
+
+	if len(team1Scores) == 0 || len(team2Scores) == 0 {
+		return nil, fmt.Errorf("insufficient scores for combined scores format")
+	}
+
+	// Prepare hole result. For stableford we store team scores as the summed points;
+	// for gross we store summed strokes.
+	var team1ScoreVal, team2ScoreVal int
+	if useStableford {
+		team1ScoreVal = team1Sum
+		team2ScoreVal = team2Sum
+	} else {
+		team1ScoreVal = team1Sum
+		team2ScoreVal = team2Sum
+	}
+
+	result := &HoleResult{
+		HoleNumber:   holeNumber,
+		Team1Score:   &team1ScoreVal,
+		Team2Score:   &team2ScoreVal,
+		PlayerScores: scores,
+		Team1Points:  0,
+		Team2Points:  0,
+	}
+
+	// Decide winner: for stableford higher sum wins, for gross lower sum wins
+	if useStableford {
+		if team1Sum > team2Sum {
+			result.Team1Points = 1
+			result.WinnerTeamID = &match.Team1ID
+		} else if team2Sum > team1Sum {
+			result.Team2Points = 1
+			result.WinnerTeamID = &match.Team2ID
+		} else {
+			result.Team1Points = 0.5
+			result.Team2Points = 0.5
+		}
+	} else {
+		if team1Sum < team2Sum {
+			result.Team1Points = 1
+			result.WinnerTeamID = &match.Team1ID
+		} else if team2Sum < team1Sum {
+			result.Team2Points = 1
+			result.WinnerTeamID = &match.Team2ID
+		} else {
+			result.Team1Points = 0.5
+			result.Team2Points = 0.5
+		}
+	}
+
+	return result, nil
 }

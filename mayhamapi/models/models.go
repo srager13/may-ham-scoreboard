@@ -214,6 +214,9 @@ const (
 	AlternateShot MatchFormat = "alternate_shot"
 	HighLow       MatchFormat = "high_low"
 	Shamble       MatchFormat = "shamble"
+	// CombinedScores is a format where two players per side have their hole scores
+	// summed and the better total (higher for Stableford, lower for Gross) wins
+	CombinedScores MatchFormat = "combined_scores"
 )
 
 // Implement driver.Valuer interface for database storage
