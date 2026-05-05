@@ -614,32 +614,42 @@ const TeamScoreBanner = ({ teams, totalAvailablePoints }: { teams: TeamStanding[
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
       <div className="flex items-center justify-between">
-        <div className="flex-1 text-center">
-          {leaderHasWon && (
-            <div className="mb-3">
-              <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 rounded-full shadow-lg">
-                <Trophy className="h-5 w-5 text-white mr-2" />
-                <span className="text-lg font-bold text-white">TOURNAMENT CHAMPION</span>
-                <Trophy className="h-5 w-5 text-white ml-2" />
+          <div className="flex-1 text-center">
+            {leaderHasWon && (
+              <div className="mb-3">
+                <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 rounded-full shadow-lg">
+                  <Trophy className="h-5 w-5 text-white mr-2" />
+                  <span className="text-lg font-bold text-white">TOURNAMENT CHAMPION</span>
+                  <Trophy className="h-5 w-5 text-white ml-2" />
+                </div>
               </div>
+            )}
+
+            {/* Leader logo above the total score */}
+            <div className="mb-2">
+              {leader.team.logo_url ? (
+                <img src={leader.team.logo_url} alt={leader.team.name + ' logo'} className="w-20 h-20 rounded-full mx-auto mb-2 object-cover" />
+              ) : (
+                <div className="w-20 h-20 rounded-full mx-auto mb-2" style={{ backgroundColor: leader.team.color }}></div>
+              )}
             </div>
-          )}
-          <div
-            className="text-6xl font-bold mb-2"
-            style={{ color: leader.team.color }}
-          >
-            {leader.points_won.toFixed(1)}
-          </div>
-          <div className="text-xl font-semibold mb-1">{leader.team.name}</div>
-          <div className="text-sm text-gray-600">
-            {leader.matches_won}W - {leader.matches_lost}L - {leader.matches_tied}T
-          </div>
-          {leaderHasWon && (
-            <div className="mt-2 text-sm font-semibold text-green-600">
-              ✓ Won with {leader.points_won.toFixed(1)} points (needed {pointsNeededToWin})
+
+            <div
+              className="text-6xl font-bold mb-2"
+              style={{ color: leader.team.color }}
+            >
+              {leader.points_won.toFixed(1)}
             </div>
-          )}
-        </div>
+            <div className="text-xl font-semibold mb-1">{leader.team.name}</div>
+            <div className="text-sm text-gray-600">
+              {leader.matches_won}W - {leader.matches_lost}L - {leader.matches_tied}T
+            </div>
+            {leaderHasWon && (
+              <div className="mt-2 text-sm font-semibold text-green-600">
+                ✓ Won with {leader.points_won.toFixed(1)} points (needed {pointsNeededToWin})
+              </div>
+            )}
+          </div>
 
         <div className="px-8">
           <div className="text-center mb-4">
@@ -663,6 +673,15 @@ const TeamScoreBanner = ({ teams, totalAvailablePoints }: { teams: TeamStanding[
         </div>
 
         <div className="flex-1 text-center">
+          {/* Trailer logo above the total score */}
+          <div className="mb-2">
+            {trailer.team.logo_url ? (
+              <img src={trailer.team.logo_url} alt={trailer.team.name + ' logo'} className="w-20 h-20 rounded-full mx-auto mb-2 object-cover" />
+            ) : (
+              <div className="w-20 h-20 rounded-full mx-auto mb-2" style={{ backgroundColor: trailer.team.color }}></div>
+            )}
+          </div>
+
           <div
             className="text-6xl font-bold mb-2"
             style={{ color: trailer.team.color }}
@@ -736,33 +755,45 @@ const TeamStandings = ({ teams, totalAvailablePoints }: { teams: TeamStanding[],
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div
-                        className="w-4 h-4 rounded-full mr-3"
-                        style={{ backgroundColor: team.team.color }}
-                      ></div>
-                      <div className="flex items-center gap-2">
-                        <div className={`text-lg font-semibold ${teamHasWon ? 'text-yellow-800' : ''}`}>
-                          {team.team.name}
-                        </div>
-                        {teamHasWon && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-yellow-400 to-yellow-500 text-white">
-                            <Trophy className="h-3 w-3 mr-1" />
-                            WINNER
-                          </span>
+                      <div className="flex items-center">
+                        {team.team.logo_url ? (
+                          <img src={team.team.logo_url} alt={team.team.name + ' logo'} className="w-8 h-8 rounded mr-3 object-cover" />
+                        ) : (
+                          <div
+                            className="w-4 h-4 rounded-full mr-3"
+                            style={{ backgroundColor: team.team.color }}
+                          ></div>
                         )}
+                        <div className="flex items-center gap-2">
+                          <div className={`text-lg font-semibold ${teamHasWon ? 'text-yellow-800' : ''}`}>
+                            {team.team.name}
+                          </div>
+                          {teamHasWon && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-yellow-400 to-yellow-500 text-white">
+                              <Trophy className="h-3 w-3 mr-1" />
+                              WINNER
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <div className={`text-3xl font-bold ${teamHasWon ? 'text-yellow-700' : ''}`} style={{ color: teamHasWon ? undefined : team.team.color }}>
-                      {team.points_won.toFixed(1)}
-                    </div>
-                    {teamHasWon && (
-                      <div className="text-xs text-green-600 font-semibold mt-1">
-                        ✓ Won (needed {pointsNeededToWin})
+                  <td className="px-6 py-4 whitespace-nowrap text-center align-top">
+                    <div className="flex flex-col items-center">
+                      {team.team.logo_url ? (
+                        <img src={team.team.logo_url} alt={team.team.name + ' logo'} className="w-12 h-12 rounded-full object-cover mb-2" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full mb-2" style={{ backgroundColor: team.team.color }}></div>
+                      )}
+
+                      <div className={`text-3xl font-bold ${teamHasWon ? 'text-yellow-700' : ''}`} style={{ color: teamHasWon ? undefined : team.team.color }}>
+                        {team.points_won.toFixed(1)}
                       </div>
-                    )}
+                      {teamHasWon && (
+                        <div className="text-xs text-green-600 font-semibold mt-1">
+                          ✓ Won (needed {pointsNeededToWin})
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     <div className="text-sm">

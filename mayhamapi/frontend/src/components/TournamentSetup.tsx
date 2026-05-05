@@ -7,6 +7,8 @@ interface TeamData {
   name: string;
   color: string;
   players: User[];
+  logoFile?: File | null;
+  logoPreviewUrl?: string | null;
 }
 
 interface PairingData {
@@ -282,8 +284,8 @@ const TournamentSetup = () => {
         setAvailableUsers(allUsers);
       }
       
-      for (const team of teamsData) {
-        const membersData = await apiClient.getTeamMembers(team.id);
+        for (const team of teamsData) {
+          const membersData = await apiClient.getTeamMembers(team.id);
         // Map user_id to actual User objects from availableUsers
         const players = membersData
           .map(member => allUsers.find(user => user.id === member.user_id))
@@ -293,7 +295,8 @@ const TournamentSetup = () => {
           id: team.id,
           name: team.name,
           color: team.color || '#000000',
-          players
+          players,
+          logoPreviewUrl: team.logo_url || null
         });
       }
       setTeams(loadedTeams);
@@ -487,6 +490,21 @@ const TournamentSetup = () => {
               console.error(`Failed to add player ${player.name} (${player.id}) to team:`, memberError);
             }
           }
+
+          // Upload logo if provided
+          if (team.logoFile) {
+            try {
+              const fd = new FormData();
+              fd.append('logo', team.logoFile);
+              const updated = await apiClient.uploadTeamLogo(newTeam.id, fd);
+              // Update createdTeams entry if returned
+              if (updated && updated.logo_url) {
+                createdTeams[createdTeams.length - 1].logo_url = updated.logo_url;
+              }
+            } catch (err) {
+              console.error('Failed to upload team logo:', err);
+            }
+          }
         }
 
         // Step 4: Recreate rounds and pairings
@@ -595,6 +613,20 @@ const TournamentSetup = () => {
               await apiClient.addTeamMember(newTeam.id, player.id);
             } catch (memberError) {
               console.error(`Failed to add player ${player.name} (${player.id}) to team:`, memberError);
+            }
+          }
+
+          // Upload logo if provided
+          if (team.logoFile) {
+            try {
+              const fd = new FormData();
+              fd.append('logo', team.logoFile);
+              const updated = await apiClient.uploadTeamLogo(newTeam.id, fd);
+              if (updated && updated.logo_url) {
+                createdTeams[createdTeams.length - 1].logo_url = updated.logo_url;
+              }
+            } catch (err) {
+              console.error('Failed to upload team logo:', err);
             }
           }
         }
@@ -1083,6 +1115,17 @@ const TeamsStep = ({ teams, setTeams, availableUsers }) => {
     setTeams(newTeams);
   };
 
+  const handleLogoChange = (teamIdx: number, file?: File | null) => {
+    const newTeams = [...teams];
+    newTeams[teamIdx].logoFile = file || null;
+    if (file) {
+      newTeams[teamIdx].logoPreviewUrl = URL.createObjectURL(file);
+    } else {
+      newTeams[teamIdx].logoPreviewUrl = null;
+    }
+    setTeams(newTeams);
+  };
+
   const assignedPlayerIds = teams.flatMap(t => t.players.map(p => p.id));
   const unassignedUsers = availableUsers.filter(u => !assignedPlayerIds.includes(u.id));
 
@@ -1105,12 +1148,25 @@ const TeamsStep = ({ teams, setTeams, availableUsers }) => {
                   onChange={(e) => updateTeam(idx, 'name', e.target.value)}
                   className="text-xl font-bold border-b-2 border-transparent hover:border-gray-300 px-2 py-1"
                 />
-                <input
-                  type="color"
-                  value={team.color}
-                  onChange={(e) => updateTeam(idx, 'color', e.target.value)}
-                  className="w-12 h-12 rounded cursor-pointer"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={team.color}
+                    onChange={(e) => updateTeam(idx, 'color', e.target.value)}
+                    className="w-12 h-12 rounded cursor-pointer"
+                  />
+                  <div>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(e) => handleLogoChange(idx, e.target.files ? e.target.files[0] : null)}
+                      className="text-xs"
+                    />
+                    {team.logoPreviewUrl && (
+                      <img src={team.logoPreviewUrl} alt="logo preview" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} />
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">

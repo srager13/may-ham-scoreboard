@@ -101,6 +101,9 @@ func setupRouter(
 	r.StaticFile("/vite.svg", "./static/vite.svg")
 	r.StaticFile("/favicon.ico", "./static/favicon.ico")
 
+	// Serve uploaded team logos
+	// Stored on filesystem at ./static/team_logos and exposed at /static/team_logos
+	r.Static("/static/team_logos", "./static/team_logos")
 	// Serve index.html at root
 	r.GET("/", func(c *gin.Context) {
 		c.File("./static/index.html")
@@ -186,6 +189,10 @@ func setupRouter(
 			protected.POST("/tournaments", tournamentHandler.CreateTournament)
 			protected.DELETE("/tournaments/:tournament_id", tournamentHandler.DeleteTournament)
 			protected.POST("/tournaments/:tournament_id/teams", tournamentHandler.CreateTeam)
+			// Upload team logo (multipart/form-data: field name "logo")
+			protected.POST("/teams/:team_id/logo", tournamentHandler.UploadTeamLogo)
+			// Debug: list files in the team_logos upload directory
+			protected.GET("/debug/team-logos", tournamentHandler.ListTeamLogos)
 			protected.DELETE("/teams/:team_id", tournamentHandler.DeleteTeam)
 			protected.GET("/teams/:team_id/members", tournamentHandler.GetTeamMembers)
 			protected.POST("/teams/:team_id/members", tournamentHandler.AddTeamMember)

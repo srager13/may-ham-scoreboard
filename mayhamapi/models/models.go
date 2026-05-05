@@ -107,6 +107,7 @@ type Team struct {
 	TournamentID string    `json:"tournament_id" db:"tournament_id"`
 	Name         string    `json:"name" db:"name"`
 	Color        *string   `json:"color,omitempty" db:"color"`
+	LogoURL      *string   `json:"logo_url,omitempty" db:"logo_url"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 }

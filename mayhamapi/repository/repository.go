@@ -143,14 +143,14 @@ func (r *Repository) GetUserTournaments(userID string) ([]models.Tournament, err
 
 func (r *Repository) CreateTeam(tournamentID string, req *models.CreateTeamRequest) (*models.Team, error) {
 	query := `
-		INSERT INTO teams (tournament_id, name, color, created_at, updated_at)
-		VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		RETURNING id, tournament_id, name, color, created_at, updated_at
-	`
+        INSERT INTO teams (tournament_id, name, color, created_at, updated_at)
+        VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        RETURNING id, tournament_id, name, color, logo_url, created_at, updated_at
+    `
 
 	var team models.Team
 	err := r.db.QueryRow(query, tournamentID, req.Name, req.Color).Scan(
-		&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.CreatedAt, &team.UpdatedAt,
+		&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.LogoURL, &team.CreatedAt, &team.UpdatedAt,
 	)
 
 	if err != nil {
@@ -161,7 +161,7 @@ func (r *Repository) CreateTeam(tournamentID string, req *models.CreateTeamReque
 }
 
 func (r *Repository) GetTeamsByTournament(tournamentID string) ([]models.Team, error) {
-	query := `SELECT id, tournament_id, name, color, created_at, updated_at FROM teams WHERE tournament_id = $1 ORDER BY created_at`
+	query := `SELECT id, tournament_id, name, color, logo_url, created_at, updated_at FROM teams WHERE tournament_id = $1 ORDER BY created_at`
 
 	rows, err := r.db.Query(query, tournamentID)
 	if err != nil {
@@ -173,7 +173,7 @@ func (r *Repository) GetTeamsByTournament(tournamentID string) ([]models.Team, e
 	for rows.Next() {
 		var team models.Team
 		err := rows.Scan(
-			&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.CreatedAt, &team.UpdatedAt,
+			&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.LogoURL, &team.CreatedAt, &team.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan team: %w", err)
@@ -185,11 +185,11 @@ func (r *Repository) GetTeamsByTournament(tournamentID string) ([]models.Team, e
 }
 
 func (r *Repository) GetTeam(teamID string) (*models.Team, error) {
-	query := `SELECT id, tournament_id, name, color, created_at, updated_at FROM teams WHERE id = $1`
+	query := `SELECT id, tournament_id, name, color, logo_url, created_at, updated_at FROM teams WHERE id = $1`
 
 	var team models.Team
 	err := r.db.QueryRow(query, teamID).Scan(
-		&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.CreatedAt, &team.UpdatedAt,
+		&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.LogoURL, &team.CreatedAt, &team.UpdatedAt,
 	)
 
 	if err != nil {
@@ -460,7 +460,7 @@ func (r *Repository) GetPairingPlayers(pairingID string) ([]models.PairingPlayer
 	query := `
 		SELECT pp.id, pp.pairing_id, pp.user_id, pp.team_id, pp.player_order, pp.created_at,
 		       u.id, u.email, u.name, u.password_hash, u.handicap, u.is_admin, u.created_at, u.updated_at,
-		       t.id, t.tournament_id, t.name, t.color, t.created_at, t.updated_at
+		       t.id, t.tournament_id, t.name, t.color, t.logo_url, t.created_at, t.updated_at
 		FROM pairing_players pp
 		JOIN users u ON pp.user_id = u.id
 		LEFT JOIN teams t ON pp.team_id = t.id
@@ -484,7 +484,7 @@ func (r *Repository) GetPairingPlayers(pairingID string) ([]models.PairingPlayer
 		err := rows.Scan(
 			&player.ID, &player.PairingID, &player.UserID, &player.TeamID, &player.PlayerOrder, &player.CreatedAt,
 			&user.ID, &user.Email, &user.Name, &passwordHashNull, &user.Handicap, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
-			&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.CreatedAt, &team.UpdatedAt,
+			&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.LogoURL, &team.CreatedAt, &team.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan pairing player: %w", err)
@@ -1061,6 +1061,27 @@ func (r *Repository) UpdatePairingStatus(pairingID, status string) error {
 	}
 
 	return nil
+}
+
+// UpdateTeamLogo updates the logo_url for a team and returns the updated team
+func (r *Repository) UpdateTeamLogo(teamID string, logoURL string) (*models.Team, error) {
+	query := `
+        UPDATE teams SET logo_url = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        RETURNING id, tournament_id, name, color, logo_url, created_at, updated_at
+    `
+
+	var team models.Team
+	err := r.db.QueryRow(query, logoURL, teamID).Scan(
+		&team.ID, &team.TournamentID, &team.Name, &team.Color, &team.LogoURL, &team.CreatedAt, &team.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("team not found")
+		}
+		return nil, fmt.Errorf("failed to update team logo: %w", err)
+	}
+	return &team, nil
 }
 
 // ============================================

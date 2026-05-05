@@ -1,8 +1,15 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"time"
 
 	"mayhamapi/models"
 	"mayhamapi/repository"
@@ -532,4 +539,167 @@ func (h *TournamentHandler) GetPairingPlayers(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"players": players})
+}
+
+// POST /api/v1/teams/:team_id/logo
+// Accepts multipart/form-data with field name "logo" and stores file on filesystem
+func (h *TournamentHandler) UploadTeamLogo(c *gin.Context) {
+	teamID := c.Param("team_id")
+
+	// Max upload size: 5MB
+	const maxFileSize = 5 * 1024 * 1024
+
+	file, header, err := c.Request.FormFile("logo")
+	if err != nil {
+		log.Printf("UploadTeamLogo: team=%s no file provided: %v", teamID, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "logo file is required"})
+		return
+	}
+	defer file.Close()
+
+	log.Printf("UploadTeamLogo: team=%s received upload: filename=%s size=%d", teamID, header.Filename, header.Size)
+
+	if header.Size > maxFileSize {
+		log.Printf("UploadTeamLogo: team=%s file too large: %d bytes", teamID, header.Size)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file too large (max 5MB)"})
+		return
+	}
+
+	// Peek first 512 bytes to detect content type
+	buf := make([]byte, 512)
+	n, _ := file.Read(buf)
+	contentType := http.DetectContentType(buf[:n])
+	allowed := map[string]bool{"image/png": true, "image/jpeg": true, "image/webp": true}
+	if !allowed[contentType] {
+		log.Printf("UploadTeamLogo: team=%s unsupported content type: %s", teamID, contentType)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported file type"})
+		return
+	}
+
+	// Ensure upload directory exists
+	uploadDir := "./static/team_logos"
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		log.Printf("UploadTeamLogo: team=%s failed to create upload dir %s: %v", teamID, uploadDir, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare upload directory"})
+		return
+	}
+
+	// Generate unique filename using random bytes + original extension
+	ext := filepath.Ext(header.Filename)
+	if ext == "" {
+		switch contentType {
+		case "image/png":
+			ext = ".png"
+		case "image/jpeg":
+			ext = ".jpg"
+		case "image/webp":
+			ext = ".webp"
+		}
+	}
+	rb := make([]byte, 16)
+	if _, err := rand.Read(rb); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate filename"})
+		return
+	}
+	filename := fmt.Sprintf("team_%s_%s%s", teamID, hex.EncodeToString(rb), ext)
+	destPath := filepath.Join(uploadDir, filename)
+	log.Printf("UploadTeamLogo: team=%s saving to %s", teamID, destPath)
+
+	// Rewind the file reader (we already read some bytes)
+	if seeker, ok := file.(io.Seeker); ok {
+		seeker.Seek(0, io.SeekStart)
+	} else {
+		// If not seekable, reopen via header (fallback)
+		// But Gin's multipart gives a File which supports Seek, so this should rarely happen
+	}
+
+	out, err := os.Create(destPath)
+	if err != nil {
+		log.Printf("UploadTeamLogo: team=%s failed to create file %s: %v", teamID, destPath, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create file"})
+		return
+	}
+	defer out.Close()
+
+	written, err := io.Copy(out, file)
+	if err != nil || written == 0 {
+		log.Printf("UploadTeamLogo: team=%s failed to save file %s (written=%d): %v", teamID, destPath, written, err)
+		// Attempt to remove partially written file
+		if removeErr := os.Remove(destPath); removeErr != nil {
+			log.Printf("UploadTeamLogo: team=%s failed to remove partial file %s: %v", teamID, destPath, removeErr)
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
+		return
+	}
+	log.Printf("UploadTeamLogo: team=%s wrote %d bytes to %s", teamID, written, destPath)
+
+	// Construct public URL path
+	logoURL := fmt.Sprintf("/static/team_logos/%s", filename)
+
+	// Update DB
+	updatedTeam, err := h.repo.UpdateTeamLogo(teamID, logoURL)
+	if err != nil {
+		// If update failed, remove file and log
+		if removeErr := os.Remove(destPath); removeErr != nil {
+			log.Printf("UploadTeamLogo: team=%s failed to remove file %s after DB error: %v", teamID, destPath, removeErr)
+		} else {
+			log.Printf("UploadTeamLogo: team=%s removed file %s after DB error", teamID, destPath)
+		}
+		log.Printf("UploadTeamLogo: team=%s failed to update DB with logo_url %s: %v", teamID, logoURL, err)
+		if err.Error() == "team not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "team not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	log.Printf("UploadTeamLogo: team=%s successfully updated logo_url=%s", teamID, logoURL)
+
+	c.JSON(http.StatusCreated, updatedTeam)
+}
+
+// GET /api/v1/debug/team-logos
+// Returns a JSON list of files under ./static/team_logos for quick verification
+func (h *TournamentHandler) ListTeamLogos(c *gin.Context) {
+	uploadDir := "./static/team_logos"
+
+	entries, err := os.ReadDir(uploadDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Directory doesn't exist yet — return empty list
+			c.JSON(http.StatusOK, gin.H{"files": []interface{}{}})
+			return
+		}
+		log.Printf("ListTeamLogos: failed to read directory %s: %v", uploadDir, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upload directory"})
+		return
+	}
+
+	type fileEntry struct {
+		Name    string `json:"name"`
+		Size    int64  `json:"size"`
+		ModTime string `json:"mod_time"`
+		URL     string `json:"url"`
+	}
+
+	files := []fileEntry{}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			log.Printf("ListTeamLogos: failed to stat file %s: %v", e.Name(), err)
+			continue
+		}
+		files = append(files, fileEntry{
+			Name:    e.Name(),
+			Size:    info.Size(),
+			ModTime: info.ModTime().Format(time.RFC3339),
+			URL:     "/static/team_logos/" + e.Name(),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"files": files})
 }

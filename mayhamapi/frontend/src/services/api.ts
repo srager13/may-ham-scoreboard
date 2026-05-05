@@ -33,6 +33,7 @@ export interface Team {
   tournament_id: string;
   name: string;
   color?: string;
+  logo_url?: string;
   created_at: string;
 }
 
@@ -553,6 +554,27 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  // Upload team logo (multipart/form-data). Uses fetch directly so the browser
+  // can set the correct Content-Type boundary for FormData.
+  async uploadTeamLogo(teamId: string, formData: FormData): Promise<Team> {
+    const url = `${this.baseUrl}/teams/${teamId}/logo`;
+    const headers: Record<string, string> = {};
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(response.status, errorData.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
   }
 
   async addTeamMember(teamId: string, userId: string): Promise<TeamMember> {
