@@ -301,6 +301,6 @@ INSERT INTO match_formats (name, description, players_per_side, scoring_type, sc
     ('2v2 Best Ball', 'Two-person team best ball', 2, 'best_ball', 'individual'),
     ('2v2 Alternate Shot', 'Two-person alternate shot', 2, 'alternate_shot', 'team'),
     ('High-Low', 'Two-on-two, one point for best low score and better of each team''s higher score', 2, 'high_low', 'individual'),
-    ('Shamble', 'Drive scramble, then individual play', 2, 'shamble', 'team')
-    ,('2v2 Combined Scores', 'Two-person teams: sum player scores per hole; higher sum wins for Stableford, lower sum wins for Gross', 2, 'combined_scores', 'individual')
+    ('Shamble', 'Drive scramble, then individual play', 2, 'shamble', 'team'),
+    ('2v2 Combined Scores', 'Two-person teams: sum player scores per hole; higher sum wins for Stableford, lower sum wins for Gross', 2, 'combined_scores', 'individual')
 ON CONFLICT (name) DO NOTHING;
