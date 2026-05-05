@@ -1979,11 +1979,21 @@ const MatchConfig = ({
             ))}
           </select>
           {selectedFormat && (
-            <p className="text-xs text-gray-500 mt-1">
-              {selectedFormat.score_input_type === 'team' 
-                ? '📝 Team submits one combined score per hole'
-                : '📝 Each player submits their own score'}
-            </p>
+            <div className="mt-2 text-xs text-gray-500">
+              <p>
+                {selectedFormat.score_input_type === 'team'
+                  ? '📝 Team submits one combined score per hole'
+                  : '📝 Each player submits their own score'}
+              </p>
+              {/* Show format description if present, with a short fallback for the new combined format */}
+              <p className="mt-1 text-xs text-gray-600">
+                {selectedFormat.description
+                  ? selectedFormat.description
+                  : (selectedFormat.scoring_type === 'combined_scores'
+                      ? 'Two-person teams: sum player scores per hole; for Stableford tournaments sum Stableford points (higher wins), otherwise sum strokes (lower wins). Ties split the hole.'
+                      : '')}
+              </p>
+            </div>
           )}
         </div>
 

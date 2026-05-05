@@ -367,6 +367,16 @@ Authorization: Bearer <token>
       "score_input_type": "team",
       "created_at": "2025-01-01T00:00:00Z"
     }
+    ,
+    {
+      "id": "format-uuid-3",
+      "name": "2v2 Combined Scores",
+      "description": "Two-person teams: sum player scores per hole; higher sum wins for Stableford, lower sum wins for Gross",
+      "players_per_side": 2,
+      "scoring_type": "combined_scores",
+      "score_input_type": "individual",
+      "created_at": "2025-01-01T00:00:00Z"
+    }
   ]
 }
 ```

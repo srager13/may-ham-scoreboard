@@ -92,6 +92,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// Log the incoming registration attempt (do NOT log the password).
+	log.Printf("Register: incoming request email=%s name=%s", req.Email, req.Name)
+
 	// Check if user already exists
 	existingUser, _ := h.repo.GetUserByEmail(req.Email)
 	if existingUser != nil {
@@ -109,9 +112,14 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	// Create user with the hashed password; the plaintext is never stored.
 	user, err := h.repo.CreateUser(req.Email, req.Name, string(hashedBytes), req.Handicap)
 	if err != nil {
+		// Surface repository error in logs to aid debugging of 500s while
+		// avoiding exposing internal errors to clients.
+		log.Printf("Register: failed to create user email=%s: %v", req.Email, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
 	}
+
+	log.Printf("Register: created user id=%s email=%s", user.ID, user.Email)
 
 	// Send verification email (best-effort — don't block registration if SMTP is down).
 	if h.mailer != nil {
@@ -133,6 +141,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	// Generate JWT token
 	token, err := middleware.GenerateToken(user.ID, user.Email, user.IsAdmin)
 	if err != nil {
+		log.Printf("Register: failed to generate token for user %s: %v", user.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
@@ -305,6 +314,17 @@ func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 	}
 
 	if token.UsedAt != nil {
+		// The token was already consumed. This can happen if the verification
+		// endpoint is called more than once (for example React StrictMode in
+		// development can cause effects to run twice) or the user clicks the
+		// link multiple times. If the user's email is already marked verified
+		// treat this as success to make the operation idempotent for clients.
+		user, uerr := h.repo.GetUserByID(token.UserID)
+		if uerr == nil && user.EmailVerified {
+			c.JSON(http.StatusOK, gin.H{"message": "Email verified successfully"})
+			return
+		}
+
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Verification token has already been used"})
 		return
 	}
