@@ -628,9 +628,10 @@ const TeamScoreBanner = ({ teams, totalAvailablePoints }: { teams: TeamStanding[
             {/* Leader logo above the total score */}
             <div className="mb-2">
               {leader.team.logo_url ? (
-                <img src={leader.team.logo_url} alt={leader.team.name + ' logo'} className="w-20 h-20 rounded-full mx-auto mb-2 object-cover" />
+                // show full image in a boxed area without rounding or cropping
+                <img src={leader.team.logo_url} alt={leader.team.name + ' logo'} className="w-64 h-64 mx-auto mb-2 object-contain" />
               ) : (
-                <div className="w-20 h-20 rounded-full mx-auto mb-2" style={{ backgroundColor: leader.team.color }}></div>
+                <div className="w-64 h-64 mx-auto mb-2" style={{ backgroundColor: leader.team.color }}></div>
               )}
             </div>
 
@@ -676,9 +677,9 @@ const TeamScoreBanner = ({ teams, totalAvailablePoints }: { teams: TeamStanding[
           {/* Trailer logo above the total score */}
           <div className="mb-2">
             {trailer.team.logo_url ? (
-              <img src={trailer.team.logo_url} alt={trailer.team.name + ' logo'} className="w-20 h-20 rounded-full mx-auto mb-2 object-cover" />
+              <img src={trailer.team.logo_url} alt={trailer.team.name + ' logo'} className="w-64 h-64 mx-auto mb-2 object-contain" />
             ) : (
-              <div className="w-20 h-20 rounded-full mx-auto mb-2" style={{ backgroundColor: trailer.team.color }}></div>
+              <div className="w-64 h-64 mx-auto mb-2" style={{ backgroundColor: trailer.team.color }}></div>
             )}
           </div>
 
@@ -715,12 +716,14 @@ const TeamStandings = ({ teams, totalAvailablePoints }: { teams: TeamStanding[],
               <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Rank
               </th>
+               <th className="px-4 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+               </th>
               <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Team
               </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Points
-              </th>
+               <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                 Points
+               </th>
               <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Matches
               </th>
@@ -754,37 +757,29 @@ const TeamStandings = ({ teams, totalAvailablePoints }: { teams: TeamStanding[],
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        {team.team.logo_url ? (
-                          <img src={team.team.logo_url} alt={team.team.name + ' logo'} className="w-8 h-8 rounded mr-3 object-cover" />
-                        ) : (
-                          <div
-                            className="w-4 h-4 rounded-full mr-3"
-                            style={{ backgroundColor: team.team.color }}
-                          ></div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <div className={`text-lg font-semibold ${teamHasWon ? 'text-yellow-800' : ''}`}>
-                            {team.team.name}
-                          </div>
-                          {teamHasWon && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-yellow-400 to-yellow-500 text-white">
-                              <Trophy className="h-3 w-3 mr-1" />
-                              WINNER
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                  <td className="px-4 py-4 whitespace-nowrap text-center">
+                    {team.team.logo_url ? (
+                      <img src={team.team.logo_url} alt={team.team.name + ' logo'} className="w-8 h-8 rounded object-cover mx-auto" />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full mx-auto" style={{ backgroundColor: team.team.color }}></div>
+                    )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center align-top">
-                    <div className="flex flex-col items-center">
-                      {team.team.logo_url ? (
-                        <img src={team.team.logo_url} alt={team.team.name + ' logo'} className="w-12 h-12 rounded-full object-cover mb-2" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full mb-2" style={{ backgroundColor: team.team.color }}></div>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <div className={`text-lg font-semibold ${teamHasWon ? 'text-yellow-800' : ''}`}>
+                        {team.team.name}
+                      </div>
+                      {teamHasWon && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-yellow-400 to-yellow-500 text-white">
+                          <Trophy className="h-3 w-3 mr-1" />
+                          WINNER
+                        </span>
                       )}
+                    </div>
+                  </td>
 
+                  <td className="px-6 py-4 whitespace-nowrap text-center align-top">
+                    <div>
                       <div className={`text-3xl font-bold ${teamHasWon ? 'text-yellow-700' : ''}`} style={{ color: teamHasWon ? undefined : team.team.color }}>
                         {team.points_won.toFixed(1)}
                       </div>
