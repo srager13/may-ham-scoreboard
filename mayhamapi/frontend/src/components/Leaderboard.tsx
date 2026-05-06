@@ -746,7 +746,7 @@ const TeamStandings = ({ teams, totalAvailablePoints }: { teams: TeamStanding[],
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      {index === 0 && <Trophy size={20} className="text-yellow-500 mr-2" />}
+                      {teamHasWon && index === 0 && <Trophy size={20} className="text-yellow-500 mr-2" />}
                       {teamHasWon && index !== 0 && (
                         <CheckCircle size={20} className="text-green-600 mr-2" />
                       )}
