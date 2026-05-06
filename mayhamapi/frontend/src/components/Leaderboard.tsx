@@ -716,8 +716,6 @@ const TeamStandings = ({ teams, totalAvailablePoints }: { teams: TeamStanding[],
               <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Rank
               </th>
-               <th className="px-4 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-               </th>
               <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Team
               </th>
@@ -756,13 +754,6 @@ const TeamStandings = ({ teams, totalAvailablePoints }: { teams: TeamStanding[],
                         {index + 1}
                       </span>
                     </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-center">
-                    {team.team.logo_url ? (
-                      <img src={team.team.logo_url} alt={team.team.name + ' logo'} className="w-8 h-8 rounded object-cover mx-auto" />
-                    ) : (
-                      <div className="w-6 h-6 rounded-full mx-auto" style={{ backgroundColor: team.team.color }}></div>
-                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
