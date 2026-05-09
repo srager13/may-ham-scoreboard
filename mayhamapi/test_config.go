@@ -61,9 +61,10 @@ func SetupTestDatabase(t *testing.T) *TestDB {
 
 	testDB := &db.DB{DB: testSQLDB}
 
-	// Run migrations
-	err = runTestMigrations(testDB)
-	if err != nil {
+	// Run migrations using the same logic as the production DB helper so
+	// tests automatically pick up any new SQL migration files added under
+	// db/migrations/*.sql (keeps test and prod migration behavior in sync).
+	if err := testDB.RunMigrations(); err != nil {
 		t.Fatalf("Failed to run test migrations: %v", err)
 	}
 

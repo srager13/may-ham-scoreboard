@@ -55,17 +55,25 @@ func (db *DB) Close() error {
 func (db *DB) RunMigrations() error {
 	log.Println("Running database migrations...")
 
-	// Run main schema first
-	migrationSQL, err := os.ReadFile("db/golf_db_schema.sql")
+	// Ensure a simple migrations tracking table exists so we can avoid re-
+	// executing SQL files that already ran. This is a lightweight alternative
+	// to introducing an external migration dependency while still being safe
+	// for tests and production.
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename TEXT PRIMARY KEY,
+        applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`)
 	if err != nil {
-		return fmt.Errorf("failed to read migration file: %w", err)
+		return fmt.Errorf("failed to ensure schema_migrations table: %w", err)
 	}
 
-	if _, err := db.Exec(string(migrationSQL)); err != nil {
-		return fmt.Errorf("failed to execute migrations: %w", err)
+	// Run main schema (only if not already applied)
+	schemaFile := "db/golf_db_schema.sql"
+	if err := runMigrationIfNeeded(db, schemaFile); err != nil {
+		return err
 	}
 
-	// Run all migration files in order
+	// Run all migration files in order, skipping ones already applied
 	files, err := filepath.Glob("db/migrations/*.sql")
 	if err != nil {
 		return fmt.Errorf("failed to find migration files: %w", err)
@@ -73,17 +81,57 @@ func (db *DB) RunMigrations() error {
 	sort.Strings(files)
 
 	for _, file := range files {
-		log.Printf("Running migration: %s", file)
-		migrationSQL, err := os.ReadFile(file)
-		if err != nil {
-			return fmt.Errorf("failed to read migration file %s: %w", file, err)
-		}
-		if _, err := db.Exec(string(migrationSQL)); err != nil {
-			return fmt.Errorf("failed to execute migration %s: %w", file, err)
+		if err := runMigrationIfNeeded(db, file); err != nil {
+			return err
 		}
 	}
 
 	log.Println("Database migrations completed successfully")
+	return nil
+}
+
+// runMigrationIfNeeded executes the SQL file at path if it hasn't been
+// recorded in schema_migrations. Each migration is executed inside a
+// transaction and recorded on success.
+func runMigrationIfNeeded(db *DB, path string) error {
+	filename := filepath.Base(path)
+
+	var exists bool
+	if err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE filename=$1)", filename).Scan(&exists); err != nil {
+		return fmt.Errorf("failed to check migration %s: %w", filename, err)
+	}
+	if exists {
+		log.Printf("Skipping already-applied migration: %s", filename)
+		return nil
+	}
+
+	log.Printf("Applying migration: %s", filename)
+	sqlBytes, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read migration file %s: %w", path, err)
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction for migration %s: %w", filename, err)
+	}
+
+	// Execute migration SQL
+	if _, err := tx.Exec(string(sqlBytes)); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to execute migration %s: %w", filename, err)
+	}
+
+	// Record migration
+	if _, err := tx.Exec("INSERT INTO schema_migrations (filename) VALUES ($1)", filename); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to record migration %s: %w", filename, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit migration %s: %w", filename, err)
+	}
+
 	return nil
 }
 
