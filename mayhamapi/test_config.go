@@ -24,15 +24,35 @@ type TestDB struct {
 
 // SetupTestDatabase creates a test database and runs migrations
 func SetupTestDatabase(t *testing.T) *TestDB {
+	// Ensure test env file is loaded in case TestMain hasn't (defensive)
+	envFile := os.Getenv("ENV_FILE")
+	if envFile == "" {
+		envFile = ".env.test"
+	}
+	if err := godotenv.Overload(envFile); err != nil {
+		t.Logf("[SetupTestDatabase] godotenv.Overload(%s) error: %v", envFile, err)
+	} else {
+		t.Logf("[SetupTestDatabase] loaded env from %s", envFile)
+	}
+
 	// Generate unique test database name
 	testDBName := fmt.Sprintf("test_mayham_golf_%d", time.Now().UnixNano())
 
 	// Connect to postgres database to create test database
+	adminHost := getEnvWithDefault("DB_HOST", "localhost")
+	adminPort := getEnvWithDefault("DB_PORT", "5432")
+	adminUser := getEnvWithDefault("DB_USER", "postgres")
+	adminPass := getEnvWithDefault("DB_PASSWORD", "password")
+
+	t.Logf("[SetupTestDatabase] admin DB env: host=%s port=%s user=%s dbname=postgres", adminHost, adminPort, adminUser)
+
 	adminDSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable",
-		getEnvWithDefault("DB_HOST", "localhost"),
-		getEnvWithDefault("DB_PORT", "5432"),
-		getEnvWithDefault("DB_USER", "postgres"),
-		getEnvWithDefault("DB_PASSWORD", "password"))
+		adminHost,
+		adminPort,
+		adminUser,
+		adminPass)
+
+	t.Logf("[SetupTestDatabase] adminDSN=%s", adminDSN)
 
 	adminDB, err := sql.Open("postgres", adminDSN)
 	if err != nil {
