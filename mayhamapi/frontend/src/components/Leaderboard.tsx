@@ -342,10 +342,11 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
             }
           });
 
+           // Only count matches that have been completed toward the W/L/T record.
           const team1Won = matchWithResults.team1_points > matchWithResults.team2_points;
           const team2Won = matchWithResults.team2_points > matchWithResults.team1_points;
           const tied = matchWithResults.team1_points === matchWithResults.team2_points;
-          const countMatch = match.status !== 'scheduled' || scores.length > 0;
+          const countMatch = matchWithResults.status === 'completed';
 
           matchWithResults.players.forEach((player) => {
             const userId = player.user_id;
