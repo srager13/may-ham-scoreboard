@@ -1,6 +1,7 @@
 **/.env**
 mayhamapi
 mayhamapi-*
+mayhamapi.test
 tmp/
 static/
 *.key

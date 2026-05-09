@@ -217,6 +217,44 @@ func (h *ScoringHandler) SubmitPairingScores(c *gin.Context) {
 		})
 	}
 
+	// Infer and persist pairing status based on match statuses and saved scores
+	// Re-fetch matches to get authoritative status values after scoring service updated matches
+	updatedMatches, err := h.repo.GetMatchesByPairing(pairingID)
+	if err != nil {
+		// Log, but don't fail the request
+		log.Printf("Warning: failed to re-fetch matches for pairing %s: %v", pairingID, err)
+	} else {
+		desiredStatus := "not_started"
+
+		// If all matches are completed, pairing is completed
+		allCompleted := true
+		for _, m := range updatedMatches {
+			if m.Status != "completed" {
+				allCompleted = false
+				break
+			}
+		}
+		if allCompleted && len(updatedMatches) > 0 {
+			desiredStatus = "completed"
+		} else if len(scores) > 0 {
+			// If we have any saved scores for this pairing, it's in_progress
+			desiredStatus = "in_progress"
+		}
+
+		// Fetch current pairing to compare
+		if pairing, perr := h.repo.GetPairing(pairingID); perr != nil {
+			log.Printf("Warning: failed to fetch pairing %s for status update: %v", pairingID, perr)
+		} else {
+			if pairing.Status != desiredStatus {
+				if err := h.repo.UpdatePairingStatus(pairingID, desiredStatus); err != nil {
+					log.Printf("Warning: failed to update pairing %s status to %s: %v", pairingID, desiredStatus, err)
+				} else {
+					log.Printf("Pairing %s status updated to %s", pairingID, desiredStatus)
+				}
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"scores":         submittedScores,
 		"match_statuses": matchStatuses,
@@ -258,6 +296,37 @@ func (h *ScoringHandler) GetPairingScores(c *gin.Context) {
 			"match_id":     match.ID,
 			"match_status": matchStatus,
 		})
+	}
+
+	// Infer and persist pairing status on load so clients get authoritative status
+	updatedMatches, err := h.repo.GetMatchesByPairing(pairingID)
+	if err != nil {
+		log.Printf("Warning: failed to fetch matches for pairing %s when inferring status: %v", pairingID, err)
+	} else {
+		desiredStatus := "not_started"
+
+		allCompleted := true
+		for _, m := range updatedMatches {
+			if m.Status != "completed" {
+				allCompleted = false
+				break
+			}
+		}
+		if allCompleted && len(updatedMatches) > 0 {
+			desiredStatus = "completed"
+		} else if len(scores) > 0 {
+			desiredStatus = "in_progress"
+		}
+
+		if pairing.Status != desiredStatus {
+			if err := h.repo.UpdatePairingStatus(pairingID, desiredStatus); err != nil {
+				log.Printf("Warning: failed to update pairing %s status to %s on load: %v", pairingID, desiredStatus, err)
+			} else {
+				log.Printf("Pairing %s status updated to %s on load", pairingID, desiredStatus)
+				// reflect the change in the pairing object returned to client
+				pairing.Status = desiredStatus
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

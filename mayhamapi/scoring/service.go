@@ -3,7 +3,6 @@ package scoring
 import (
 	"fmt"
 	"mayhamapi/models"
-	"mayhamapi/repository"
 )
 
 // ScoringService handles all golf scoring calculations for different match formats.
@@ -14,11 +13,20 @@ import (
 // - 2v2 Alternate Shot: Teams alternate shots with one ball (combined score)
 // - High-Low: Head-to-head comparison of lowest scores from each team and highest scores from each team
 // - Shamble: Teams tee off together, then play best ball from the best drive
-type ScoringService struct {
-	repo *repository.Repository
+// repoInterface describes the subset of repository methods used by the scoring service.
+type repoInterface interface {
+	SaveHoleResult(*models.HoleResult) error
+	UpdateMatchPoints(matchID string, team1Points, team2Points float64) error
+	UpdateMatchStatus(matchID, status string) error
+	GetMatchHoleResults(matchID string) ([]models.HoleResult, error)
+	GetMatchFormat(formatID string) (*models.MatchFormatEntity, error)
 }
 
-func NewScoringService(repo *repository.Repository) *ScoringService {
+type ScoringService struct {
+	repo repoInterface
+}
+
+func NewScoringService(repo repoInterface) *ScoringService {
 	return &ScoringService{repo: repo}
 }
 
@@ -145,8 +153,14 @@ func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scor
 
 	// Calculate match-level points based on overall match winner
 	// team1TotalPoints and team2TotalPoints represent hole points won
-	holesRemaining := match.Holes - holesCompleted
-	matchComplete := holesCompleted >= match.Holes
+	// Use the actual hole range length (endHole - startHole + 1) when
+	// determining how many holes are expected for this match. This
+	// ensures matches that cover sub-ranges (e.g., holes 1-9) are
+	// evaluated correctly even if match.Holes contains a different
+	// value.
+	holesInRange := endHole - startHole + 1
+	holesRemaining := holesInRange - holesCompleted
+	matchComplete := holesCompleted >= holesInRange
 
 	var matchTeam1Points, matchTeam2Points float64
 	var winnerTeamID *string
@@ -219,8 +233,16 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 			team2TotalPoints += result.Team2Points
 		}
 
-		holesRemaining := match.Holes - holesCompleted
-		matchComplete := holesCompleted == match.Holes
+		// Determine hole range for stored results as well
+		startHole := 1
+		endHole := match.Holes
+		if match.StartHole != nil && match.EndHole != nil {
+			startHole = *match.StartHole
+			endHole = *match.EndHole
+		}
+		holesInRange := endHole - startHole + 1
+		holesRemaining := holesInRange - holesCompleted
+		matchComplete := holesCompleted == holesInRange
 
 		var winnerTeamID *string
 		matchTeam1Points := 0.0

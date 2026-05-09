@@ -122,14 +122,23 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
         roundsData.map(async (round) => {
           try {
             const pairings = await apiClient.getRoundPairings(round.id);
-            const completed = pairings.filter((pairing) => pairing.status === 'completed');
 
-            return Promise.all(
-              completed.map(async (pairing) => {
+            // For each pairing fetch its matches and keep pairings that have at least
+            // one completed match. We intentionally do not rely on pairing.status
+            // because matches may be completed even if the pairing hasn't been
+            // marked completed yet on the backend.
+            const enriched = await Promise.all(
+              pairings.map(async (pairing) => {
                 try {
                   const matches = await apiClient.getPairingMatches(pairing.id);
+                  const completedMatches = matches.filter((m) => m.status === 'completed');
+
+                  if (completedMatches.length === 0) {
+                    return null; // no completed matches for this pairing
+                  }
+
                   const matchResults = await Promise.all(
-                    matches.map(async (match) => {
+                    completedMatches.map(async (match) => {
                       try {
                         const matchScores = await apiClient.getMatchScores(match.id);
                         return {
@@ -146,23 +155,26 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
                   return {
                     ...pairing,
                     round,
-                    matches,
+                    matches: completedMatches,
                     matchResults
-                  };
+                  } as PairingWithResults;
                 } catch (err) {
                   console.warn('Error loading pairing matches:', pairing.id, err);
-                  return { ...pairing, round };
+                  return null;
                 }
               })
             );
+
+            return enriched;
           } catch (err) {
             console.warn('Error loading round pairings:', round.id, err);
-            return [] as PairingWithResults[];
+            return [] as (PairingWithResults | null)[];
           }
         })
       );
 
-      const completed = pairingsByRound.flat().sort((a, b) => {
+      const completed = pairingsByRound.flat().flat().filter((p) => p !== null) as PairingWithResults[];
+      completed.sort((a, b) => {
         const roundDiff = (b.round?.round_number || 0) - (a.round?.round_number || 0);
         if (roundDiff !== 0) {
           return roundDiff;
@@ -191,14 +203,20 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
         roundsData.map(async (round) => {
           try {
             const pairings = await apiClient.getRoundPairings(round.id);
-            const live = pairings.filter((pairing) => pairing.status === 'in_progress');
-
-            return Promise.all(
-              live.map(async (pairing) => {
+            // Include pairings where any match is in progress. We don't rely on
+            // pairing.status because handlers may not have updated it yet.
+            const enriched = await Promise.all(
+              pairings.map(async (pairing) => {
                 try {
                   const matches = await apiClient.getPairingMatches(pairing.id);
+                  const inProgressMatches = matches.filter((m) => m.status === 'in_progress');
+
+                  if (inProgressMatches.length === 0) {
+                    return null;
+                  }
+
                   const matchResults = await Promise.all(
-                    matches.map(async (match) => {
+                    inProgressMatches.map(async (match) => {
                       try {
                         const matchScores = await apiClient.getMatchScores(match.id);
                         return {
@@ -215,15 +233,17 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
                   return {
                     ...pairing,
                     round,
-                    matches,
+                    matches: inProgressMatches,
                     matchResults
-                  };
+                  } as PairingWithResults;
                 } catch (err) {
                   console.warn('Error loading pairing matches:', pairing.id, err);
-                  return { ...pairing, round };
+                  return null;
                 }
               })
             );
+
+            return enriched;
           } catch (err) {
             console.warn('Error loading round pairings:', round.id, err);
             return [] as PairingWithResults[];
@@ -231,7 +251,9 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
         })
       );
 
-      const live = pairingsByRound.flat().sort((a, b) => {
+      // pairingsByRound is [][](PairingWithResults|null) - normalize by flattening two levels
+      const live = pairingsByRound.flat().flat().filter((p) => p !== null) as PairingWithResults[];
+      live.sort((a, b) => {
         const roundDiff = (b.round?.round_number || 0) - (a.round?.round_number || 0);
         if (roundDiff !== 0) {
           return roundDiff;
@@ -1019,7 +1041,7 @@ const CompletedMatchesView = ({
         </div>
       ) : pairings.length === 0 ? (
         <div className="p-8 text-center bg-white rounded-lg shadow">
-          <p className="text-gray-600">No completed pairings yet.</p>
+          <p className="text-gray-600">No completed matches yet.</p>
         </div>
       ) : (
         <div className="space-y-10">
@@ -1080,7 +1102,7 @@ const LiveMatchesView = ({
         </div>
       ) : pairings.length === 0 ? (
         <div className="p-8 text-center bg-white rounded-lg shadow">
-          <p className="text-gray-600">No live pairings yet.</p>
+          <p className="text-gray-600">No live matches yet.</p>
         </div>
       ) : (
         <div className="space-y-10">

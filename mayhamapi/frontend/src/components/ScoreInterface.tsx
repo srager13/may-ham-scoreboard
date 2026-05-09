@@ -227,9 +227,18 @@ const ScoreInterface: React.FC = () => {
       };
       
       setSelectedPairing(updatedPairing);
-      
+
       // Initialize holeScores with existing scores for all holes
       setHoleScores(scoresMap);
+
+      // Automatically infer and update pairing & match statuses based on loaded scores
+      try {
+        await updatePairingStatusBasedOnScores(updatedPairing, {});
+        await updateMatchStatuses(updatedPairing);
+      } catch (err) {
+        // Non-fatal: keep UI working even if status updates fail
+        console.warn('Status inference after loading scores failed:', err);
+      }
       
       // Determine current hole (first hole without scores)
       const completedHoles = new Set(Object.keys(scoresMap).map(h => parseInt(h)));
@@ -265,6 +274,27 @@ const ScoreInterface: React.FC = () => {
       }
     }));
   };
+
+  // Debounced inference: when local holeScores change, if pairing is not_started and any local score exists
+  // transition pairing to in_progress (after short debounce) to reflect immediate local edits.
+  useEffect(() => {
+    if (!selectedPairing) return;
+    // Only auto-start if pairing currently not_started
+    if (selectedPairing.status !== 'not_started') return;
+
+    const anyLocalScores = Object.keys(holeScores).some(h => Object.values(holeScores[parseInt(h, 10)] || {}).some(v => v > 0));
+    if (!anyLocalScores) return;
+
+    const t = setTimeout(async () => {
+      try {
+        await updatePairingStatusBasedOnScores(selectedPairing, holeScores);
+      } catch (err) {
+        console.warn('Debounced pairing status update failed:', err);
+      }
+    }, 500);
+
+    return () => clearTimeout(t);
+  }, [holeScores, selectedPairing]);
 
   // Helper function to find which match applies to a specific hole
   const getMatchForHole = (pairing: PairingWithScores | null, holeNumber: number): Match | undefined => {
@@ -356,6 +386,230 @@ const ScoreInterface: React.FC = () => {
     return true; // All players have scores
   };
 
+  // Determine hole count for a pairing (use course holes if available, otherwise default to 18)
+  const getHoleCount = (pairing: PairingWithScores) => {
+    return pairing.holes && pairing.holes.length > 0 ? pairing.holes.length : 18;
+  };
+
+  // Merge pairing.scores (from server) with local holeScores (unsaved edits) into a single map
+  const mergeScores = (
+    pairing: PairingWithScores,
+    localScores: Record<number, Record<string, number>> = {}
+  ): Record<number, Record<string, number>> => {
+    const merged: Record<number, Record<string, number>> = {};
+    // Start with server scores
+    if (pairing.scores) {
+      Object.keys(pairing.scores).forEach(k => {
+        const hn = parseInt(k as any, 10);
+        merged[hn] = { ...(pairing.scores as any)[k] };
+      });
+    }
+    // Overlay local unsaved scores
+    Object.keys(localScores).forEach(k => {
+      const hn = parseInt(k as any, 10);
+      merged[hn] = { ...(merged[hn] || {}), ...(localScores as any)[k] };
+    });
+    return merged;
+  };
+
+  // Check whether any scores exist in the merged map
+  const mergedHasAnyScores = (merged: Record<number, Record<string, number>>) => {
+    return Object.keys(merged).some(h => Object.values(merged[parseInt(h, 10)] || {}).some(v => v > 0));
+  };
+  // Helper: get user IDs for match players (fallback to pairing players)
+  const getMatchPlayerUserIds = (match: Match | undefined, pairing: PairingWithScores, teamId?: string) => {
+    if (!match) return [] as string[];
+
+    // Prefer match.players if available
+    // match.players may be present from GetMatchesByPairing or matchResults match_players
+    const mpAny = (match as any).players || (match as any).match_players;
+    if (Array.isArray(mpAny) && mpAny.length > 0) {
+      const filtered = (mpAny as any[])
+        .filter(p => (teamId ? p.team_id === teamId : true))
+        .map(p => p.user_id);
+      if (filtered.length > 0) return filtered;
+    }
+
+    // Fallback to pairing.players
+    return (pairing.players || [])
+      .filter(p => (teamId ? p.team_id === teamId : true))
+      .map(p => p.user_id);
+  };
+
+  // Helper: check if a specific user has a score for a hole (consider strokes and stableford points)
+  const hasUserScoreForHole = (pairing: PairingWithScores, merged: Record<number, Record<string, number>>, hole: number, userId: string) => {
+    const holeMap = merged[hole];
+    if (holeMap && holeMap[userId] && holeMap[userId] > 0) return true;
+
+    // Check stablefordPoints map as a fallback (stableford tournaments)
+    if (pairing.stablefordPoints && pairing.stablefordPoints[hole] && pairing.stablefordPoints[hole][userId] && pairing.stablefordPoints[hole][userId] > 0) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Check whether the pairing is fully scored (format-aware)
+  // For each hole, ensure that every match covering that hole has the required inputs:
+  // - Individual inputs: every match player must have a score
+  // - Team inputs: at least one teammate from each team must have a score (the UI uses the first teammate as representative)
+  const pairingIsFullyScored = (
+    pairing: PairingWithScores,
+    merged: Record<number, Record<string, number>>
+  ) => {
+    const holeCount = getHoleCount(pairing);
+    const players = pairing.players || [];
+    if (players.length === 0) return false;
+
+    for (let h = 1; h <= holeCount; h++) {
+      const matchesForHole = getAllMatchesForHole(pairing, h);
+
+      // If there are no matches defined for this pairing, fall back to requiring every pairing player to have a score
+      if (!matchesForHole || matchesForHole.length === 0) {
+        for (const p of players) {
+          if (!hasUserScoreForHole(pairing, merged, h, p.user_id)) return false;
+        }
+        continue;
+      }
+
+      // For each match covering this hole, ensure required scores exist
+      for (const m of matchesForHole) {
+        const format = (m as any).format as MatchFormat | undefined;
+
+        if (format && format.score_input_type === 'team') {
+          // Team-based input: require at least one score for each side
+          const team1UserIds = getMatchPlayerUserIds(m, pairing, m.team1_id);
+          const team2UserIds = getMatchPlayerUserIds(m, pairing, m.team2_id);
+
+          // If we couldn't resolve team players, fall back to requiring pairing players with matching team ids
+          if (team1UserIds.length === 0 || team2UserIds.length === 0) {
+            const t1 = (pairing.players || []).filter(p => p.team_id === m.team1_id).map(p => p.user_id);
+            const t2 = (pairing.players || []).filter(p => p.team_id === m.team2_id).map(p => p.user_id);
+            if (t1.length === 0 || t2.length === 0) return false;
+            if (!t1.some(uid => hasUserScoreForHole(pairing, merged, h, uid))) return false;
+            if (!t2.some(uid => hasUserScoreForHole(pairing, merged, h, uid))) return false;
+          } else {
+            if (!team1UserIds.some(uid => hasUserScoreForHole(pairing, merged, h, uid))) return false;
+            if (!team2UserIds.some(uid => hasUserScoreForHole(pairing, merged, h, uid))) return false;
+          }
+        } else {
+          // Individual input: require every match player to have a score
+          const expectedUserIds = getMatchPlayerUserIds(m, pairing);
+          if (expectedUserIds.length === 0) {
+            // If match has no explicit players, conservatively require all pairing players
+            for (const p of players) {
+              if (!hasUserScoreForHole(pairing, merged, h, p.user_id)) return false;
+            }
+          } else {
+            for (const uid of expectedUserIds) {
+              if (!hasUserScoreForHole(pairing, merged, h, uid)) return false;
+            }
+          }
+        }
+      }
+    }
+
+    return true;
+  };
+
+  // Update pairing status automatically based on scores (not_started -> in_progress -> completed)
+  const updatePairingStatusBasedOnScores = async (
+    pairing: PairingWithScores,
+    localScores: Record<number, Record<string, number>> = {}
+  ) => {
+    try {
+      const merged = mergeScores(pairing, localScores);
+      const anyScores = mergedHasAnyScores(merged);
+      const fullyScored = pairingIsFullyScored(pairing, merged);
+
+      let desiredStatus: string = 'not_started';
+      if (fullyScored) desiredStatus = 'completed';
+      else if (anyScores) desiredStatus = 'in_progress';
+
+      if (desiredStatus !== pairing.status) {
+        try {
+          await apiClient.updatePairingStatus(pairing.id, desiredStatus);
+          // Update local list and selected pairing
+          setPairings(prev => prev.map(p => (p.id === pairing.id ? { ...p, status: desiredStatus } : p)));
+          if (selectedPairing?.id === pairing.id) {
+            setSelectedPairing(prev => (prev ? { ...prev, status: desiredStatus } : prev));
+          }
+        } catch (err) {
+          console.warn('Failed to update pairing status:', err);
+        }
+      }
+    } catch (err) {
+      console.warn('Error determining pairing status:', err);
+    }
+  };
+
+  // Infer expected match status based on hole_results
+  const inferMatchStatus = (match: MatchWithResults, pairing: PairingWithScores) => {
+    const holeResults = match.hole_results || [];
+    const uniqueHoles = new Set(holeResults.map(hr => hr.hole_number)).size;
+
+    let expectedCount = 0;
+    if (typeof match.start_hole === 'number' && typeof match.end_hole === 'number') {
+      expectedCount = match.end_hole - match.start_hole + 1;
+    } else if (match.holes && match.holes > 0) {
+      expectedCount = match.holes;
+    } else {
+      expectedCount = getHoleCount(pairing);
+    }
+
+    if (uniqueHoles === 0) return 'not_started';
+    if (uniqueHoles >= expectedCount) return 'completed';
+    return 'in_progress';
+  };
+
+  // Update matches' statuses based on hole results in matchResults
+  const updateMatchStatuses = async (pairing: PairingWithScores) => {
+    if (!pairing.matchResults || pairing.matchResults.length === 0) return;
+
+    const updates: Array<{ matchId: string; desired: string }> = [];
+    for (const m of pairing.matchResults) {
+      try {
+        const desired = inferMatchStatus(m, pairing);
+        if (desired !== m.status) {
+          updates.push({ matchId: m.id, desired });
+        }
+      } catch (err) {
+        console.warn('Error inferring match status for', m.id, err);
+      }
+    }
+
+    if (updates.length === 0) return;
+
+    try {
+      await Promise.all(updates.map(u => apiClient.updateMatchStatus(u.matchId, u.desired)));
+
+      // Update local copies
+      setSelectedPairing(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          matchResults: prev.matchResults?.map(mr => {
+            const u = updates.find(x => x.matchId === mr.id);
+            return u ? { ...mr, status: u.desired } as MatchWithResults : mr;
+          })
+        };
+      });
+
+      setPairings(prev => prev.map(p => {
+        if (p.id !== pairing.id) return p;
+        return {
+          ...p,
+          matches: p.matches?.map(m => {
+            const u = updates.find(x => x.matchId === m.id);
+            return u ? { ...m, status: u.desired } : m;
+          })
+        } as PairingWithScores;
+      }));
+    } catch (err) {
+      console.warn('Failed to update match statuses:', err);
+    }
+  };
+
   // Handle Next button click with auto-submit if all scores are present
   const handleNextHole = async () => {
     if (!selectedPairing) return;
@@ -382,42 +636,56 @@ const ScoreInterface: React.FC = () => {
             strokes: strokes
           }));
 
-        if (scoresArray.length > 0) {
-          console.log(`Auto-submitting hole ${currentHole}:`, scoresArray);
-          await apiClient.submitPairingScores(selectedPairing.id, {
-            hole_number: currentHole,
-            scores: scoresArray
-          });
+          if (scoresArray.length > 0) {
+            console.log(`Auto-submitting hole ${currentHole}:`, scoresArray);
+            await apiClient.submitPairingScores(selectedPairing.id, {
+              hole_number: currentHole,
+              scores: scoresArray
+            });
 
-          // Reload match results to reflect calculated scoring
-          if (selectedPairing.matches && selectedPairing.matches.length > 0) {
-            try {
-              const updatedMatchResults = await Promise.all(
-                selectedPairing.matches.map(async (match) => {
-                  try {
-                    const matchScores = await apiClient.getMatchScores(match.id);
-                    const matchPlayers = await apiClient.getMatchPlayers(match.id);
-                    return {
-                      ...match,
-                      hole_results: matchScores.hole_results || [],
-                      match_players: matchPlayers
-                    };
-                  } catch (err) {
-                    console.warn('Error loading results for match:', match.id, err);
-                    return match;
-                  }
-                })
-              );
+            // Reload match results to reflect calculated scoring
+            if (selectedPairing.matches && selectedPairing.matches.length > 0) {
+              try {
+                const updatedMatchResults = await Promise.all(
+                  selectedPairing.matches.map(async (match) => {
+                    try {
+                      const matchScores = await apiClient.getMatchScores(match.id);
+                      const matchPlayers = await apiClient.getMatchPlayers(match.id);
+                      return {
+                        ...match,
+                        hole_results: matchScores.hole_results || [],
+                        match_players: matchPlayers
+                      };
+                    } catch (err) {
+                      console.warn('Error loading results for match:', match.id, err);
+                      return match;
+                    }
+                  })
+                );
 
-              setSelectedPairing(prev => ({
-                ...prev!,
-                matchResults: updatedMatchResults
-              }));
-            } catch (err) {
-              console.warn('Error reloading match results:', err);
+                // Update local pairing with new scores and match results and then infer statuses
+                const updatedPairing = {
+                  ...selectedPairing,
+                  scores: {
+                    ...selectedPairing.scores,
+                    [currentHole]: holeData
+                  },
+                  matchResults: updatedMatchResults
+                } as PairingWithScores;
+
+                setSelectedPairing(updatedPairing);
+
+                try {
+                  await updatePairingStatusBasedOnScores(updatedPairing);
+                  await updateMatchStatuses(updatedPairing);
+                } catch (err) {
+                  console.warn('Failed to update statuses after auto-submit (next):', err);
+                }
+              } catch (err) {
+                console.warn('Error reloading match results:', err);
+              }
             }
           }
-        }
       } catch (err) {
         console.error('Error auto-submitting hole scores:', err);
         // Don't show error to user, just proceed to next hole
@@ -499,23 +767,33 @@ const ScoreInterface: React.FC = () => {
                 strokes: strokes
               }));
 
-            if (scoresArray.length > 0) {
-              console.log(`Auto-submitting hole ${holeNum}:`, scoresArray);
-              await apiClient.submitPairingScores(selectedPairing.id, {
-                hole_number: holeNum,
-                scores: scoresArray
-              });
+              if (scoresArray.length > 0) {
+                console.log(`Auto-submitting hole ${holeNum}:`, scoresArray);
+                await apiClient.submitPairingScores(selectedPairing.id, {
+                  hole_number: holeNum,
+                  scores: scoresArray
+                });
+              }
             }
-          }
-          
-          // Update local state with submitted scores
-          setSelectedPairing(prev => ({
-            ...prev!,
-            scores: {
-              ...prev!.scores,
-              ...holeScores
+            
+            // Update local state with submitted scores
+            const updatedPairingAfterSubmit = {
+              ...selectedPairing,
+              scores: {
+                ...selectedPairing.scores,
+                ...holeScores
+              }
+            } as PairingWithScores;
+
+            setSelectedPairing(updatedPairingAfterSubmit);
+
+            // Infer/update match statuses now that we have new scores
+            try {
+              await updatePairingStatusBasedOnScores(updatedPairingAfterSubmit);
+              await updateMatchStatuses(updatedPairingAfterSubmit);
+            } catch (err) {
+              console.warn('Failed to update statuses after auto-submit (completePairing):', err);
             }
-          }));
           
           console.log('Auto-submit completed successfully');
         }
@@ -606,38 +884,48 @@ const ScoreInterface: React.FC = () => {
         }
       }
       
-      // Reload match results from backend to reflect calculated scoring
-      setLoadingResults(true);
-      try {
-        const updatedMatchResults = await Promise.all(
-          selectedPairing.matches?.map(async (match) => {
-            try {
-              const matchScores = await apiClient.getMatchScores(match.id);
-              const matchPlayers = await apiClient.getMatchPlayers(match.id);
-              return {
-                ...match,
-                hole_results: matchScores.hole_results || [],
-                match_players: matchPlayers
-              };
-            } catch (err) {
-              console.warn('Error loading results for match:', match.id, err);
-              return match;
-            }
-          }) || []
-        );
-        
-        // Update local state with reloaded match results and scores
-        setSelectedPairing(prev => ({
-          ...prev!,
-          scores: {
-            ...prev!.scores,
-            ...holeScores
-          },
-          matchResults: updatedMatchResults
-        }));
-      } finally {
-        setLoadingResults(false);
-      }
+        // Reload match results from backend to reflect calculated scoring
+        setLoadingResults(true);
+        try {
+          const updatedMatchResults = await Promise.all(
+            selectedPairing.matches?.map(async (match) => {
+              try {
+                const matchScores = await apiClient.getMatchScores(match.id);
+                const matchPlayers = await apiClient.getMatchPlayers(match.id);
+                return {
+                  ...match,
+                  hole_results: matchScores.hole_results || [],
+                  match_players: matchPlayers
+                };
+              } catch (err) {
+                console.warn('Error loading results for match:', match.id, err);
+                return match;
+              }
+            }) || []
+          );
+
+          // Update local state with reloaded match results and scores
+          const updatedPairingAfterSubmit = {
+            ...selectedPairing,
+            scores: {
+              ...selectedPairing.scores,
+              ...holeScores
+            },
+            matchResults: updatedMatchResults
+          } as PairingWithScores;
+
+          setSelectedPairing(updatedPairingAfterSubmit);
+
+          // Infer/update pairing + match statuses after submission
+          try {
+            await updatePairingStatusBasedOnScores(updatedPairingAfterSubmit);
+            await updateMatchStatuses(updatedPairingAfterSubmit);
+          } catch (err) {
+            console.warn('Failed to update statuses after submitHoleScores:', err);
+          }
+        } finally {
+          setLoadingResults(false);
+        }
 
       // Advance to next hole after successful submission
       const updatedScores = {
@@ -1854,32 +2142,11 @@ const ScoreInterface: React.FC = () => {
           {viewMode === 'scorecard' && (
             <div className="bg-white shadow-sm rounded-lg p-6">
 
-          {/* Start Pairing Section for not_started pairings */}
-          {selectedPairing.status === 'not_started' && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-medium text-blue-900 mb-2">
-                    Pairing {selectedPairing.pairing_number} - Ready to Start
-                  </h3>
-                  <p className="text-blue-700">
-                    Players: {(selectedPairing.players || []).map(p => p.user?.name).join(', ')}
-                  </p>
-                  <p className="text-sm text-blue-600 mt-1">
-                    Click "Start Round" to begin entering scores for this pairing.
-                  </p>
-                </div>
-                <button
-                  onClick={() => startPairing(selectedPairing.id)}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
-                >
-                  Start Round
-                </button>
-              </div>
-            </div>
-          )}
-
-          {selectedPairing.status === 'in_progress' && (
+          {/* If pairing is not completed, show the full scorecard in entry mode.
+              We removed the explicit "Start Round" gating UI so users may begin entering
+              scores while the pairing.status is still 'not_started'. The server remains
+              authoritative and will persist an inferred status based on saved scores. */}
+          {selectedPairing.status !== 'completed' && (
             <>
               {/* Full Scorecard Table - Entry Mode */}
               <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden shadow-lg">
