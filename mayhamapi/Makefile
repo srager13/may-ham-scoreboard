@@ -77,6 +77,22 @@ setup-test-db:
 		 exit 1)
 	@echo "PostgreSQL connection successful!"
 
+# Show DBs, roles and recent migrations for mayham databases
+.PHONY: db-info
+db-info:
+	@echo "Databases and owners:"
+	@sudo -u postgres psql -c "SELECT datname, pg_catalog.pg_get_userbyid(datdba) AS owner FROM pg_database WHERE datistemplate = false;"
+	@echo
+	@echo "Roles (pg_roles):"
+	@sudo -u postgres psql -c "\du"
+	@echo
+	@echo "Recent migrations in mayham_dev (if any):"
+	@sudo -u postgres psql -d mayham_dev -c "SELECT filename, applied_at FROM schema_migrations ORDER BY applied_at DESC LIMIT 20;" || true
+	@echo
+	@echo "Recent migrations in mayham_prod (if any):"
+	@sudo -u postgres psql -d mayham_prod -c "SELECT filename, applied_at FROM schema_migrations ORDER BY applied_at DESC LIMIT 20;" || true
+
+
 # Help
 help:
 	@echo "Available commands:"
