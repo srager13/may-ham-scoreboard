@@ -22,6 +22,18 @@ Group=golftournament-dev
 WorkingDirectory=/root/may-ham-scoreboard/mayhamapi
 EnvironmentFile=/root/may-ham-scoreboard/mayhamapi/.env.development
 ExecStartPre=/bin/mkdir -p /tmp/golftournament-dev
+# Execute pre-start commands as root so they can create and chown system
+# directories. PermissionsStartOnly=true ensures the main process still
+# runs as the unprivileged service user.
+PermissionsStartOnly=true
+# Ensure the persistent upload directory exists and has correct ownership
+# and permissions. Use portable mkdir/chown/chmod sequence. The chown and
+# chmod are prefixed with '-' so failures won't prevent the service from
+# starting (useful in environments where ownership adjustment may be
+# unnecessary or not permitted).
+ExecStartPre=/bin/mkdir -p /srv/golf-api-dev/uploads
+ExecStartPre=-/bin/chown -R golftournament-dev:golftournament-dev /srv/golf-api-dev/uploads
+ExecStartPre=-/bin/chmod -R 0755 /srv/golf-api-dev/uploads
 ExecStart=/root/go/bin/air
 
 # Security hardening
@@ -29,7 +41,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 # ProtectHome=true - DISABLED: dev services need access to /root/may-ham-scoreboard
-ReadWritePaths=/var/log/golf-tournament-dev /var/backups/golf-tournament-dev
+ReadWritePaths=/var/log/golf-tournament-dev /var/backups/golf-tournament-dev /srv/golf-api-dev/uploads
 RuntimeDirectory=golf-tournament-dev
 RuntimeDirectoryMode=0755
 

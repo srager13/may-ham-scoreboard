@@ -21,14 +21,21 @@ User=golftournament
 Group=golftournament
 WorkingDirectory=/opt/golf-tournament/backend
 EnvironmentFile=/opt/golf-tournament/backend/.env.production
-ExecStart=/opt/golf-tournament/backend/mayhamapi
+  # Create uploads directory before starting the service. PermissionsStartOnly
+  # causes ExecStartPre commands to run as root while the main process runs as
+  # the specified User/Group.
+  PermissionsStartOnly=true
+  ExecStartPre=/bin/mkdir -p /srv/golf-api/uploads
+  ExecStartPre=-/bin/chown -R golftournament:golftournament /srv/golf-api/uploads
+  ExecStartPre=-/bin/chmod -R 0755 /srv/golf-api/uploads
+  ExecStart=/opt/golf-tournament/backend/mayhamapi
 
 # Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/log/golf-tournament /var/backups/golf-tournament
+ReadWritePaths=/var/log/golf-tournament /var/backups/golf-tournament /srv/golf-api/uploads
 RuntimeDirectory=golf-tournament
 RuntimeDirectoryMode=0755
 
