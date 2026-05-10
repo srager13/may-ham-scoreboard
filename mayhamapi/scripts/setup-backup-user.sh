@@ -37,7 +37,9 @@ sudo -u postgres psql -c "GRANT CONNECT ON DATABASE \"$DB_NAME\" TO \"$BACKUP_DB
 sudo -u postgres psql -d "$DB_NAME" -c "GRANT USAGE ON SCHEMA public TO \"$BACKUP_DB_USER\";"
 sudo -u postgres psql -d "$DB_NAME" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"$BACKUP_DB_USER\";"
 sudo -u postgres psql -d "$DB_NAME" -c "GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO \"$BACKUP_DB_USER\";"
-sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO \"$BACKUP_DB_USER\";"
-sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO \"$BACKUP_DB_USER\";"
+# Ensure future objects created by the application DB user have SELECT granted
+# Use FOR ROLE so default privileges apply to objects created by $DB_USER
+sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES FOR ROLE \"$DB_USER\" IN SCHEMA public GRANT SELECT ON TABLES TO \"$BACKUP_DB_USER\";"
+sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES FOR ROLE \"$DB_USER\" IN SCHEMA public GRANT SELECT ON SEQUENCES TO \"$BACKUP_DB_USER\";"
 
 log_success "Backup user '$BACKUP_DB_USER' is configured"
