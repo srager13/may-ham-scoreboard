@@ -9,8 +9,11 @@ env_files = [".env.development"]
 
 [build]
   args_bin = []
-  entrypoint = "./tmp/main"
-  cmd = "go build -buildvcs=false -o ./tmp/main ."
+  # Build output is placed outside the repo to avoid polluting the workspace
+  # and interfering with go modules. Use an absolute path in /tmp which is
+  # prepared by the systemd unit for the dev service.
+  entrypoint = "/tmp/golftournament-dev/main"
+  cmd = "go build -buildvcs=false -o /tmp/golftournament-dev/main ."
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "frontend", "static", "system-service", "nginx-proxy-config"]
   exclude_file = []
