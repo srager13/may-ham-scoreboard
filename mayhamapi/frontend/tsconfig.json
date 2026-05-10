@@ -22,5 +22,11 @@
     "noImplicitAny": false
   },
   "include": ["src"],
+  "exclude": [
+    "**/__tests__/**",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "node_modules"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
