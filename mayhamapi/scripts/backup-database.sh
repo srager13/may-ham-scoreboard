@@ -46,6 +46,17 @@ log_info "Backing up database: $DB_NAME"
 log_info "Using backup user: $BACKUP_USER"
 log_info "Backup file: $BACKUP_FILE_GZ"
 
+# Ensure backup user has necessary SELECT privileges (if we have sudo/postgres access)
+if command -v sudo >/dev/null 2>&1; then
+    log_info "Ensuring backup user '$BACKUP_USER' has SELECT privileges on public schema"
+    # Best-effort grants; ignore failures so backup can still attempt with provided credentials
+    sudo -u postgres psql -d "$DB_NAME" -c "GRANT CONNECT ON DATABASE \"$DB_NAME\" TO \"$BACKUP_USER\";" >/dev/null 2>&1 || true
+    sudo -u postgres psql -d "$DB_NAME" -c "GRANT USAGE ON SCHEMA public TO \"$BACKUP_USER\";" >/dev/null 2>&1 || true
+    sudo -u postgres psql -d "$DB_NAME" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"$BACKUP_USER\";" >/dev/null 2>&1 || true
+    sudo -u postgres psql -d "$DB_NAME" -c "GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO \"$BACKUP_USER\";" >/dev/null 2>&1 || true
+    sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO \"$BACKUP_USER\";" >/dev/null 2>&1 || true
+fi
+
 # Create backup using the selected credentials
 PGPASSWORD="$BACKUP_PASS" pg_dump \
     -h "$DB_HOST" \
@@ -54,7 +65,29 @@ PGPASSWORD="$BACKUP_PASS" pg_dump \
     -F plain \
     --no-owner \
     --no-acl \
-    > "$BACKUP_FILE"
+    > "$BACKUP_FILE" 2> /tmp/pg_dump.err
+
+if [ $? -ne 0 ]; then
+    log_warning "pg_dump as '$BACKUP_USER' failed. Inspecting error and attempting fallback if possible."
+    cat /tmp/pg_dump.err | sed -n '1,200p'
+    rm -f /tmp/pg_dump.err
+
+    # Try fallback: run pg_dump as the local postgres superuser (useful for local deployments)
+    if command -v sudo >/dev/null 2>&1; then
+        log_info "Attempting backup as 'postgres' superuser using sudo -u postgres pg_dump"
+        if sudo -u postgres pg_dump -h "$DB_HOST" -d "$DB_NAME" -F plain --no-owner --no-acl > "$BACKUP_FILE" 2>/dev/null; then
+            log_success "Backup created successfully as 'postgres' user (fallback)"
+        else
+            log_error "Database backup failed (both backup user and postgres superuser attempts)"
+            rm -f "$BACKUP_FILE"
+            exit 1
+        fi
+    else
+        log_error "Database backup failed and no sudo/postgres fallback available"
+        rm -f "$BACKUP_FILE"
+        exit 1
+    fi
+fi
 
 if [ $? -ne 0 ]; then
     log_error "Database backup failed"
