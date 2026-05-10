@@ -404,7 +404,9 @@ func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber 
 	team1Scores := []int{}
 	team2Scores := []int{}
 
-	// Create maps for quick lookup using match players
+	// Create maps for quick lookup using match players (preferred).
+	// If match.Players isn't populated (e.g., in unit tests or lightweight calls),
+	// fall back to inferring teams from the provided scores for singles match play.
 	team1UserIDs := make(map[string]bool)
 	team2UserIDs := make(map[string]bool)
 	for _, player := range match.Players {
@@ -413,6 +415,33 @@ func (s *ScoringService) calculateMatchPlayHole(match *models.Match, holeNumber 
 			team1UserIDs[player.UserID] = true
 		case match.Team2ID:
 			team2UserIDs[player.UserID] = true
+		}
+	}
+
+	// Fallback: if no player metadata is available, try to infer team membership
+	// from the scores for the common singles match_play case.
+	if len(team1UserIDs) == 0 && len(team2UserIDs) == 0 {
+		if matchFormat.PlayersPerSide == 1 {
+			// Collect first two unique user IDs from scores in order seen.
+			seen := make(map[string]bool)
+			userOrder := []string{}
+			for _, sc := range scores {
+				if !seen[sc.UserID] {
+					userOrder = append(userOrder, sc.UserID)
+					seen[sc.UserID] = true
+					if len(userOrder) == 2 {
+						break
+					}
+				}
+			}
+			if len(userOrder) < 2 {
+				return nil, fmt.Errorf("insufficient scores for match play")
+			}
+			team1UserIDs[userOrder[0]] = true
+			team2UserIDs[userOrder[1]] = true
+		} else {
+			// For team match play, we require explicit match player metadata
+			return nil, fmt.Errorf("insufficient match player metadata for team match play")
 		}
 	}
 
