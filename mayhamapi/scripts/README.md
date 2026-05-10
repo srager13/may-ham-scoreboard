@@ -149,6 +149,27 @@ sudo ./scripts/install-services.sh
 ./scripts/deploy.sh v1.0.0
 ```
 
+### File uploads (UPLOAD_DIR)
+
+The application saves runtime-uploaded files (team logos) to a configurable directory. By default this is `./uploads/team_logos` under the backend working directory. The server serves those files at the public path `/static/team_logos/<file>`.
+
+If you need to change the uploads location for your environment, set the `UPLOAD_DIR` environment variable in your `.env.production` (or `.env.development`) file. Example:
+
+```bash
+# .env.production
+UPLOAD_DIR=/opt/golf-tournament/uploads/team_logos
+```
+
+When upgrading from older deployments that stored uploads under `static/team_logos`, move files to the configured `UPLOAD_DIR` (backup first):
+
+```bash
+sudo mkdir -p /opt/golf-tournament/backend/uploads/team_logos
+sudo cp -a /opt/golf-tournament/backend/static/team_logos /tmp/team_logos_backup || true
+sudo mv /opt/golf-tournament/backend/static/team_logos/* /opt/golf-tournament/backend/uploads/team_logos/ || true
+sudo chown -R golftournament:golftournament /opt/golf-tournament/backend/uploads/team_logos
+```
+
+
 ### Daily Development
 
 ```bash

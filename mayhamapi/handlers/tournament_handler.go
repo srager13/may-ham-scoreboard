@@ -18,11 +18,12 @@ import (
 )
 
 type TournamentHandler struct {
-	repo *repository.Repository
+	repo      *repository.Repository
+	uploadDir string
 }
 
-func NewTournamentHandler(repo *repository.Repository) *TournamentHandler {
-	return &TournamentHandler{repo: repo}
+func NewTournamentHandler(repo *repository.Repository, uploadDir string) *TournamentHandler {
+	return &TournamentHandler{repo: repo, uploadDir: uploadDir}
 }
 
 // POST /api/v1/tournaments
@@ -576,8 +577,11 @@ func (h *TournamentHandler) UploadTeamLogo(c *gin.Context) {
 		return
 	}
 
-	// Ensure upload directory exists
-	uploadDir := "./static/team_logos"
+	// Ensure upload directory exists. Use the handler's configured uploadDir so
+	// the location is environment-configurable.
+	// Keep the public URL as /static/team_logos/<file> so DB entries and
+	// clients don't need to change.
+	uploadDir := h.uploadDir
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		log.Printf("UploadTeamLogo: team=%s failed to create upload dir %s: %v", teamID, uploadDir, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare upload directory"})
@@ -660,9 +664,9 @@ func (h *TournamentHandler) UploadTeamLogo(c *gin.Context) {
 }
 
 // GET /api/v1/debug/team-logos
-// Returns a JSON list of files under ./static/team_logos for quick verification
+// Returns a JSON list of files under ./uploads/team_logos for quick verification
 func (h *TournamentHandler) ListTeamLogos(c *gin.Context) {
-	uploadDir := "./static/team_logos"
+	uploadDir := h.uploadDir
 
 	entries, err := os.ReadDir(uploadDir)
 	if err != nil {

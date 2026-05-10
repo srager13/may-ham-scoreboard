@@ -3,6 +3,9 @@ package main
 import (
 	"log"
 	"os"
+	"os/user"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"mayhamapi/db"
@@ -58,14 +61,96 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(repo, mailer)
-	tournamentHandler := handlers.NewTournamentHandler(repo)
+	// Configure upload directory via environment (default to ./uploads/team_logos)
+	uploadDir := os.Getenv("UPLOAD_DIR")
+	if uploadDir == "" {
+		uploadDir = "./uploads/team_logos"
+	}
+
+	// Resolve to an absolute path for clarity in logs and to avoid surprises
+	resolvedUploadDir, err := filepath.Abs(uploadDir)
+	if err != nil {
+		log.Printf("Using upload dir %s (failed to resolve absolute path: %v)", uploadDir, err)
+		resolvedUploadDir = uploadDir
+	} else {
+		// Normalize with Clean
+		resolvedUploadDir = filepath.Clean(resolvedUploadDir)
+		log.Printf("Using upload dir: %s (resolved absolute path: %s)", uploadDir, resolvedUploadDir)
+	}
+
+	// Ensure the upload directory exists and has sensible permissions
+	if err := os.MkdirAll(resolvedUploadDir, 0755); err != nil {
+		log.Fatalf("Failed to create upload directory %s: %v", resolvedUploadDir, err)
+	}
+	if err := os.Chmod(resolvedUploadDir, 0755); err != nil {
+		log.Printf("Warning: failed to set permissions on upload dir %s: %v", resolvedUploadDir, err)
+	}
+
+	// Optional: set ownership if requested. Supports either numeric UID/GID via
+	// UPLOAD_DIR_UID and UPLOAD_DIR_GID, or a username (optionally with group)
+	// via UPLOAD_DIR_OWNER (format: user or user:group).
+	if uidStr := os.Getenv("UPLOAD_DIR_UID"); uidStr != "" {
+		if gidStr := os.Getenv("UPLOAD_DIR_GID"); gidStr != "" {
+			if uid, err := strconv.Atoi(uidStr); err == nil {
+				if gid, err := strconv.Atoi(gidStr); err == nil {
+					if err := os.Chown(resolvedUploadDir, uid, gid); err != nil {
+						log.Printf("Warning: failed to chown %s to %d:%d: %v", resolvedUploadDir, uid, gid, err)
+					} else {
+						log.Printf("Set ownership of upload dir %s to %d:%d", resolvedUploadDir, uid, gid)
+					}
+				}
+			}
+		}
+	} else if owner := os.Getenv("UPLOAD_DIR_OWNER"); owner != "" {
+		// owner may be "user" or "user:group"
+		var uid, gid int
+		var uidSet, gidSet bool
+		if strings.Contains(owner, ":") {
+			parts := strings.SplitN(owner, ":", 2)
+			uStr, gStr := parts[0], parts[1]
+			if u, err := user.Lookup(uStr); err == nil {
+				if uID, err := strconv.Atoi(u.Uid); err == nil {
+					uid = uID
+					uidSet = true
+				}
+			}
+			if g, err := user.LookupGroup(gStr); err == nil {
+				if gID, err := strconv.Atoi(g.Gid); err == nil {
+					gid = gID
+					gidSet = true
+				}
+			}
+		} else {
+			if u, err := user.Lookup(owner); err == nil {
+				if uID, err := strconv.Atoi(u.Uid); err == nil {
+					uid = uID
+					uidSet = true
+				}
+				if gID, err := strconv.Atoi(u.Gid); err == nil {
+					gid = gID
+					gidSet = true
+				}
+			}
+		}
+		if uidSet && gidSet {
+			if err := os.Chown(resolvedUploadDir, uid, gid); err != nil {
+				log.Printf("Warning: failed to chown %s to %s: %v", resolvedUploadDir, owner, err)
+			} else {
+				log.Printf("Set ownership of upload dir %s to %s", resolvedUploadDir, owner)
+			}
+		} else {
+			log.Printf("UPLOAD_DIR_OWNER=%s provided but could not resolve to numeric uid:gid; skipping chown", owner)
+		}
+	}
+
+	tournamentHandler := handlers.NewTournamentHandler(repo, resolvedUploadDir)
 	scoringHandler := handlers.NewScoringHandler(repo, scoringService)
 	groupHandler := handlers.NewGroupHandler(repo)
 	leaderboardHandler := handlers.NewLeaderboardHandler(repo)
 	golfCourseHandler := handlers.NewGolfCourseHandler(repo)
 
-	// Setup router
-	router := setupRouter(authHandler, tournamentHandler, scoringHandler, groupHandler, leaderboardHandler, golfCourseHandler, wsHub)
+	// Setup router (pass resolved upload dir so the static handler serves the same path)
+	router := setupRouter(authHandler, tournamentHandler, scoringHandler, groupHandler, leaderboardHandler, golfCourseHandler, wsHub, resolvedUploadDir)
 
 	// Start server
 	port := os.Getenv("PORT")
@@ -87,6 +172,7 @@ func setupRouter(
 	leaderboardHandler *handlers.LeaderboardHandler,
 	golfCourseHandler *handlers.GolfCourseHandler,
 	wsHub *websocket.Hub,
+	uploadDir string,
 ) *gin.Engine {
 	r := gin.Default()
 
@@ -102,8 +188,9 @@ func setupRouter(
 	r.StaticFile("/favicon.ico", "./static/favicon.ico")
 
 	// Serve uploaded team logos
-	// Stored on filesystem at ./static/team_logos and exposed at /static/team_logos
-	r.Static("/static/team_logos", "./static/team_logos")
+	// Expose the configured upload directory at the public path
+	// /static/team_logos so existing DB entries and clients continue to work.
+	r.Static("/static/team_logos", uploadDir)
 	// Serve index.html at root
 	r.GET("/", func(c *gin.Context) {
 		c.File("./static/index.html")

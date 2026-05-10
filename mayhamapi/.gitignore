@@ -4,6 +4,7 @@ mayhamapi-*
 mayhamapi.test
 tmp/
 static/
+uploads/
 *.key
 *.pem
 backups/

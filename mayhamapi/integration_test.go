@@ -26,7 +26,8 @@ func TestGetPairingsByRound_Integration(t *testing.T) {
 
 	// Create repository and handlers
 	repo := repository.NewRepository(testDB.DB)
-	tournamentHandler := handlers.NewTournamentHandler(repo)
+	uploadDir := t.TempDir()
+	tournamentHandler := handlers.NewTournamentHandler(repo, uploadDir)
 
 	// Create test data
 	testData := CreateTestData(t, testDB, repo)
@@ -68,7 +69,8 @@ func TestGetPairingPlayers_Integration(t *testing.T) {
 
 	// Create repository and handlers
 	repo := repository.NewRepository(testDB.DB)
-	tournamentHandler := handlers.NewTournamentHandler(repo)
+	uploadDir := t.TempDir()
+	tournamentHandler := handlers.NewTournamentHandler(repo, uploadDir)
 
 	// Create test data
 	testData := CreateTestData(t, testDB, repo)
@@ -133,7 +135,8 @@ func TestGetPairingMatches_Integration(t *testing.T) {
 
 	// Create repository and handlers
 	repo := repository.NewRepository(testDB.DB)
-	tournamentHandler := handlers.NewTournamentHandler(repo)
+	uploadDir := t.TempDir()
+	tournamentHandler := handlers.NewTournamentHandler(repo, uploadDir)
 
 	// Create test data
 	testData := CreateTestData(t, testDB, repo)
@@ -187,7 +190,8 @@ func TestGetPairingsByRound_EmptyResult(t *testing.T) {
 
 	// Create repository and handlers
 	repo := repository.NewRepository(testDB.DB)
-	tournamentHandler := handlers.NewTournamentHandler(repo)
+	uploadDir := t.TempDir()
+	tournamentHandler := handlers.NewTournamentHandler(repo, uploadDir)
 
 	// Setup test router
 	router := gin.New()
@@ -219,7 +223,8 @@ func TestCreatePairing_Integration(t *testing.T) {
 
 	// Create repository and handlers
 	repo := repository.NewRepository(testDB.DB)
-	tournamentHandler := handlers.NewTournamentHandler(repo)
+	uploadDir := t.TempDir()
+	tournamentHandler := handlers.NewTournamentHandler(repo, uploadDir)
 
 	// Create test data
 	testData := CreateTestData(t, testDB, repo)
@@ -291,7 +296,8 @@ func TestGetMatchesByRound_Integration(t *testing.T) {
 
 	// Create repository and handlers
 	repo := repository.NewRepository(testDB.DB)
-	tournamentHandler := handlers.NewTournamentHandler(repo)
+	uploadDir := t.TempDir()
+	tournamentHandler := handlers.NewTournamentHandler(repo, uploadDir)
 
 	// Create test data
 	testData := CreateTestData(t, testDB, repo)

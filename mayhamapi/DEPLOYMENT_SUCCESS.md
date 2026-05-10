@@ -160,6 +160,28 @@ sudo systemctl restart golf-api
 ./scripts/verify-deployment.sh production
 ```
 
+### File uploads (UPLOAD_DIR)
+
+This deployment uses a configurable upload directory for runtime file uploads (team logos). By default the application stores uploads at `./uploads/team_logos` and serves them at the public path `/static/team_logos/<file>`.
+
+If you are upgrading from an older deployment that stored uploads in `./static/team_logos`, move those files to the new location before restarting the service:
+
+```bash
+cd /opt/golf-tournament/backend
+sudo mkdir -p ./uploads/team_logos
+# Backup existing files first
+sudo cp -a ./static/team_logos /tmp/team_logos_backup || true
+sudo mv ./static/team_logos/* ./uploads/team_logos/ || true
+sudo chown -R golftournament:golftournament ./uploads/team_logos
+```
+
+To override the default upload directory set the `UPLOAD_DIR` environment variable in your `.env.production` file (path can be absolute or relative to the running directory):
+
+```
+UPLOAD_DIR=./uploads/team_logos
+```
+
+
 ## Backup & Recovery
 
 ### Create Backup
