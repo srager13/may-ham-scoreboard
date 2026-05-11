@@ -85,6 +85,7 @@ const TournamentSetup = () => {
   const [createdTournament, setCreatedTournament] = useState<Tournament | null>(null);
   const [golfCourses, setGolfCourses] = useState<GolfCourse[]>([]);
   const [availableTees, setAvailableTees] = useState<{ [courseId: string]: GolfCourseTee[] }>({});
+  const [mappingWarnings, setMappingWarnings] = useState<string[]>([]);
 
 
   useEffect(() => {
@@ -293,6 +294,7 @@ const TournamentSetup = () => {
       // Load teams
       const teamsData = await apiClient.getTournamentTeams(tournamentId);
       const loadedTeams: TeamData[] = [];
+      const localMappingWarnings: string[] = [];
       
       // First, load all users if not already loaded
       const allUsers = availableUsers.length > 0 ? availableUsers : await apiClient.getUsers();
@@ -373,21 +375,69 @@ const TournamentSetup = () => {
             }
 
             if (Array.isArray(matchPlayers) && matchPlayers.length > 0) {
+              // Determine which loadedTeam corresponds to match.team1_id and team2_id
+              // If the match includes explicit team1_id/team2_id use those. Otherwise
+              // fall back to the order of loadedTeams (with a warning) assuming the
+              // API returns teams in the expected order.
+              let teamIdToIdx: { [teamId: string]: number } = {};
+              if (match.team1_id && match.team2_id) {
+                const idx1 = loadedTeams.findIndex(t => t.id === match.team1_id);
+                const idx2 = loadedTeams.findIndex(t => t.id === match.team2_id);
+                if (idx1 !== -1) teamIdToIdx[match.team1_id] = idx1;
+                if (idx2 !== -1) teamIdToIdx[match.team2_id] = idx2;
+              }
+
+              // If we still don't have mapping for both sides, try assigning from order
+              if (!match.team1_id || teamIdToIdx[match.team1_id] === undefined) {
+                if (loadedTeams.length >= 2) {
+                  // assume loadedTeams[0] is team1 and loadedTeams[1] is team2
+                  if (loadedTeams[0]?.id) teamIdToIdx[loadedTeams[0].id] = 0;
+                  if (loadedTeams[1]?.id) teamIdToIdx[loadedTeams[1].id] = 1;
+                  localMappingWarnings.push(`Match ${match.match_number}: unable to determine which side is team1/team2 from API response; falling back to team order.`);
+                }
+              }
+
               // Fill slots based on player_order (1-based) where possible
               matchPlayers.forEach(mp => {
                 const slot = (mp.player_order || 1) - 1;
-                // Find which team this player belongs to in the loaded teams list
                 const teamIdx = loadedTeams.findIndex(t => t.id === mp.team_id);
-                if (teamIdx === -1) return; // unknown team
+                if (teamIdx === -1) {
+                  localMappingWarnings.push(`Match ${match.match_number}: player ${mp.user_id} references unknown team ${mp.team_id}`);
+                  return; // unknown team
+                }
 
                 // Find the index of this user within that team's players array
                 const userIdxInTeam = (loadedTeams[teamIdx].players || []).findIndex(p => p.id === mp.user_id);
-                if (userIdxInTeam === -1) return; // player not found on team
+                if (userIdxInTeam === -1) {
+                  localMappingWarnings.push(`Match ${match.match_number}: player ${mp.user_id} not found on team ${mp.team_id}`);
+                  return; // player not found on team
+                }
 
-                if (teamIdx === 0) {
+                // Determine whether this is team1 or team2 for the match
+                // Prefer explicit team_id -> side mapping (team1_id/team2_id), otherwise
+                // use the assumption that teamIdToIdx maps the team's id to 0 or 1.
+                let side: 'team1' | 'team2' | undefined;
+                if (match.team1_id && mp.team_id === match.team1_id) side = 'team1';
+                else if (match.team2_id && mp.team_id === match.team2_id) side = 'team2';
+                else {
+                  // fallback: check teamIdToIdx mapping
+                  const mappedIdx = teamIdToIdx[mp.team_id];
+                  if (mappedIdx === 0) side = 'team1';
+                  else if (mappedIdx === 1) side = 'team2';
+                }
+
+                if (!side) {
+                  // Fallback: if teams are ordered and this teamIdx matches 0/1 use that
+                  if (teamIdx === 0) side = 'team1';
+                  else if (teamIdx === 1) side = 'team2';
+                }
+
+                if (side === 'team1') {
                   if (slot >= 0 && slot < playersNeeded) team1Players[slot] = userIdxInTeam;
-                } else if (teamIdx === 1) {
+                } else if (side === 'team2') {
                   if (slot >= 0 && slot < playersNeeded) team2Players[slot] = userIdxInTeam;
+                } else {
+                  localMappingWarnings.push(`Match ${match.match_number}: could not determine side for player ${mp.user_id}`);
                 }
               });
             }
@@ -439,6 +489,15 @@ const TournamentSetup = () => {
       }
       setRounds(loadedRounds);
       setAvailableTees(teesCache);
+
+      // If any mapping warnings were collected while reconstructing matches,
+      // surface them to the user in a non-blocking way so they can review
+      // and reassign players if necessary.
+      if (localMappingWarnings.length > 0) {
+        setMappingWarnings(localMappingWarnings);
+      } else {
+        setMappingWarnings([]);
+      }
 
       setEditMode(true);
       setSelectedTournamentId(tournamentId);
@@ -595,22 +654,22 @@ const TournamentSetup = () => {
               // Collect user IDs for this match from team1_players and team2_players indices
               // Note: team1_players/team2_players contain indices into teams[].players, not pairing.players
               const playerUserIds: string[] = [];
-              if (match.team1_players && Array.isArray(match.team1_players)) {
-                match.team1_players.forEach(teamPlayerIdx => {
-                  // teamPlayerIdx is an index into teams[0].players
-                  if (teams[0] && teams[0].players[teamPlayerIdx]) {
-                    playerUserIds.push(teams[0].players[teamPlayerIdx].id);
-                  }
-                });
-              }
-              if (match.team2_players && Array.isArray(match.team2_players)) {
-                match.team2_players.forEach(teamPlayerIdx => {
-                  // teamPlayerIdx is an index into teams[1].players
-                  if (teams[1] && teams[1].players[teamPlayerIdx]) {
-                    playerUserIds.push(teams[1].players[teamPlayerIdx].id);
-                  }
-                });
-              }
+               if (match.team1_players && Array.isArray(match.team1_players)) {
+                 match.team1_players.forEach(teamPlayerIdx => {
+                   // teamPlayerIdx is an index into teams[0].players
+                   if (typeof teamPlayerIdx === 'number' && teams[0] && teams[0].players[teamPlayerIdx]) {
+                     playerUserIds.push(teams[0].players[teamPlayerIdx].id);
+                   }
+                 });
+               }
+               if (match.team2_players && Array.isArray(match.team2_players)) {
+                 match.team2_players.forEach(teamPlayerIdx => {
+                   // teamPlayerIdx is an index into teams[1].players
+                   if (typeof teamPlayerIdx === 'number' && teams[1] && teams[1].players[teamPlayerIdx]) {
+                     playerUserIds.push(teams[1].players[teamPlayerIdx].id);
+                   }
+                 });
+               }
 
               return {
                 team1_id: createdTeams[0].id,
@@ -727,22 +786,22 @@ const TournamentSetup = () => {
               // Collect user IDs for this match from team1_players and team2_players indices
               // Note: team1_players/team2_players contain indices into teams[].players, not pairing.players
               const playerUserIds: string[] = [];
-              if (match.team1_players && Array.isArray(match.team1_players)) {
-                match.team1_players.forEach(teamPlayerIdx => {
-                  // teamPlayerIdx is an index into teams[0].players
-                  if (teams[0] && teams[0].players[teamPlayerIdx]) {
-                    playerUserIds.push(teams[0].players[teamPlayerIdx].id);
-                  }
-                });
-              }
-              if (match.team2_players && Array.isArray(match.team2_players)) {
-                match.team2_players.forEach(teamPlayerIdx => {
-                  // teamPlayerIdx is an index into teams[1].players
-                  if (teams[1] && teams[1].players[teamPlayerIdx]) {
-                    playerUserIds.push(teams[1].players[teamPlayerIdx].id);
-                  }
-                });
-              }
+               if (match.team1_players && Array.isArray(match.team1_players)) {
+                 match.team1_players.forEach(teamPlayerIdx => {
+                   // teamPlayerIdx is an index into teams[0].players
+                   if (typeof teamPlayerIdx === 'number' && teams[0] && teams[0].players[teamPlayerIdx]) {
+                     playerUserIds.push(teams[0].players[teamPlayerIdx].id);
+                   }
+                 });
+               }
+               if (match.team2_players && Array.isArray(match.team2_players)) {
+                 match.team2_players.forEach(teamPlayerIdx => {
+                   // teamPlayerIdx is an index into teams[1].players
+                   if (typeof teamPlayerIdx === 'number' && teams[1] && teams[1].players[teamPlayerIdx]) {
+                     playerUserIds.push(teams[1].players[teamPlayerIdx].id);
+                   }
+                 });
+               }
 
               return {
                 team1_id: createdTeams[0].id,
@@ -830,6 +889,32 @@ const TournamentSetup = () => {
               >
                 Start Fresh
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mapping warnings (non-blocking) */}
+      {mappingWarnings.length > 0 && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className="mb-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded">
+            <div className="flex justify-between items-start">
+              <div>
+                <strong>Warning:</strong> Some persisted match data couldn't be fully mapped into the current teams/players. Please review the Matches in Rounds & Matches.
+                <ul className="mt-2 list-disc ml-5 text-sm">
+                  {mappingWarnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <button
+                  onClick={() => setMappingWarnings([])}
+                  className="ml-4 px-3 py-1 bg-yellow-200 rounded hover:bg-yellow-300 text-sm"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1395,12 +1480,16 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
     // Get the last match in this pairing to copy format and holes from
     const lastMatch = pairing.matches.length > 0 ? pairing.matches[pairing.matches.length - 1] : null;
     
+    const defaultFormatId = lastMatch ? lastMatch.format_id : (safeMatchFormats.length > 0 ? safeMatchFormats[0].id : '');
+    const defaultFormat = safeMatchFormats.find(f => f.id === defaultFormatId);
+    const playersNeeded = defaultFormat?.players_per_side || 1;
+
     pairing.matches.push({
       match_number: pairing.matches.length + 1,
-      format_id: lastMatch ? lastMatch.format_id : (safeMatchFormats.length > 0 ? safeMatchFormats[0].id : ''),
+      format_id: defaultFormatId,
       holes: lastMatch ? lastMatch.holes : 6,
-      team1_players: [],
-      team2_players: []
+      team1_players: Array(playersNeeded).fill(undefined),
+      team2_players: Array(playersNeeded).fill(undefined)
     });
     setRounds(newRounds);
   };
@@ -1413,7 +1502,25 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
     // Support both single field update and multiple fields update
     if (typeof fieldOrFields === 'string') {
       // Single field update: updateMatch(roundIdx, pairingIdx, matchIdx, 'field', value)
-      newMatches[matchIdx] = { ...newMatches[matchIdx], [fieldOrFields]: value };
+      // If format_id is changing, ensure we resize player slot arrays to the
+      // appropriate length for the new format's players_per_side
+      if (fieldOrFields === 'format_id') {
+        const newFormatId = value;
+        const newFormat = matchFormats.find(f => f.id === newFormatId);
+        const newPlayersNeeded = newFormat?.players_per_side || 1;
+        const old = newMatches[matchIdx];
+        const oldTeam1 = Array.isArray(old.team1_players) ? old.team1_players.slice() : [];
+        const oldTeam2 = Array.isArray(old.team2_players) ? old.team2_players.slice() : [];
+
+        const resizedTeam1 = Array(newPlayersNeeded).fill(undefined);
+        const resizedTeam2 = Array(newPlayersNeeded).fill(undefined);
+        for (let i = 0; i < Math.min(oldTeam1.length, newPlayersNeeded); i++) resizedTeam1[i] = oldTeam1[i];
+        for (let i = 0; i < Math.min(oldTeam2.length, newPlayersNeeded); i++) resizedTeam2[i] = oldTeam2[i];
+
+        newMatches[matchIdx] = { ...old, format_id: newFormatId, team1_players: resizedTeam1, team2_players: resizedTeam2 };
+      } else {
+        newMatches[matchIdx] = { ...newMatches[matchIdx], [fieldOrFields]: value };
+      }
     } else {
       // Multiple fields update: updateMatch(roundIdx, pairingIdx, matchIdx, { field1: value1, field2: value2 })
       newMatches[matchIdx] = { ...newMatches[matchIdx], ...fieldOrFields };
