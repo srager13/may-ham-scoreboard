@@ -88,6 +88,11 @@ type HoleResult struct {
 }
 
 func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scores []models.Score) (*MatchStatus, error) {
+	// Fetch match format early so we can handle format-specific match-level logic
+	matchFormat, err := s.repo.GetMatchFormat(match.MatchFormatID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get match format: %w", err)
+	}
 	// Get the number of players from the pairing
 	expectedPlayersPerHole := 2 // Default minimum
 	if match.Pairing != nil && len(match.Pairing.Players) > 0 {
@@ -112,6 +117,15 @@ func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scor
 	team1TotalPoints := 0.0
 	team2TotalPoints := 0.0
 	holesCompleted := 0
+
+	// Detect whether this match uses Stableford points by scanning submitted scores
+	useStableford := false
+	for _, sc := range scores {
+		if sc.StablefordPoints != nil {
+			useStableford = true
+			break
+		}
+	}
 
 	// Calculate and store results for each completed hole in this match's range
 	for holeNum := startHole; holeNum <= endHole; holeNum++ {
@@ -166,20 +180,55 @@ func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scor
 	var winnerTeamID *string
 
 	if matchComplete {
-		if team1TotalPoints > team2TotalPoints {
-			// Team 1 wins the match - gets the full match points
-			winnerTeamID = &match.Team1ID
-			matchTeam1Points = match.PointsAvailable
-			matchTeam2Points = 0
-		} else if team2TotalPoints > team1TotalPoints {
-			// Team 2 wins the match - gets the full match points
-			winnerTeamID = &match.Team2ID
-			matchTeam1Points = 0
-			matchTeam2Points = match.PointsAvailable
+		// Special handling for cumulative combined-scores formats where the
+		// winner is determined by the sum across all holes instead of hole-by-hole
+		if matchFormat.ScoringType == "combined_scores_total" {
+			// For Stableford-style scoring higher total wins, for gross lower total wins
+			if useStableford {
+				if team1TotalPoints > team2TotalPoints {
+					winnerTeamID = &match.Team1ID
+					matchTeam1Points = match.PointsAvailable
+					matchTeam2Points = 0
+				} else if team2TotalPoints > team1TotalPoints {
+					winnerTeamID = &match.Team2ID
+					matchTeam1Points = 0
+					matchTeam2Points = match.PointsAvailable
+				} else {
+					matchTeam1Points = match.PointsAvailable / 2
+					matchTeam2Points = match.PointsAvailable / 2
+				}
+			} else {
+				// Gross scoring: lower total strokes wins
+				if team1TotalPoints < team2TotalPoints {
+					winnerTeamID = &match.Team1ID
+					matchTeam1Points = match.PointsAvailable
+					matchTeam2Points = 0
+				} else if team2TotalPoints < team1TotalPoints {
+					winnerTeamID = &match.Team2ID
+					matchTeam1Points = 0
+					matchTeam2Points = match.PointsAvailable
+				} else {
+					matchTeam1Points = match.PointsAvailable / 2
+					matchTeam2Points = match.PointsAvailable / 2
+				}
+			}
 		} else {
-			// Match is tied - each team gets half the available points
-			matchTeam1Points = match.PointsAvailable / 2
-			matchTeam2Points = match.PointsAvailable / 2
+			// Default behavior: higher aggregated hole points wins
+			if team1TotalPoints > team2TotalPoints {
+				// Team 1 wins the match - gets the full match points
+				winnerTeamID = &match.Team1ID
+				matchTeam1Points = match.PointsAvailable
+				matchTeam2Points = 0
+			} else if team2TotalPoints > team1TotalPoints {
+				// Team 2 wins the match - gets the full match points
+				winnerTeamID = &match.Team2ID
+				matchTeam1Points = 0
+				matchTeam2Points = match.PointsAvailable
+			} else {
+				// Match is tied - each team gets half the available points
+				matchTeam1Points = match.PointsAvailable / 2
+				matchTeam2Points = match.PointsAvailable / 2
+			}
 		}
 	} else {
 		// Match not complete - no match points awarded yet
@@ -188,7 +237,7 @@ func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scor
 	}
 
 	// Update match total points (these are match-level points, not hole points)
-	err := s.repo.UpdateMatchPoints(match.ID, matchTeam1Points, matchTeam2Points)
+	err = s.repo.UpdateMatchPoints(match.ID, matchTeam1Points, matchTeam2Points)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update match points: %w", err)
 	}
@@ -215,6 +264,13 @@ func (s *ScoringService) CalculateAndStoreMatchResults(match *models.Match, scor
 
 // CalculateMatchStatus calculates current match status, preferring stored results when available
 func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []models.Score) (*MatchStatus, error) {
+	// Get match format so we can correctly interpret stored results
+	matchFormat, mfErr := s.repo.GetMatchFormat(match.MatchFormatID)
+	if mfErr != nil {
+		// If match format can't be loaded, we can still try to compute status from scores
+		matchFormat = nil
+	}
+
 	// First try to get stored hole results
 	storedResults, err := s.repo.GetMatchHoleResults(match.ID)
 	if err != nil {
@@ -249,18 +305,71 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 		matchTeam2Points := 0.0
 
 		if matchComplete {
-			if team1TotalPoints > team2TotalPoints {
-				winnerTeamID = &match.Team1ID
-				matchTeam1Points = match.PointsAvailable
-				matchTeam2Points = 0.0
-			} else if team2TotalPoints > team1TotalPoints {
-				winnerTeamID = &match.Team2ID
-				matchTeam1Points = 0.0
-				matchTeam2Points = match.PointsAvailable
+			// If this is a cumulative combined-scores format, determine winner by
+			// comparing total aggregated scores/points rather than hole points.
+			if matchFormat != nil && matchFormat.ScoringType == "combined_scores_total" {
+				// Determine whether stored results represent Stableford points by
+				// checking if any stored Team1Score/Team2Score came from points.
+				// We can infer by checking the presence of non-zero Team1Score values
+				// but to be safe, prefer comparing totals as higher wins for Stableford
+				// and lower wins for gross. We'll assume that when Team1Points are
+				// aggregated as raw strokes the lower total should win.
+				// Heuristic: if any stored result has Team1Score != nil and Team1Score > 0
+				// and any of original submitted scores included StablefordPoints, we
+				// could rely on the submitted scores. As a simpler approach here,
+				// treat higher total as winning only if the tournament's scores in
+				// the provided scores slice include StablefordPoints. Fall back to
+				// higher-wins behavior otherwise.
+				useStableford := false
+				for _, sc := range scores {
+					if sc.StablefordPoints != nil {
+						useStableford = true
+						break
+					}
+				}
+
+				if useStableford {
+					if team1TotalPoints > team2TotalPoints {
+						winnerTeamID = &match.Team1ID
+						matchTeam1Points = match.PointsAvailable
+						matchTeam2Points = 0.0
+					} else if team2TotalPoints > team1TotalPoints {
+						winnerTeamID = &match.Team2ID
+						matchTeam1Points = 0.0
+						matchTeam2Points = match.PointsAvailable
+					} else {
+						matchTeam1Points = match.PointsAvailable / 2
+						matchTeam2Points = match.PointsAvailable / 2
+					}
+				} else {
+					// Gross scoring: lower total strokes wins
+					if team1TotalPoints < team2TotalPoints {
+						winnerTeamID = &match.Team1ID
+						matchTeam1Points = match.PointsAvailable
+						matchTeam2Points = 0.0
+					} else if team2TotalPoints < team1TotalPoints {
+						winnerTeamID = &match.Team2ID
+						matchTeam1Points = 0.0
+						matchTeam2Points = match.PointsAvailable
+					} else {
+						matchTeam1Points = match.PointsAvailable / 2
+						matchTeam2Points = match.PointsAvailable / 2
+					}
+				}
 			} else {
-				// Tie - split points
-				matchTeam1Points = match.PointsAvailable / 2
-				matchTeam2Points = match.PointsAvailable / 2
+				if team1TotalPoints > team2TotalPoints {
+					winnerTeamID = &match.Team1ID
+					matchTeam1Points = match.PointsAvailable
+					matchTeam2Points = 0.0
+				} else if team2TotalPoints > team1TotalPoints {
+					winnerTeamID = &match.Team2ID
+					matchTeam1Points = 0.0
+					matchTeam2Points = match.PointsAvailable
+				} else {
+					// Tie - split points
+					matchTeam1Points = match.PointsAvailable / 2
+					matchTeam2Points = match.PointsAvailable / 2
+				}
 			}
 		}
 
@@ -281,6 +390,8 @@ func (s *ScoringService) CalculateMatchStatus(match *models.Match, scores []mode
 }
 
 func (s *ScoringService) calculateMatchStatusFromScores(match *models.Match, scores []models.Score) (*MatchStatus, error) {
+	// Load match format so we can support cumulative combined-scores logic
+	matchFormat, _ := s.repo.GetMatchFormat(match.MatchFormatID)
 	// Get the number of players from the pairing
 	expectedPlayersPerHole := 2 // Default minimum
 	if match.Pairing != nil && len(match.Pairing.Players) > 0 {
@@ -338,18 +449,58 @@ func (s *ScoringService) calculateMatchStatusFromScores(match *models.Match, sco
 	matchTeam2Points := 0.0
 
 	if matchComplete {
-		if team1Points > team2Points {
-			winnerTeamID = &match.Team1ID
-			matchTeam1Points = match.PointsAvailable
-			matchTeam2Points = 0.0
-		} else if team2Points > team1Points {
-			winnerTeamID = &match.Team2ID
-			matchTeam1Points = 0.0
-			matchTeam2Points = match.PointsAvailable
+		if matchFormat != nil && matchFormat.ScoringType == "combined_scores_total" {
+			// For cumulative combined-scores, decide winner based on aggregate
+			useStableford := false
+			for _, sc := range scores {
+				if sc.StablefordPoints != nil {
+					useStableford = true
+					break
+				}
+			}
+
+			if useStableford {
+				if team1Points > team2Points {
+					winnerTeamID = &match.Team1ID
+					matchTeam1Points = match.PointsAvailable
+					matchTeam2Points = 0.0
+				} else if team2Points > team1Points {
+					winnerTeamID = &match.Team2ID
+					matchTeam1Points = 0.0
+					matchTeam2Points = match.PointsAvailable
+				} else {
+					matchTeam1Points = match.PointsAvailable / 2
+					matchTeam2Points = match.PointsAvailable / 2
+				}
+			} else {
+				// Gross scoring: lower total wins
+				if team1Points < team2Points {
+					winnerTeamID = &match.Team1ID
+					matchTeam1Points = match.PointsAvailable
+					matchTeam2Points = 0.0
+				} else if team2Points < team1Points {
+					winnerTeamID = &match.Team2ID
+					matchTeam1Points = 0.0
+					matchTeam2Points = match.PointsAvailable
+				} else {
+					matchTeam1Points = match.PointsAvailable / 2
+					matchTeam2Points = match.PointsAvailable / 2
+				}
+			}
 		} else {
-			// Tie - split points
-			matchTeam1Points = match.PointsAvailable / 2
-			matchTeam2Points = match.PointsAvailable / 2
+			if team1Points > team2Points {
+				winnerTeamID = &match.Team1ID
+				matchTeam1Points = match.PointsAvailable
+				matchTeam2Points = 0.0
+			} else if team2Points > team1Points {
+				winnerTeamID = &match.Team2ID
+				matchTeam1Points = 0.0
+				matchTeam2Points = match.PointsAvailable
+			} else {
+				// Tie - split points
+				matchTeam1Points = match.PointsAvailable / 2
+				matchTeam2Points = match.PointsAvailable / 2
+			}
 		}
 	}
 
@@ -376,6 +527,8 @@ func (s *ScoringService) calculateHoleResult(match *models.Match, holeNumber int
 	switch matchFormat.ScoringType {
 	case "combined_scores":
 		return s.calculateCombinedScoresHole(match, holeNumber, scores)
+	case "combined_scores_total":
+		return s.calculateCombinedScoresTotalHole(match, holeNumber, scores)
 	case "match_play":
 		return s.calculateMatchPlayHole(match, holeNumber, scores)
 	case "scramble":
@@ -844,5 +997,84 @@ func (s *ScoringService) calculateCombinedScoresHole(match *models.Match, holeNu
 		}
 	}
 
+	return result, nil
+}
+
+// calculateCombinedScoresTotalHole implements the cumulative "2v2 Combined Scores - Gross Score/Points" format.
+// Instead of awarding hole-by-hole match points, this format returns the team's combined
+// strokes (for gross) or combined Stableford points (for stableford) for the hole in
+// the Team1Points/Team2Points fields so callers can sum them across the match.
+func (s *ScoringService) calculateCombinedScoresTotalHole(match *models.Match, holeNumber int, scores []models.Score) (*HoleResult, error) {
+	team1Scores := []int{}
+	team2Scores := []int{}
+
+	// Create maps for quick lookup using match players
+	team1UserIDs := make(map[string]bool)
+	team2UserIDs := make(map[string]bool)
+	for _, player := range match.Players {
+		switch player.TeamID {
+		case match.Team1ID:
+			team1UserIDs[player.UserID] = true
+		case match.Team2ID:
+			team2UserIDs[player.UserID] = true
+		}
+	}
+
+	// Determine if Stableford points are present on any score
+	useStableford := false
+	for _, sc := range scores {
+		if sc.StablefordPoints != nil {
+			useStableford = true
+			break
+		}
+	}
+
+	// Group and sum appropriate values per team for this hole
+	team1Sum := 0
+	team2Sum := 0
+	for _, sc := range scores {
+		if team1UserIDs[sc.UserID] {
+			if useStableford {
+				if sc.StablefordPoints == nil {
+					return nil, fmt.Errorf("missing stableford points for player %s in stableford match", sc.UserID)
+				}
+				team1Sum += *sc.StablefordPoints
+			} else {
+				team1Sum += sc.Strokes
+			}
+			team1Scores = append(team1Scores, sc.Strokes)
+		} else if team2UserIDs[sc.UserID] {
+			if useStableford {
+				if sc.StablefordPoints == nil {
+					return nil, fmt.Errorf("missing stableford points for player %s in stableford match", sc.UserID)
+				}
+				team2Sum += *sc.StablefordPoints
+			} else {
+				team2Sum += sc.Strokes
+			}
+			team2Scores = append(team2Scores, sc.Strokes)
+		}
+	}
+
+	if len(team1Scores) == 0 || len(team2Scores) == 0 {
+		return nil, fmt.Errorf("insufficient scores for combined scores total format")
+	}
+
+	// Prepare hole result: store the team totals in Team1Score/Team2Score and
+	// also put the same values into Team1Points/Team2Points so callers that
+	// aggregate Team*Points across holes get the cumulative totals.
+	team1ScoreVal := team1Sum
+	team2ScoreVal := team2Sum
+
+	result := &HoleResult{
+		HoleNumber:   holeNumber,
+		Team1Score:   &team1ScoreVal,
+		Team2Score:   &team2ScoreVal,
+		PlayerScores: scores,
+		Team1Points:  float64(team1Sum),
+		Team2Points:  float64(team2Sum),
+	}
+
+	// WinnerTeamID is not meaningful per-hole for this cumulative format, leave nil
 	return result, nil
 }

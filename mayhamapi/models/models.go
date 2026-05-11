@@ -218,6 +218,10 @@ const (
 	// CombinedScores is a format where two players per side have their hole scores
 	// summed and the better total (higher for Stableford, lower for Gross) wins
 	CombinedScores MatchFormat = "combined_scores"
+	// CombinedScoresTotal is a variant where the teams' scores/points are
+	// aggregated across all holes in the match and the match winner is
+	// determined by the lower total for gross or higher total for Stableford.
+	CombinedScoresTotal MatchFormat = "combined_scores_total"
 )
 
 // Implement driver.Valuer interface for database storage

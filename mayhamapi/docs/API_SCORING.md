@@ -370,10 +370,19 @@ Authorization: Bearer <token>
     ,
     {
       "id": "format-uuid-3",
-      "name": "2v2 Combined Scores",
-      "description": "Two-person teams: sum player scores per hole; higher sum wins for Stableford, lower sum wins for Gross",
+      "name": "2v2 Combined Scores - Match Play",
+      "description": "Two-person teams: sum player scores per hole; higher sum wins for Stableford, lower sum wins for Gross (hole-by-hole)",
       "players_per_side": 2,
       "scoring_type": "combined_scores",
+      "score_input_type": "individual",
+      "created_at": "2025-01-01T00:00:00Z"
+    },
+    {
+      "id": "format-uuid-4",
+      "name": "2v2 Combined Scores - Gross Score/Points",
+      "description": "Two-person teams: aggregate combined strokes (gross) or combined Stableford points (stableford) across all holes; lower total wins for Gross, higher total wins for Stableford",
+      "players_per_side": 2,
+      "scoring_type": "combined_scores_total",
       "score_input_type": "individual",
       "created_at": "2025-01-01T00:00:00Z"
     }

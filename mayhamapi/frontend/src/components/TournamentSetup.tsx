@@ -2045,8 +2045,8 @@ const MatchConfig = ({
               <p className="mt-1 text-xs text-gray-600">
                 {selectedFormat.description
                   ? selectedFormat.description
-                  : (selectedFormat.scoring_type === 'combined_scores'
-                      ? 'Two-person teams: sum player scores per hole; for Stableford tournaments sum Stableford points (higher wins), otherwise sum strokes (lower wins). Ties split the hole.'
+                  : ((selectedFormat.scoring_type === 'combined_scores' || selectedFormat.scoring_type === 'combined_scores_total')
+                      ? 'Two-person teams: sum player scores per hole (match play) or aggregate scores across holes (gross/points). For Stableford use summed points (higher wins); for Gross use summed strokes (lower wins).'
                       : '')}
               </p>
             </div>
