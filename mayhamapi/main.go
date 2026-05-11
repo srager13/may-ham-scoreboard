@@ -278,6 +278,11 @@ func setupRouter(
 			protected.POST("/tournaments/:tournament_id/teams", tournamentHandler.CreateTeam)
 			// Upload team logo (multipart/form-data: field name "logo")
 			protected.POST("/teams/:team_id/logo", tournamentHandler.UploadTeamLogo)
+			// Allow setting an existing uploaded logo URL on a team without re-uploading
+			// (PATCH with JSON body { "logo_url": "/static/team_logos/..." }). This is
+			// used by the frontend when recreating teams during tournament edits to
+			// preserve previously uploaded logos.
+			protected.PATCH("/teams/:team_id/logo", tournamentHandler.SetTeamLogoUrl)
 			// Debug: list files in the team_logos upload directory
 			protected.GET("/debug/team-logos", tournamentHandler.ListTeamLogos)
 			protected.DELETE("/teams/:team_id", tournamentHandler.DeleteTeam)

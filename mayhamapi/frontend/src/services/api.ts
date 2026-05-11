@@ -577,6 +577,17 @@ class ApiClient {
     return response.json();
   }
 
+  // Set an existing logo URL on a team record. This is used when editing a
+  // tournament and we want to preserve a previously uploaded logo file without
+  // re-uploading it. The server will validate the provided URL (must point to
+  // the configured /static/team_logos path) and update the team record.
+  async setTeamLogoUrl(teamId: string, logoUrl: string): Promise<Team> {
+    return this.request<Team>(`/teams/${teamId}/logo`, {
+      method: 'PATCH',
+      body: JSON.stringify({ logo_url: logoUrl }),
+    });
+  }
+
   async addTeamMember(teamId: string, userId: string): Promise<TeamMember> {
     return this.request<TeamMember>(`/teams/${teamId}/members`, {
       method: 'POST',

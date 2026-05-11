@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"mayhamapi/models"
@@ -661,6 +662,56 @@ func (h *TournamentHandler) UploadTeamLogo(c *gin.Context) {
 	log.Printf("UploadTeamLogo: team=%s successfully updated logo_url=%s", teamID, logoURL)
 
 	c.JSON(http.StatusCreated, updatedTeam)
+}
+
+// PATCH /api/v1/teams/:team_id/logo
+// Accepts JSON body { "logo_url": "/static/team_logos/filename.jpg" }
+// This endpoint allows the client to set a team's logo_url to an existing
+// uploaded asset (e.g., when recreating team records during an edit without
+// re-uploading the original file). For security we validate that the provided
+// path is within the configured /static/team_logos prefix.
+func (h *TournamentHandler) SetTeamLogoUrl(c *gin.Context) {
+	teamID := c.Param("team_id")
+
+	var req struct {
+		LogoURL string `json:"logo_url" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Basic validation: must be a path under /static/team_logos/
+	if !strings.HasPrefix(req.LogoURL, "/static/team_logos/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "logo_url must be a /static/team_logos/ path"})
+		return
+	}
+
+	// Optionally ensure the file actually exists on disk
+	// The uploadDir is the filesystem directory that backs /static/team_logos
+	// so we can check for the existence of the referenced file.
+	filename := strings.TrimPrefix(req.LogoURL, "/static/team_logos/")
+	fullPath := filepath.Join(h.uploadDir, filename)
+	if _, err := os.Stat(fullPath); err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "referenced logo file does not exist on server"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate logo file"})
+		return
+	}
+
+	updatedTeam, err := h.repo.UpdateTeamLogo(teamID, req.LogoURL)
+	if err != nil {
+		if err.Error() == "team not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "team not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, updatedTeam)
 }
 
 // GET /api/v1/debug/team-logos

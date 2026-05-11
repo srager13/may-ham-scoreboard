@@ -602,15 +602,23 @@ const TournamentSetup = () => {
             }
           } else if (team.logoPreviewUrl) {
             // Preserve previously uploaded logo URL when editing a tournament and
-            // the user did not provide a new File. We copy the preview/url from
-            // the loaded team state into the newly created team object so the
-            // UI (and subsequent pairing creation) continues to show the logo.
-            // Note: this does not re-upload the image to the server under the
-            // new team record. If server-side persistence of the same asset for
-            // the new team row is required, a backend endpoint would be needed
-            // to copy/attach the asset to the new team record. For now we keep
-            // the client-side UX consistent by preserving the URL.
-            createdTeams[createdTeams.length - 1].logo_url = team.logoPreviewUrl;
+            // the user did not provide a new File. Try to persist the same
+            // logo_url on the newly created team record by calling the backend
+            // PATCH /teams/:team_id/logo with { logo_url }. The server will
+            // validate the path and ensure the referenced file exists.
+            try {
+              const updated = await apiClient.setTeamLogoUrl(newTeam.id, team.logoPreviewUrl);
+              if (updated && (updated as any).logo_url) {
+                createdTeams[createdTeams.length - 1].logo_url = (updated as any).logo_url;
+              } else {
+                // Fall back to copying the preview URL into the local object
+                createdTeams[createdTeams.length - 1].logo_url = team.logoPreviewUrl;
+              }
+            } catch (err) {
+              console.error('Failed to persist existing team logo to new team:', err);
+              // Still preserve the URL client-side for UX, even if server call fails
+              createdTeams[createdTeams.length - 1].logo_url = team.logoPreviewUrl;
+            }
           }
         }
 
