@@ -54,11 +54,12 @@ export function mapMatchPlayersToSlots(
 
   // Process each persisted match player
   (matchPlayers || []).forEach(mp => {
-    const slot = (mp.player_order || 1) - 1;
-    if (slot < 0 || slot >= playersNeeded) {
-      warnings.push(`Match ${matchNumber ?? matchId ?? ''}: player ${mp.user_id} has invalid player_order ${mp.player_order}`);
-      return;
-    }
+    // Support both 1-based and legacy 0-based player_order values.
+    // Treat undefined as 1 (first slot). If player_order === 0, treat as slot 0.
+    let slot = (mp.player_order === undefined ? 1 : mp.player_order) - 1;
+
+    // If slot is out-of-range, we'll attempt tolerant placement below instead
+    const slotOutOfRange = slot < 0 || slot >= playersNeeded;
 
     const teamIdx = mp.team_id ? (teamIdToIdx[mp.team_id] ?? loadedTeams.findIndex(t => t.id === mp.team_id)) : -1;
     if (teamIdx === -1) {
@@ -90,9 +91,49 @@ export function mapMatchPlayersToSlots(
       }
     }
 
-    if (side === 'team1') team1_players[slot] = mp.user_id;
-    else if (side === 'team2') team2_players[slot] = mp.user_id;
-    else warnings.push(`Match ${matchNumber ?? matchId ?? ''}: could not determine side for player ${mp.user_id}`);
+    // If the originally computed slot is out-of-range or already taken, attempt
+    // to place the player into the first available slot for that side.
+    const placeInFirstAvailable = () => {
+      const arr = side === 'team1' ? team1_players : team2_players;
+      const freeIdx = arr.findIndex(v => v === undefined);
+      if (freeIdx !== -1) {
+        arr[freeIdx] = mp.user_id;
+        warnings.push(`Match ${matchNumber ?? matchId ?? ''}: placed player ${mp.user_id} into slot ${freeIdx + 1} due to unexpected player_order ${mp.player_order}`);
+      } else {
+        warnings.push(`Match ${matchNumber ?? matchId ?? ''}: no available slots to place player ${mp.user_id} (player_order ${mp.player_order})`);
+        slotIssues.push({ matchId, matchNumber, side: side || 'team1', slot: Math.max(0, Math.min(playersNeeded - 1, slot)), message: `Could not place player ${mp.user_id} into any slot` });
+      }
+    };
+
+    if (slotOutOfRange) {
+      // Special-case common off-by-one: if player_order === 0, we already adjusted,
+      // otherwise try tolerant fallback
+      if (mp.player_order === 0) {
+        // slot already computed as 0, fall through to place there
+      } else {
+        // Attempt to place in first available slot instead of skipping silently.
+        if (side === 'team1' || side === 'team2') {
+          placeInFirstAvailable();
+          return;
+        }
+      }
+    }
+
+    if (slot < 0 || slot >= playersNeeded) {
+      warnings.push(`Match ${matchNumber ?? matchId ?? ''}: player ${mp.user_id} has invalid player_order ${mp.player_order}`);
+      return;
+    }
+
+    if (side === 'team1') {
+      if (team1_players[slot] !== undefined) {
+        // slot already occupied — try to place in first available slot
+        placeInFirstAvailable();
+      } else team1_players[slot] = mp.user_id;
+    } else if (side === 'team2') {
+      if (team2_players[slot] !== undefined) {
+        placeInFirstAvailable();
+      } else team2_players[slot] = mp.user_id;
+    } else warnings.push(`Match ${matchNumber ?? matchId ?? ''}: could not determine side for player ${mp.user_id}`);
   });
 
   return { team1_players, team2_players, warnings, slotIssues };

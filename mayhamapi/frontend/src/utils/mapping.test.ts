@@ -73,4 +73,59 @@ describe('mapMatchPlayersToSlots', () => {
     expect(res.team1_players[0]).toBe('p1');
     expect(res.team2_players[0]).toBe('p2');
   });
+
+  it('accepts zero-based player_order (0) and treats it as slot 0', () => {
+    const teams = [
+      { id: 't1', players: [{ id: 'u1' }] },
+      { id: 't2', players: [{ id: 'u2' }] }
+    ];
+
+    const matchPlayers: any[] = [
+      { user_id: 'u1', team_id: 't1', player_order: 0 },
+      { user_id: 'u2', team_id: 't2', player_order: 0 }
+    ];
+
+    const res = mapMatchPlayersToSlots(teams as any, matchPlayers, 1, { matchId: 'm5', matchNumber: 5, matchTeam1Id: 't1', matchTeam2Id: 't2' });
+    expect(res.team1_players[0]).toBe('u1');
+    expect(res.team2_players[0]).toBe('u2');
+    // zero-based special-case should not be noisy
+    expect(res.warnings.length).toBe(0);
+  });
+
+  it('places out-of-range player_order into first available slot with a warning', () => {
+    const teams = [
+      { id: 't1', players: [{ id: 'a' }, { id: 'b' }] },
+      { id: 't2', players: [{ id: 'c' }, { id: 'd' }] }
+    ];
+
+    const matchPlayers: any[] = [
+      // player_order 3 is out of range for playersNeeded=2
+      { user_id: 'a', team_id: 't1', player_order: 3 },
+      { user_id: 'c', team_id: 't2', player_order: 1 }
+    ];
+
+    const res = mapMatchPlayersToSlots(teams as any, matchPlayers, 2, { matchId: 'm6', matchNumber: 6, matchTeam1Id: 't1', matchTeam2Id: 't2' });
+    // 'a' should be placed into the first free slot (slot 0)
+    expect(res.team1_players[0]).toBe('a');
+    expect(res.team2_players[0]).toBe('c');
+    expect(res.warnings.length).toBeGreaterThan(0);
+  });
+
+  it('reports an issue when there are more persisted players than slots', () => {
+    const teams = [
+      { id: 't1', players: [{ id: 'x' }] },
+      { id: 't2', players: [{ id: 'y' }] }
+    ];
+
+    const matchPlayers: any[] = [
+      { user_id: 'x', team_id: 't1', player_order: 1 },
+      { user_id: 'x2', team_id: 't1', player_order: 2 }
+    ];
+
+    const res = mapMatchPlayersToSlots(teams as any, matchPlayers, 1, { matchId: 'm7', matchNumber: 7, matchTeam1Id: 't1', matchTeam2Id: 't2' });
+    // first placed, second cannot be placed -> issue reported
+    expect(res.team1_players[0]).toBe('x');
+    expect(res.slotIssues.length).toBeGreaterThan(0);
+    expect(res.warnings.length).toBeGreaterThan(0);
+  });
 });

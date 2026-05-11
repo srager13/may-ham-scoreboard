@@ -20,6 +20,11 @@ func TestRepository_GetMatchesByRound(t *testing.T) {
 }
 
 func TestRepository_CreateMatch(t *testing.T) {
+	// This test requires the integration test database. It should verify that
+	// CreateMatchForPairing enforces the match format's players_per_side by
+	// truncating/normalizing assigned players when a pairing contains more
+	// players than allowed. For local runs with a test DB, implement SetupTestDatabase
+	// and remove the Skip.
 	t.Skip("Integration test - requires test database setup")
 }
 

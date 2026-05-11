@@ -528,38 +528,72 @@ func (r *Repository) CreateMatchForPairing(pairingID, roundID string, matchNumbe
 		return nil, fmt.Errorf("failed to create match: %w", err)
 	}
 
-	// Auto-assign players from pairing to this match
+	// Auto-assign players from pairing to this match, but respect the
+	// match format's players_per_side. Normalize PlayerOrder to be in the
+	// range 1..players_per_side for each team and truncate any extra players.
 	pairingPlayers, err := r.GetPairingPlayers(pairingID)
 	if err != nil {
 		fmt.Printf("Warning: failed to get pairing players for match %s: %v\n", match.ID, err)
 	} else {
-		// If specific player user IDs were provided, only assign those players
-		// Otherwise, assign all pairing players (legacy behavior)
-		playersToAssign := pairingPlayers
+		// Determine players per side from the match format
+		playersPerSide := 1
+		if req.MatchFormatID != "" {
+			if format, err := r.GetMatchFormat(req.MatchFormatID); err == nil {
+				playersPerSide = format.PlayersPerSide
+			} else {
+				fmt.Printf("Warning: failed to load match format %s for match %s: %v\n", req.MatchFormatID, match.ID, err)
+			}
+		}
+
+		// Start from the set of pairing players or the subset specified by the request
+		playersToConsider := pairingPlayers
 		if req.PlayerUserIDs != nil {
-			// Filter to only the specified players
 			playerIDMap := make(map[string]bool)
 			for _, userID := range req.PlayerUserIDs {
 				playerIDMap[userID] = true
 			}
-			playersToAssign = []models.PairingPlayer{}
+			playersToConsider = []models.PairingPlayer{}
 			for _, pp := range pairingPlayers {
 				if playerIDMap[pp.UserID] {
-					playersToAssign = append(playersToAssign, pp)
+					playersToConsider = append(playersToConsider, pp)
 				}
 			}
 		}
 
-		// Create match_players entries for the selected players
-		for _, pp := range playersToAssign {
-			matchPlayer := &models.MatchPlayer{
-				MatchID:     match.ID,
-				UserID:      pp.UserID,
-				TeamID:      pp.TeamID,
-				PlayerOrder: pp.PlayerOrder,
+		// Group by team so we can enforce playersPerSide per team and assign
+		// normalized PlayerOrder values (1..playersPerSide)
+		teamBuckets := make(map[string][]models.PairingPlayer)
+		for _, pp := range playersToConsider {
+			teamBuckets[pp.TeamID] = append(teamBuckets[pp.TeamID], pp)
+		}
+
+		// For each team (prefer team1 then team2), take up to playersPerSide
+		for _, teamID := range []string{match.Team1ID, match.Team2ID} {
+			players := teamBuckets[teamID]
+			if len(players) == 0 {
+				continue
 			}
-			if err := r.CreateMatchPlayer(matchPlayer); err != nil {
-				fmt.Printf("Warning: failed to create match player for match %s: %v\n", match.ID, err)
+
+			limit := playersPerSide
+			if len(players) < limit {
+				limit = len(players)
+			}
+
+			for i := 0; i < limit; i++ {
+				pp := players[i]
+				matchPlayer := &models.MatchPlayer{
+					MatchID:     match.ID,
+					UserID:      pp.UserID,
+					TeamID:      pp.TeamID,
+					PlayerOrder: i + 1, // normalize to 1..playersPerSide
+				}
+				if err := r.CreateMatchPlayer(matchPlayer); err != nil {
+					fmt.Printf("Warning: failed to create match player for match %s: %v\n", match.ID, err)
+				}
+			}
+
+			if len(players) > playersPerSide {
+				fmt.Printf("Warning: truncated %d extra players for match %s team %s (allowed %d)\n", len(players)-playersPerSide, match.ID, teamID, playersPerSide)
 			}
 		}
 	}
