@@ -265,6 +265,22 @@ const TournamentSetup = () => {
       }
 
       // Ensure golf courses are loaded
+      // Ensure match formats are loaded (needed to determine players per side when
+      // reconstructing saved match player assignments) and golf courses are loaded.
+      // Use a local formatsForLoad variable so we can rely on the formats immediately
+      // even if the state update hasn't flushed yet.
+      let formatsForLoad: MatchFormat[] = Array.isArray(matchFormats) ? matchFormats : [];
+      if (formatsForLoad.length === 0) {
+        try {
+          const fmts = await apiClient.getMatchFormats();
+          formatsForLoad = Array.isArray(fmts) ? fmts : [];
+          setMatchFormats(formatsForLoad);
+        } catch (err) {
+          console.error('Error loading match formats:', err);
+          formatsForLoad = [];
+        }
+      }
+
       if (golfCourses.length === 0) {
         try {
           const courses = await apiClient.getStoredGolfCourses();
@@ -333,14 +349,63 @@ const TournamentSetup = () => {
             team: p.team
           }));
 
-          const loadedMatches: MatchData[] = matchesData.map(match => ({
-            id: match.id,
-            match_number: match.match_number,
-            format_id: match.match_format_id,
-            holes: match.holes,
-            team1_players: [],
-            team2_players: []
-          }));
+          const loadedMatches: MatchData[] = [];
+          // Build matches and populate player assignment indices from persisted data
+          for (const match of matchesData) {
+            // Determine how many players per side this format requires
+            const format = formatsForLoad?.find(f => f.id === match.match_format_id) || matchFormats?.find(f => f.id === match.match_format_id);
+            const playersNeeded = format?.players_per_side || 1;
+
+            // Initialize arrays for player slot indices (indices into teams[].players)
+            const team1Players = Array(playersNeeded).fill(undefined);
+            const team2Players = Array(playersNeeded).fill(undefined);
+
+            // Try to use embedded players if provided by the matches response,
+            // otherwise fetch them from the API
+            let matchPlayers = match.players;
+            if (!Array.isArray(matchPlayers) || matchPlayers.length === 0) {
+              try {
+                matchPlayers = await apiClient.getMatchPlayers(match.id);
+              } catch (err) {
+                console.error('Failed to load match players for match', match.id, err);
+                matchPlayers = [];
+              }
+            }
+
+            if (Array.isArray(matchPlayers) && matchPlayers.length > 0) {
+              // Fill slots based on player_order (1-based) where possible
+              matchPlayers.forEach(mp => {
+                const slot = (mp.player_order || 1) - 1;
+                // Find which team this player belongs to in the loaded teams list
+                const teamIdx = loadedTeams.findIndex(t => t.id === mp.team_id);
+                if (teamIdx === -1) return; // unknown team
+
+                // Find the index of this user within that team's players array
+                const userIdxInTeam = (loadedTeams[teamIdx].players || []).findIndex(p => p.id === mp.user_id);
+                if (userIdxInTeam === -1) return; // player not found on team
+
+                if (teamIdx === 0) {
+                  if (slot >= 0 && slot < playersNeeded) team1Players[slot] = userIdxInTeam;
+                } else if (teamIdx === 1) {
+                  if (slot >= 0 && slot < playersNeeded) team2Players[slot] = userIdxInTeam;
+                }
+              });
+            }
+
+            loadedMatches.push({
+              id: match.id,
+              match_number: match.match_number,
+              format_id: match.match_format_id,
+              holes: match.holes,
+              // Preserve existing hole range and points so the UI selects the
+              // correct values when editing an existing tournament.
+              start_hole: match.start_hole,
+              end_hole: match.end_hole,
+              points_available: match.points_available,
+              team1_players: team1Players,
+              team2_players: team2Players
+            });
+          }
 
           // Convert UTC tee_time to local HH:MM format for the time input
           let localTeeTime = '';
