@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Users, Trophy, Plus, Trash2, Edit2, Save, X, Search } from 'lucide-react';
 import { apiClient, ApiError, User, MatchFormat, Tournament, Team, Round, CreateTournamentRequest, Group, GolfCourse, GolfCourseTee, Pairing, CreatePairingRequest, PairingPlayerRequest, PairingMatchRequest } from '../services/api';
+import mapMatchPlayersToSlots from '../utils/mapping';
 
 interface TeamData {
   id?: string;
@@ -47,8 +48,12 @@ interface MatchData {
   start_hole?: number;  // First hole of match (1-18)
   end_hole?: number;    // Last hole of match (1-18)
   points_available?: number;
+  // Legacy index-based arrays (indices into teams[].players). New code uses
+  // team1_user_ids/team2_user_ids which store explicit user IDs for robustness.
   team1_players: number[];
   team2_players: number[];
+  team1_user_ids?: (string | undefined)[];
+  team2_user_ids?: (string | undefined)[];
   collapsed?: boolean;
 }
 
@@ -86,6 +91,7 @@ const TournamentSetup = () => {
   const [golfCourses, setGolfCourses] = useState<GolfCourse[]>([]);
   const [availableTees, setAvailableTees] = useState<{ [courseId: string]: GolfCourseTee[] }>({});
   const [mappingWarnings, setMappingWarnings] = useState<string[]>([]);
+  const [mappingSlotIssues, setMappingSlotIssues] = useState<any[]>([]);
 
 
   useEffect(() => {
@@ -295,6 +301,7 @@ const TournamentSetup = () => {
       const teamsData = await apiClient.getTournamentTeams(tournamentId);
       const loadedTeams: TeamData[] = [];
       const localMappingWarnings: string[] = [];
+      const localMappingSlotIssues: any[] = [];
       
       // First, load all users if not already loaded
       const allUsers = availableUsers.length > 0 ? availableUsers : await apiClient.getUsers();
@@ -358,10 +365,6 @@ const TournamentSetup = () => {
             const format = formatsForLoad?.find(f => f.id === match.match_format_id) || matchFormats?.find(f => f.id === match.match_format_id);
             const playersNeeded = format?.players_per_side || 1;
 
-            // Initialize arrays for player slot indices (indices into teams[].players)
-            const team1Players = Array(playersNeeded).fill(undefined);
-            const team2Players = Array(playersNeeded).fill(undefined);
-
             // Try to use embedded players if provided by the matches response,
             // otherwise fetch them from the API
             let matchPlayers = match.players;
@@ -373,74 +376,39 @@ const TournamentSetup = () => {
                 matchPlayers = [];
               }
             }
+            const mapping = mapMatchPlayersToSlots(
+              // Convert loadedTeams to SimpleTeam for the mapper
+              loadedTeams.map(t => ({ id: t.id, players: t.players.map(p => ({ id: p.id, name: p.name })) })),
+              Array.isArray(matchPlayers) ? matchPlayers : [],
+              playersNeeded,
+              { matchId: match.id, matchNumber: match.match_number, matchTeam1Id: (match as any).team1_id, matchTeam2Id: (match as any).team2_id }
+            );
 
-            if (Array.isArray(matchPlayers) && matchPlayers.length > 0) {
-              // Determine which loadedTeam corresponds to match.team1_id and team2_id
-              // If the match includes explicit team1_id/team2_id use those. Otherwise
-              // fall back to the order of loadedTeams (with a warning) assuming the
-              // API returns teams in the expected order.
-              let teamIdToIdx: { [teamId: string]: number } = {};
-              if (match.team1_id && match.team2_id) {
-                const idx1 = loadedTeams.findIndex(t => t.id === match.team1_id);
-                const idx2 = loadedTeams.findIndex(t => t.id === match.team2_id);
-                if (idx1 !== -1) teamIdToIdx[match.team1_id] = idx1;
-                if (idx2 !== -1) teamIdToIdx[match.team2_id] = idx2;
+            // Append any warnings and slot-specific issues from the mapping
+            if (mapping.warnings && mapping.warnings.length > 0) localMappingWarnings.push(...mapping.warnings);
+            if (mapping.slotIssues && mapping.slotIssues.length > 0) localMappingSlotIssues.push(...mapping.slotIssues);
+
+            // Attempt to convert user IDs back to indices into loadedTeams for the
+            // legacy index-based UI where necessary. Use undefined when not found.
+            const team1PlayersIdxs: (number | undefined)[] = Array(playersNeeded).fill(undefined);
+            const team2PlayersIdxs: (number | undefined)[] = Array(playersNeeded).fill(undefined);
+
+            mapping.team1_players.forEach((userId, slot) => {
+              if (!userId) return;
+              const teamIdx = loadedTeams.findIndex(t => (t.id === (match as any).team1_id) || (t.players || []).some(p => p.id === userId));
+              if (teamIdx !== -1) {
+                const idxInTeam = loadedTeams[teamIdx].players.findIndex(p => p.id === userId);
+                if (idxInTeam !== -1) team1PlayersIdxs[slot] = idxInTeam;
               }
-
-              // If we still don't have mapping for both sides, try assigning from order
-              if (!match.team1_id || teamIdToIdx[match.team1_id] === undefined) {
-                if (loadedTeams.length >= 2) {
-                  // assume loadedTeams[0] is team1 and loadedTeams[1] is team2
-                  if (loadedTeams[0]?.id) teamIdToIdx[loadedTeams[0].id] = 0;
-                  if (loadedTeams[1]?.id) teamIdToIdx[loadedTeams[1].id] = 1;
-                  localMappingWarnings.push(`Match ${match.match_number}: unable to determine which side is team1/team2 from API response; falling back to team order.`);
-                }
+            });
+            mapping.team2_players.forEach((userId, slot) => {
+              if (!userId) return;
+              const teamIdx = loadedTeams.findIndex(t => (t.id === (match as any).team2_id) || (t.players || []).some(p => p.id === userId));
+              if (teamIdx !== -1) {
+                const idxInTeam = loadedTeams[teamIdx].players.findIndex(p => p.id === userId);
+                if (idxInTeam !== -1) team2PlayersIdxs[slot] = idxInTeam;
               }
-
-              // Fill slots based on player_order (1-based) where possible
-              matchPlayers.forEach(mp => {
-                const slot = (mp.player_order || 1) - 1;
-                const teamIdx = loadedTeams.findIndex(t => t.id === mp.team_id);
-                if (teamIdx === -1) {
-                  localMappingWarnings.push(`Match ${match.match_number}: player ${mp.user_id} references unknown team ${mp.team_id}`);
-                  return; // unknown team
-                }
-
-                // Find the index of this user within that team's players array
-                const userIdxInTeam = (loadedTeams[teamIdx].players || []).findIndex(p => p.id === mp.user_id);
-                if (userIdxInTeam === -1) {
-                  localMappingWarnings.push(`Match ${match.match_number}: player ${mp.user_id} not found on team ${mp.team_id}`);
-                  return; // player not found on team
-                }
-
-                // Determine whether this is team1 or team2 for the match
-                // Prefer explicit team_id -> side mapping (team1_id/team2_id), otherwise
-                // use the assumption that teamIdToIdx maps the team's id to 0 or 1.
-                let side: 'team1' | 'team2' | undefined;
-                if (match.team1_id && mp.team_id === match.team1_id) side = 'team1';
-                else if (match.team2_id && mp.team_id === match.team2_id) side = 'team2';
-                else {
-                  // fallback: check teamIdToIdx mapping
-                  const mappedIdx = teamIdToIdx[mp.team_id];
-                  if (mappedIdx === 0) side = 'team1';
-                  else if (mappedIdx === 1) side = 'team2';
-                }
-
-                if (!side) {
-                  // Fallback: if teams are ordered and this teamIdx matches 0/1 use that
-                  if (teamIdx === 0) side = 'team1';
-                  else if (teamIdx === 1) side = 'team2';
-                }
-
-                if (side === 'team1') {
-                  if (slot >= 0 && slot < playersNeeded) team1Players[slot] = userIdxInTeam;
-                } else if (side === 'team2') {
-                  if (slot >= 0 && slot < playersNeeded) team2Players[slot] = userIdxInTeam;
-                } else {
-                  localMappingWarnings.push(`Match ${match.match_number}: could not determine side for player ${mp.user_id}`);
-                }
-              });
-            }
+            });
 
             loadedMatches.push({
               id: match.id,
@@ -452,8 +420,10 @@ const TournamentSetup = () => {
               start_hole: match.start_hole,
               end_hole: match.end_hole,
               points_available: match.points_available,
-              team1_players: team1Players,
-              team2_players: team2Players
+              team1_players: team1PlayersIdxs as any,
+              team2_players: team2PlayersIdxs as any,
+              team1_user_ids: mapping.team1_players,
+              team2_user_ids: mapping.team2_players
             });
           }
 
@@ -495,8 +465,10 @@ const TournamentSetup = () => {
       // and reassign players if necessary.
       if (localMappingWarnings.length > 0) {
         setMappingWarnings(localMappingWarnings);
+        setMappingSlotIssues(localMappingSlotIssues);
       } else {
         setMappingWarnings([]);
+        setMappingSlotIssues([]);
       }
 
       setEditMode(true);
@@ -651,20 +623,24 @@ const TournamentSetup = () => {
               }));
 
             const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => {
-              // Collect user IDs for this match from team1_players and team2_players indices
-              // Note: team1_players/team2_players contain indices into teams[].players, not pairing.players
-              const playerUserIds: string[] = [];
-               if (match.team1_players && Array.isArray(match.team1_players)) {
+               // Collect user IDs for this match. Prefer explicit team*_user_ids arrays
+               // which store user IDs directly. Fall back to index-based arrays for
+               // backward compatibility.
+               const playerUserIds: string[] = [];
+               if (match.team1_user_ids && Array.isArray(match.team1_user_ids)) {
+                 match.team1_user_ids.forEach(uid => { if (uid) playerUserIds.push(uid); });
+               } else if (match.team1_players && Array.isArray(match.team1_players)) {
                  match.team1_players.forEach(teamPlayerIdx => {
-                   // teamPlayerIdx is an index into teams[0].players
                    if (typeof teamPlayerIdx === 'number' && teams[0] && teams[0].players[teamPlayerIdx]) {
                      playerUserIds.push(teams[0].players[teamPlayerIdx].id);
                    }
                  });
                }
-               if (match.team2_players && Array.isArray(match.team2_players)) {
+
+               if (match.team2_user_ids && Array.isArray(match.team2_user_ids)) {
+                 match.team2_user_ids.forEach(uid => { if (uid) playerUserIds.push(uid); });
+               } else if (match.team2_players && Array.isArray(match.team2_players)) {
                  match.team2_players.forEach(teamPlayerIdx => {
-                   // teamPlayerIdx is an index into teams[1].players
                    if (typeof teamPlayerIdx === 'number' && teams[1] && teams[1].players[teamPlayerIdx]) {
                      playerUserIds.push(teams[1].players[teamPlayerIdx].id);
                    }
@@ -783,20 +759,24 @@ const TournamentSetup = () => {
               });
 
             const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => {
-              // Collect user IDs for this match from team1_players and team2_players indices
-              // Note: team1_players/team2_players contain indices into teams[].players, not pairing.players
-              const playerUserIds: string[] = [];
-               if (match.team1_players && Array.isArray(match.team1_players)) {
+               // Collect user IDs for this match. Prefer explicit team*_user_ids arrays
+               // which store user IDs directly. Fall back to index-based arrays for
+               // backward compatibility.
+               const playerUserIds: string[] = [];
+               if (match.team1_user_ids && Array.isArray(match.team1_user_ids)) {
+                 match.team1_user_ids.forEach(uid => { if (uid) playerUserIds.push(uid); });
+               } else if (match.team1_players && Array.isArray(match.team1_players)) {
                  match.team1_players.forEach(teamPlayerIdx => {
-                   // teamPlayerIdx is an index into teams[0].players
                    if (typeof teamPlayerIdx === 'number' && teams[0] && teams[0].players[teamPlayerIdx]) {
                      playerUserIds.push(teams[0].players[teamPlayerIdx].id);
                    }
                  });
                }
-               if (match.team2_players && Array.isArray(match.team2_players)) {
+
+               if (match.team2_user_ids && Array.isArray(match.team2_user_ids)) {
+                 match.team2_user_ids.forEach(uid => { if (uid) playerUserIds.push(uid); });
+               } else if (match.team2_players && Array.isArray(match.team2_players)) {
                  match.team2_players.forEach(teamPlayerIdx => {
-                   // teamPlayerIdx is an index into teams[1].players
                    if (typeof teamPlayerIdx === 'number' && teams[1] && teams[1].players[teamPlayerIdx]) {
                      playerUserIds.push(teams[1].players[teamPlayerIdx].id);
                    }
@@ -1097,6 +1077,7 @@ const TournamentSetup = () => {
             loading={loading}
             tournamentStartDate={tournament.start_date}
             tournamentEndDate={tournament.end_date}
+            mappingSlotIssues={mappingSlotIssues}
           />
         )}
         {step === 4 && (
@@ -1373,7 +1354,7 @@ const TeamsStep = ({ teams, setTeams, availableUsers }) => {
 };
 
 // Step 3: Rounds & Matches
-const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, availableTees, setAvailableTees, loading, tournamentStartDate, tournamentEndDate }) => {
+const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, availableTees, setAvailableTees, loading, tournamentStartDate, tournamentEndDate, mappingSlotIssues }) => {
   // Show loading message if data is still being fetched
   if (loading) {
     return (
@@ -1489,7 +1470,9 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
       format_id: defaultFormatId,
       holes: lastMatch ? lastMatch.holes : 6,
       team1_players: Array(playersNeeded).fill(undefined),
-      team2_players: Array(playersNeeded).fill(undefined)
+      team2_players: Array(playersNeeded).fill(undefined),
+      team1_user_ids: Array(playersNeeded).fill(undefined),
+      team2_user_ids: Array(playersNeeded).fill(undefined)
     });
     setRounds(newRounds);
   };
@@ -1511,13 +1494,19 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
         const old = newMatches[matchIdx];
         const oldTeam1 = Array.isArray(old.team1_players) ? old.team1_players.slice() : [];
         const oldTeam2 = Array.isArray(old.team2_players) ? old.team2_players.slice() : [];
+        const oldTeam1Users = Array.isArray(old.team1_user_ids) ? old.team1_user_ids.slice() : [];
+        const oldTeam2Users = Array.isArray(old.team2_user_ids) ? old.team2_user_ids.slice() : [];
 
         const resizedTeam1 = Array(newPlayersNeeded).fill(undefined);
         const resizedTeam2 = Array(newPlayersNeeded).fill(undefined);
+        const resizedTeam1Users = Array(newPlayersNeeded).fill(undefined);
+        const resizedTeam2Users = Array(newPlayersNeeded).fill(undefined);
         for (let i = 0; i < Math.min(oldTeam1.length, newPlayersNeeded); i++) resizedTeam1[i] = oldTeam1[i];
         for (let i = 0; i < Math.min(oldTeam2.length, newPlayersNeeded); i++) resizedTeam2[i] = oldTeam2[i];
+        for (let i = 0; i < Math.min(oldTeam1Users.length, newPlayersNeeded); i++) resizedTeam1Users[i] = oldTeam1Users[i];
+        for (let i = 0; i < Math.min(oldTeam2Users.length, newPlayersNeeded); i++) resizedTeam2Users[i] = oldTeam2Users[i];
 
-        newMatches[matchIdx] = { ...old, format_id: newFormatId, team1_players: resizedTeam1, team2_players: resizedTeam2 };
+        newMatches[matchIdx] = { ...old, format_id: newFormatId, team1_players: resizedTeam1, team2_players: resizedTeam2, team1_user_ids: resizedTeam1Users, team2_user_ids: resizedTeam2Users };
       } else {
         newMatches[matchIdx] = { ...newMatches[matchIdx], [fieldOrFields]: value };
       }
@@ -1600,6 +1589,7 @@ const RoundsStep = ({ rounds, setRounds, teams, matchFormats, golfCourses, avail
               toggleRoundCollapse={toggleRoundCollapse}
               togglePairingCollapse={togglePairingCollapse}
               toggleMatchCollapse={toggleMatchCollapse}
+              mappingSlotIssues={mappingSlotIssues}
             />
           ))
         )}
@@ -1628,6 +1618,7 @@ const RoundConfig = ({
   toggleRoundCollapse,
   togglePairingCollapse,
   toggleMatchCollapse
+  , mappingSlotIssues
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -1870,6 +1861,7 @@ const RoundConfig = ({
               deleteMatch={deleteMatch}
               togglePairingCollapse={togglePairingCollapse}
               toggleMatchCollapse={toggleMatchCollapse}
+              mappingSlotIssues={mappingSlotIssues}
             />
           ))
         )}
@@ -1892,7 +1884,8 @@ const PairingConfig = ({
   updateMatch,
   deleteMatch,
   togglePairingCollapse,
-  toggleMatchCollapse
+  toggleMatchCollapse,
+  mappingSlotIssues
 }) => {
   const addPlayerToPairing = (userId, teamId) => {
     const newPlayers = [...(pairing.players || [])];
@@ -2103,6 +2096,7 @@ const PairingConfig = ({
                 updateMatch={updateMatch}
                 deleteMatch={deleteMatch}
                 toggleMatchCollapse={toggleMatchCollapse}
+                mappingSlotIssues={mappingSlotIssues}
               />
             ))
           )}
@@ -2123,7 +2117,8 @@ const MatchConfig = ({
   matchFormats,
   updateMatch,
   deleteMatch,
-  toggleMatchCollapse
+  toggleMatchCollapse,
+  mappingSlotIssues
 }) => {
   // Ensure matchFormats is always an array
   const safeMatchFormats = Array.isArray(matchFormats) ? matchFormats : [];
@@ -2314,33 +2309,56 @@ const MatchConfig = ({
                   ))
                 ) : (
                   // Manual selection view - show dropdowns
-                  Array.from({ length: playersNeeded }).map((_, playerSlot) => (
-                    <select
-                      key={playerSlot}
-                      value={teamIdx === 0 ? (match.team1_players[playerSlot] !== undefined ? match.team1_players[playerSlot].toString() : '') : (match.team2_players[playerSlot] !== undefined ? match.team2_players[playerSlot].toString() : '')}
-                      onChange={(e) => {
-                        const newPlayers = [...(teamIdx === 0 ? match.team1_players : match.team2_players)];
-                        if (e.target.value === '') {
-                          newPlayers[playerSlot] = undefined;
-                        } else {
-                          newPlayers[playerSlot] = parseInt(e.target.value);
-                        }
-                        updateMatch(roundIdx, pairingIdx, matchIdx, teamIdx === 0 ? 'team1_players' : 'team2_players', newPlayers);
-                      }}
-                      className="w-full p-1 border rounded text-xs"
-                    >
-                      <option value="">Select...</option>
-                      {teamPlayersInPairing.map((player, pIdx) => {
-                        // Find the original index of this player in team.players
-                        const originalIdx = team.players.findIndex(p => p.id === player.id);
-                        return (
-                          <option key={player.id} value={originalIdx.toString()}>
-                            {player.name}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  ))
+                  Array.from({ length: playersNeeded }).map((_, playerSlot) => {
+                    const side = teamIdx === 0 ? 'team1' : 'team2';
+                    const issues = (mappingSlotIssues || []).filter((si: any) => (
+                      (si.matchId === match.id || si.matchNumber === match.match_number) && si.side === side && si.slot === playerSlot
+                    ));
+
+                    // Build value and onChange handlers
+                    const value = teamIdx === 0 ? (match.team1_user_ids && match.team1_user_ids[playerSlot] ? match.team1_user_ids[playerSlot] as string : '') : (match.team2_user_ids && match.team2_user_ids[playerSlot] ? match.team2_user_ids[playerSlot] as string : '');
+
+                    return (
+                      <div key={playerSlot}>
+                        <select
+                          value={value}
+                          onChange={(e) => {
+                            const selectedUserId = e.target.value === '' ? undefined : e.target.value;
+
+                            // Update user ID arrays
+                            const newUserIds = teamIdx === 0 ? (match.team1_user_ids ? match.team1_user_ids.slice() : Array(playersNeeded).fill(undefined)) : (match.team2_user_ids ? match.team2_user_ids.slice() : Array(playersNeeded).fill(undefined));
+                            newUserIds[playerSlot] = selectedUserId;
+
+                            // Update index arrays to maintain backward compatibility
+                            const newIndexArr = teamIdx === 0 ? (match.team1_players ? match.team1_players.slice() : Array(playersNeeded).fill(undefined)) : (match.team2_players ? match.team2_players.slice() : Array(playersNeeded).fill(undefined));
+                            if (selectedUserId) {
+                              const idxInTeam = team.players.findIndex(p => p.id === selectedUserId);
+                              newIndexArr[playerSlot] = idxInTeam !== -1 ? idxInTeam : undefined;
+                            } else {
+                              newIndexArr[playerSlot] = undefined;
+                            }
+
+                            if (teamIdx === 0) {
+                              updateMatch(roundIdx, pairingIdx, matchIdx, { team1_user_ids: newUserIds, team1_players: newIndexArr });
+                            } else {
+                              updateMatch(roundIdx, pairingIdx, matchIdx, { team2_user_ids: newUserIds, team2_players: newIndexArr });
+                            }
+                          }}
+                          className="w-full p-1 border rounded text-xs"
+                        >
+                          <option value="">Select...</option>
+                          {teamPlayersInPairing.map((player) => (
+                            <option key={player.id} value={player.id}>
+                              {player.name}
+                            </option>
+                          ))}
+                        </select>
+                        {issues.length > 0 && (
+                          <div className="text-xs text-red-600 mt-1">{issues[0].message}</div>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
