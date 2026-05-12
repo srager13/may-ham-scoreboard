@@ -543,162 +543,296 @@ const TournamentSetup = () => {
       }
 
       if (editMode && selectedTournamentId) {
-        // EDIT MODE: Update existing tournament
-        // For simplicity, we'll delete all existing rounds/matches and recreate them
-        // This ensures consistency and avoids complex diffing logic
-        
-        // Step 1: Delete all existing rounds (cascades to matches)
-        const existingRounds = await apiClient.getTournamentRounds(selectedTournamentId);
-        for (const round of existingRounds) {
-          await apiClient.deleteRound(round.id);
+        // Non-destructive edit flow: reconcile local state with server state
+        // Fetch current server state
+        const serverTeams = await apiClient.getTournamentTeams(selectedTournamentId);
+        const serverRounds = await apiClient.getTournamentRounds(selectedTournamentId);
+
+        // Reconcile teams: update existing, create missing, and delete removed (prompt user)
+        // Build maps for convenience
+        const localTeamsById: { [id: string]: TeamData } = {};
+        const newTeamsToCreate: TeamData[] = [];
+        for (const t of teams) {
+          if (t.id) localTeamsById[t.id] = t;
+          else newTeamsToCreate.push(t);
         }
 
-        // Step 2: Delete all existing teams (cascades to team members)
-        const existingTeams = await apiClient.getTournamentTeams(selectedTournamentId);
-        for (const team of existingTeams) {
-          await apiClient.deleteTeam(team.id);
-        }
-
-        // Step 3: Recreate teams with new data and create mapping from old to new team IDs
-        const teamIdMapping: { [oldTeamId: string]: string } = {}; // Map old team ID to new team ID
-        const createdTeams = [];
-        for (const team of teams) {
-          const newTeam = await apiClient.createTeam(selectedTournamentId, {
-            name: team.name,
-            color: team.color,
-          });
-          createdTeams.push(newTeam);
-
-          // Map old team ID to new team ID for pairing player updates
-          if (team.id) {
-            teamIdMapping[team.id] = newTeam.id;
-          }
-
-          // Add team members
-          for (const player of team.players) {
-            if (!player.id) {
-              console.warn('Skipping player with no ID:', player);
-              continue;
+        // Update existing teams
+        for (const s of serverTeams) {
+          const local = localTeamsById[s.id];
+          if (local) {
+            // Patch team metadata if changed
+            if (local.name !== s.name || local.color !== s.color) {
+              try {
+                await apiClient.updateTeam(s.id, { name: local.name, color: local.color });
+              } catch (err) {
+                console.error('Failed to update team', s.id, err);
+              }
             }
-            try {
-              await apiClient.addTeamMember(newTeam.id, player.id);
-            } catch (memberError) {
-              console.error(`Failed to add player ${player.name} (${player.id}) to team:`, memberError);
-            }
-          }
 
-          // Upload logo if provided
-          if (team.logoFile) {
+            // Reconcile members: naive approach - remove all server members not in local, add missing
             try {
-              const fd = new FormData();
-              fd.append('logo', team.logoFile);
-              const updated = await apiClient.uploadTeamLogo(newTeam.id, fd);
-              // Update createdTeams entry if returned
-              if (updated && updated.logo_url) {
-                createdTeams[createdTeams.length - 1].logo_url = updated.logo_url;
+              const serverMembers = await apiClient.getTeamMembers(s.id);
+              const serverMemberIds = serverMembers.map(m => m.user_id);
+              const desiredMemberIds = local.players.map(p => p.id).filter(Boolean) as string[];
+
+              // Add missing members
+              for (const uid of desiredMemberIds) {
+                if (!serverMemberIds.includes(uid)) {
+                  try { await apiClient.addTeamMember(s.id, uid); } catch (e) { console.error('addTeamMember failed', e); }
+                }
+              }
+
+              // Remove members that are no longer present locally
+              for (const sm of serverMembers) {
+                if (!desiredMemberIds.includes(sm.user_id)) {
+                  try { await apiClient.deleteTeamMember(s.id, sm.user_id); } catch (e) { console.error('deleteTeamMember failed', e); }
+                }
               }
             } catch (err) {
-              console.error('Failed to upload team logo:', err);
-            }
-          } else if (team.logoPreviewUrl) {
-            // Preserve previously uploaded logo URL when editing a tournament and
-            // the user did not provide a new File. Try to persist the same
-            // logo_url on the newly created team record by calling the backend
-            // PATCH /teams/:team_id/logo with { logo_url }. The server will
-            // validate the path and ensure the referenced file exists.
-            try {
-              const updated = await apiClient.setTeamLogoUrl(newTeam.id, team.logoPreviewUrl);
-              if (updated && (updated as any).logo_url) {
-                createdTeams[createdTeams.length - 1].logo_url = (updated as any).logo_url;
-              } else {
-                // Fall back to copying the preview URL into the local object
-                createdTeams[createdTeams.length - 1].logo_url = team.logoPreviewUrl;
-              }
-            } catch (err) {
-              console.error('Failed to persist existing team logo to new team:', err);
-              // Still preserve the URL client-side for UX, even if server call fails
-              createdTeams[createdTeams.length - 1].logo_url = team.logoPreviewUrl;
+              console.error('Failed to reconcile team members for', s.id, err);
             }
           }
         }
 
-        // Step 4: Recreate rounds and pairings
-        for (const round of rounds) {
-          const newRound = await apiClient.createRound(selectedTournamentId, {
-            name: round.name,
-            round_number: round.round_number,
-            round_date: round.date,
-            golf_course_id: round.golf_course_id,
-          });
+        // Create new teams
+        const createdTeams: Team[] = [];
+        for (const nt of newTeamsToCreate) {
+          try {
+            const created = await apiClient.createTeam(selectedTournamentId, { name: nt.name, color: nt.color });
+            createdTeams.push(created);
+            // Preserve the created team id on the local team object so later
+            // reconciliation (pairings/matches) can reference the correct server id.
+            nt.id = created.id;
+            // Add members
+            for (const p of nt.players) {
+              if (p.id) {
+                try { await apiClient.addTeamMember(created.id, p.id); } catch (e) { console.error('addTeamMember failed', e); }
+              }
+            }
+            // Upload logo if provided
+            if (nt.logoFile) {
+              try {
+                const fd = new FormData(); fd.append('logo', nt.logoFile);
+                await apiClient.uploadTeamLogo(created.id, fd);
+              } catch (e) { console.error('uploadTeamLogo failed', e); }
+            }
+          } catch (err) {
+            console.error('Failed to create team', nt, err);
+          }
+        }
 
-          // Create pairings for this round
-          for (const pairing of round.pairings || []) {
-            const pairingPlayers: PairingPlayerRequest[] = (pairing.players || [])
-              .filter(p => p.user_id && p.team_id) // Filter out invalid players
-              .map(p => ({
-                user_id: p.user_id,
-                team_id: teamIdMapping[p.team_id] || p.team_id, // Use mapped new team ID or fall back to original
-                player_order: p.player_order
-              }));
+        // Identify teams deleted locally (present on server but not in local teams)
+        const localTeamIds = teams.filter(t => t.id).map(t => t.id as string);
+        const teamsToDelete = serverTeams.filter(st => !localTeamIds.includes(st.id));
+        if (teamsToDelete.length > 0) {
+          const proceed = confirm(`You are about to delete ${teamsToDelete.length} team(s) from the tournament. This will remove team membership and may affect historical data. Continue?`);
+          if (proceed) {
+            for (const td of teamsToDelete) {
+              try {
+                await apiClient.deleteTeam(td.id);
+              } catch (e) {
+                // If the server indicates a conflict (409) because historical
+                // scoring exists, surface the server message and ask for
+                // explicit confirmation to perform a destructive delete.
+                if (e instanceof ApiError && e.status === 409) {
+                  const ok = confirm(`${e.message}\n\n${e.code ? `Code: ${e.code}` : ''}\n\nThis action will permanently remove historical scoring data. Proceed?`);
+                  if (ok) {
+                    try {
+                      await apiClient.deleteTeam(td.id, true);
+                    } catch (ee) {
+                      console.error('retry deleteTeam failed', ee);
+                      setError('Failed to delete team after confirmation');
+                      setLoading(false);
+                      return;
+                    }
+                  } else {
+                    setLoading(false);
+                    setError('Update cancelled by user');
+                    return;
+                  }
+                } else {
+                  console.error('deleteTeam failed', e);
+                }
+              }
+            }
+          } else {
+            setLoading(false);
+            setError('Update cancelled by user');
+            return;
+          }
+        }
 
-            const pairingMatches: PairingMatchRequest[] = (pairing.matches || []).map(match => {
-               // Collect user IDs for this match. Prefer explicit team*_user_ids arrays
-               // which store user IDs directly. Fall back to index-based arrays for
-               // backward compatibility.
-               const playerUserIds: string[] = [];
-               if (match.team1_user_ids && Array.isArray(match.team1_user_ids)) {
-                 match.team1_user_ids.forEach(uid => { if (uid) playerUserIds.push(uid); });
-               } else if (match.team1_players && Array.isArray(match.team1_players)) {
-                 match.team1_players.forEach(teamPlayerIdx => {
-                   if (typeof teamPlayerIdx === 'number' && teams[0] && teams[0].players[teamPlayerIdx]) {
-                     playerUserIds.push(teams[0].players[teamPlayerIdx].id);
-                   }
-                 });
-               }
+        // Reconcile rounds/pairings/matches
+        // Detect rounds that exist on the server but were removed locally and
+        // offer to delete them (guarded by server which may return 409 if
+        // historical scoring exists).
+        const localRoundIds = rounds.filter(r => r.id).map(r => r.id as string);
+        const roundsToDelete = serverRounds.filter(sr => !localRoundIds.includes(sr.id));
+        if (roundsToDelete.length > 0) {
+          const proceedRounds = confirm(`You are about to delete ${roundsToDelete.length} round(s) from the tournament. This may remove associated pairings, matches, and historical scoring. Continue?`);
+          if (proceedRounds) {
+            for (const rd of roundsToDelete) {
+              try {
+                await apiClient.deleteRound(rd.id);
+              } catch (e) {
+                if (e instanceof ApiError && e.status === 409) {
+                  const ok = confirm(`${e.message}\n\n${e.code ? `Code: ${e.code}` : ''}\n\nThis action will permanently remove historical scoring data. Proceed?`);
+                  if (ok) {
+                    try { await apiClient.deleteRound(rd.id, true); } catch (ee) { console.error('retry deleteRound failed', ee); setError('Failed to delete round after confirmation'); setLoading(false); return; }
+                  } else {
+                    setLoading(false);
+                    setError('Update cancelled by user');
+                    return;
+                  }
+                } else {
+                  console.error('deleteRound failed', e);
+                }
+              }
+            }
+          } else {
+            setLoading(false);
+            setError('Update cancelled by user');
+            return;
+          }
+        }
+        // We'll iterate local rounds: update or create round, then reconcile pairings and matches within.
+        for (const localRound of rounds) {
+          let roundId = localRound.id;
+          if (roundId) {
+            // PATCH round
+            try {
+              await apiClient.updateRound(roundId, { name: localRound.name, round_number: localRound.round_number, round_date: localRound.date, golf_course_id: localRound.golf_course_id });
+            } catch (err) { console.error('updateRound failed', err); }
+          } else {
+            // Create round
+            try {
+              const created = await apiClient.createRound(selectedTournamentId, { name: localRound.name, round_number: localRound.round_number, round_date: localRound.date, golf_course_id: localRound.golf_course_id });
+              roundId = created.id;
+              // assign back to local object so matches/pairings creation below can use it
+              localRound.id = roundId;
+            } catch (err) { console.error('createRound failed', err); continue; }
+          }
 
-               if (match.team2_user_ids && Array.isArray(match.team2_user_ids)) {
-                 match.team2_user_ids.forEach(uid => { if (uid) playerUserIds.push(uid); });
-               } else if (match.team2_players && Array.isArray(match.team2_players)) {
-                 match.team2_players.forEach(teamPlayerIdx => {
-                   if (typeof teamPlayerIdx === 'number' && teams[1] && teams[1].players[teamPlayerIdx]) {
-                     playerUserIds.push(teams[1].players[teamPlayerIdx].id);
-                   }
-                 });
-               }
+          // Load server pairings for this round to detect deletions
+          let serverPairings: Pairing[] = [];
+          try { serverPairings = await apiClient.getRoundPairings(roundId as string); } catch (e) { console.error('getRoundPairings failed', e); }
 
-              return {
-                team1_id: createdTeams[0].id,
-                team2_id: createdTeams[1].id,
-                match_format_id: match.format_id,
-                holes: match.holes,
-                start_hole: match.start_hole,
-                end_hole: match.end_hole,
-                points_available: match.points_available,
-                player_user_ids: playerUserIds.length > 0 ? playerUserIds : undefined
+          const localPairings = localRound.pairings || [];
+          const localPairingsById: { [id: string]: PairingData } = {};
+          const newPairingsToCreate: PairingData[] = [];
+          for (const p of localPairings) {
+            if (p.id) localPairingsById[p.id] = p;
+            else newPairingsToCreate.push(p);
+          }
+
+          // Update existing pairings
+          for (const sp of serverPairings) {
+            const localP = localPairingsById[sp.id];
+            if (localP) {
+              try {
+                await apiClient.updatePairing(sp.id, { pairing_number: localP.pairing_number, tee_time: localP.tee_time, golf_course_tee_id: localP.golf_course_tee_id, players: (localP.players || []).map(pl => ({ user_id: pl.user_id, team_id: pl.team_id, player_order: pl.player_order })) });
+              } catch (err) { console.error('updatePairing failed', err); }
+            }
+          }
+
+          // Create new pairings
+          for (const np of newPairingsToCreate) {
+            try {
+              const pairingPlayers = (np.players || []).filter(p => p.user_id && p.team_id).map(p => ({ user_id: p.user_id, team_id: p.team_id, player_order: p.player_order }));
+              const pairingMatches = (np.matches || []).map(m => {
+                const playerUserIds: string[] = [];
+                if (m.team1_user_ids && Array.isArray(m.team1_user_ids)) playerUserIds.push(...(m.team1_user_ids.filter(Boolean) as string[]));
+                if (m.team2_user_ids && Array.isArray(m.team2_user_ids)) playerUserIds.push(...(m.team2_user_ids.filter(Boolean) as string[]));
+                return { team1_id: '', team2_id: '', match_format_id: m.format_id, holes: m.holes, start_hole: m.start_hole, end_hole: m.end_hole, points_available: m.points_available, player_user_ids: playerUserIds.length ? playerUserIds : undefined };
+              });
+              // Resolve team ids referenced in pairingPlayers. Some local team
+              // ids may be temporary placeholders (eg. "team-0"). If so,
+              // map them to the created team ids we produced above. Otherwise
+              // use the provided id (which is typically an existing server id).
+              const resolveTeamId = (tid: string) => {
+                if (!tid) return tid;
+                if (tid.startsWith('team-')) {
+                  const parts = tid.split('-');
+                  const idx = parseInt(parts[1], 10);
+                  if (!isNaN(idx)) {
+                    // Prefer the teams array (we set nt.id after creation),
+                    // falling back to createdTeams in case of ordering differences.
+                    if (teams[idx] && teams[idx].id) return teams[idx].id as string;
+                    if (createdTeams[idx]) return createdTeams[idx].id;
+                  }
+                }
+                return tid;
               };
-            });
 
-            // Convert tee_time (HH:MM) to full RFC3339 timestamp in UTC
-            let fullTeeTime: string | undefined;
-            if (pairing.tee_time) {
-              // Create date in the tournament's timezone, then convert to UTC
-              const localDateTime = new Date(`${round.date}T${pairing.tee_time}:00`);
-              fullTeeTime = localDateTime.toISOString();
+              // Build matches with resolved team ids. If the pairing's players
+              // include explicit team ids, use those to determine team1/team2.
+              const participantTeamIds = Array.from(new Set(pairingPlayers.map(p => resolveTeamId(p.team_id)))).filter(Boolean);
+
+              const resolvedMatches = (np.matches || []).map(m => {
+                const playerUserIds: string[] = [];
+                if (m.team1_user_ids && Array.isArray(m.team1_user_ids)) playerUserIds.push(...(m.team1_user_ids.filter(Boolean) as string[]));
+                if (m.team2_user_ids && Array.isArray(m.team2_user_ids)) playerUserIds.push(...(m.team2_user_ids.filter(Boolean) as string[]));
+
+                let team1Id = '';
+                let team2Id = '';
+                if (participantTeamIds.length >= 2) {
+                  team1Id = participantTeamIds[0];
+                  team2Id = participantTeamIds[1];
+                } else {
+                  // Fallbacks: try to use the first two teams in the overall teams list
+                  team1Id = teams[0]?.id || createdTeams[0]?.id || '';
+                  team2Id = teams[1]?.id || createdTeams[1]?.id || '';
+                }
+
+                return { team1_id: team1Id, team2_id: team2Id, match_format_id: m.format_id, holes: m.holes, start_hole: m.start_hole, end_hole: m.end_hole, points_available: m.points_available, player_user_ids: playerUserIds.length ? playerUserIds : undefined };
+              });
+
+              // Create pairing including matches in a single API call. The
+              // server will create contained matches for us and validate team ids.
+              await apiClient.createPairing(roundId as string, { pairing_number: np.pairing_number, tee_time: np.tee_time, golf_course_tee_id: np.golf_course_tee_id, players: pairingPlayers, matches: resolvedMatches });
+            } catch (err) { console.error('createPairing failed', err); }
+          }
+
+          // Matches reconciliation for existing pairings: for brevity we'll only update match metadata and call updateMatchPlayers when player assignments changed
+          for (const lp of localPairings) {
+            if (!lp.matches) continue;
+            for (const m of lp.matches) {
+              if (m.id) {
+                // Patch match metadata
+                try {
+                  await apiClient.updateMatch(m.id, { match_format_id: m.format_id, holes: m.holes, start_hole: m.start_hole, end_hole: m.end_hole, points_available: m.points_available });
+                } catch (err) { console.error('updateMatch failed', err); }
+
+                // If player assignments are present, try to update them using the new endpoint
+                const t1 = (m.team1_user_ids || []).filter(Boolean) as string[];
+                const t2 = (m.team2_user_ids || []).filter(Boolean) as string[];
+                if (t1.length > 0 || t2.length > 0) {
+                  try {
+                    await apiClient.updateMatchPlayers(m.id, t1, t2, false);
+                  } catch (err) {
+                    // If server responded with 409 (ApiError with status 409), prompt user to confirm destructive update and retry
+                    if (err instanceof ApiError && err.status === 409) {
+                      const ok = confirm(`${err.message}\n\nThis change will replace match player assignments and may affect existing scores/results. Do you want to proceed?`);
+                      if (ok) {
+                        try { await apiClient.updateMatchPlayers(m.id, t1, t2, true); } catch (e) { console.error('retry updateMatchPlayers failed', e); }
+                      } else {
+                        setLoading(false);
+                        setError('Update cancelled by user');
+                        return;
+                      }
+                    } else {
+                      console.error('updateMatchPlayers failed', err);
+                    }
+                  }
+                }
+              }
             }
-
-            await apiClient.createPairing(newRound.id, {
-              pairing_number: pairing.pairing_number,
-              tee_time: fullTeeTime,
-              golf_course_tee_id: pairing.golf_course_tee_id || undefined, // Convert empty string to undefined
-              players: pairingPlayers,
-              matches: pairingMatches
-            });
           }
         }
 
         alert('Tournament updated successfully!');
         localStorage.removeItem('tournament_draft');
-        
       } else {
         // CREATE MODE: Create new tournament
         const tournamentData: CreateTournamentRequest = {

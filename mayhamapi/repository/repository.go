@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"mayhamapi/db"
 	"mayhamapi/models"
@@ -18,6 +19,11 @@ import (
 type Repository struct {
 	db *db.DB
 }
+
+// Sentinel error used when a destructive operation would remove historical
+// scoring (hole_results). Repository methods return a wrapped error using
+// this sentinel and handlers should detect it with errors.Is.
+var ErrHasHoleResults = errors.New("HAS_HOLE_RESULTS")
 
 func NewRepository(database *db.DB) *Repository {
 	return &Repository{db: database}
@@ -1085,6 +1091,218 @@ func (r *Repository) UpdateMatchStatus(matchID, status string) error {
 	return nil
 }
 
+// UpdateTeam updates simple metadata for a team and returns the updated team
+func (r *Repository) UpdateTeam(teamID string, name *string, color *string, logoURL *string) (*models.Team, error) {
+	query := `
+        UPDATE teams SET
+            name = COALESCE($1, name),
+            color = COALESCE($2, color),
+            logo_url = CASE WHEN $3 IS NOT NULL THEN $3 ELSE logo_url END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $4
+        RETURNING id, tournament_id, name, color, logo_url, created_at, updated_at
+    `
+
+	var team models.Team
+	var logoNull sql.NullString
+	err := r.db.QueryRow(query, name, color, logoURL, teamID).Scan(
+		&team.ID, &team.TournamentID, &team.Name, &team.Color, &logoNull, &team.CreatedAt, &team.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("team not found")
+		}
+		return nil, fmt.Errorf("failed to update team: %w", err)
+	}
+	if logoNull.Valid {
+		team.LogoURL = &logoNull.String
+	}
+	return &team, nil
+}
+
+// UpdateRound updates metadata for a round and returns the updated round
+func (r *Repository) UpdateRound(roundID string, name *string, roundDate *string, golfCourseID *string) (*models.Round, error) {
+	query := `
+        UPDATE rounds SET
+            name = COALESCE($1, name),
+            round_date = COALESCE(NULLIF($2,''), round_date),
+            golf_course_id = COALESCE($3, golf_course_id),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $4
+        RETURNING id, tournament_id, golf_course_id, name, round_number, round_date, start_time, status, created_at, updated_at
+    `
+
+	var round models.Round
+	var gcid sql.NullString
+	err := r.db.QueryRow(query, name, roundDate, golfCourseID, roundID).Scan(
+		&round.ID, &round.TournamentID, &gcid, &round.Name, &round.RoundNumber,
+		&round.RoundDate, &round.StartTime, &round.Status, &round.CreatedAt, &round.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("round not found")
+		}
+		return nil, fmt.Errorf("failed to update round: %w", err)
+	}
+	if gcid.Valid {
+		v := gcid.String
+		round.GolfCourseID = &v
+		if course, err := r.GetGolfCourseByID(v); err == nil {
+			round.GolfCourse = course
+		}
+	}
+	return &round, nil
+}
+
+// UpdatePairing updates pairing metadata and tee ID
+func (r *Repository) UpdatePairing(pairingID string, pairingNumber *int, teeTime *time.Time, golfCourseTeeID *string) (*models.Pairing, error) {
+	query := `
+        UPDATE pairings SET
+            pairing_number = COALESCE($1, pairing_number),
+            tee_time = COALESCE($2, tee_time),
+            golf_course_tee_id = COALESCE($3, golf_course_tee_id),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $4
+        RETURNING id, round_id, pairing_number, tee_time, golf_course_tee_id, status, created_at, updated_at
+    `
+
+	var pairing models.Pairing
+	var tee sql.NullString
+	err := r.db.QueryRow(query, pairingNumber, teeTime, golfCourseTeeID, pairingID).Scan(
+		&pairing.ID, &pairing.RoundID, &pairing.PairingNumber, &pairing.TeeTime, &tee, &pairing.Status, &pairing.CreatedAt, &pairing.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("pairing not found")
+		}
+		return nil, fmt.Errorf("failed to update pairing: %w", err)
+	}
+	if tee.Valid {
+		v := tee.String
+		pairing.GolfCourseTeeID = &v
+	}
+	// Load players
+	if players, err := r.GetPairingPlayers(pairing.ID); err == nil {
+		pairing.Players = players
+	}
+	return &pairing, nil
+}
+
+// UpdateMatch updates basic match metadata and returns the updated match
+func (r *Repository) UpdateMatch(matchID string, matchFormatID *string, holes *int, startHole *int, endHole *int, pointsAvailable *float64, team1ID *string, team2ID *string) (*models.Match, error) {
+	query := `
+        UPDATE matches SET
+            match_format_id = COALESCE($1, match_format_id),
+            holes = COALESCE($2, holes),
+            start_hole = COALESCE($3, start_hole),
+            end_hole = COALESCE($4, end_hole),
+            points_available = COALESCE($5, points_available),
+            team1_id = COALESCE($6, team1_id),
+            team2_id = COALESCE($7, team2_id),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $8
+        RETURNING id, pairing_id, round_id, team1_id, team2_id, match_format_id, match_number, holes, start_hole, end_hole, status, points_available, team1_points, team2_points, created_at, updated_at
+    `
+
+	var match models.Match
+	err := r.db.QueryRow(query, matchFormatID, holes, startHole, endHole, pointsAvailable, team1ID, team2ID, matchID).Scan(
+		&match.ID, &match.PairingID, &match.RoundID, &match.Team1ID, &match.Team2ID, &match.MatchFormatID,
+		&match.MatchNumber, &match.Holes, &match.StartHole, &match.EndHole, &match.Status, &match.PointsAvailable,
+		&match.Team1Points, &match.Team2Points, &match.CreatedAt, &match.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("match not found")
+		}
+		return nil, fmt.Errorf("failed to update match: %w", err)
+	}
+
+	// Load related data
+	if match.Team1ID != "" {
+		if t, err := r.GetTeam(match.Team1ID); err == nil {
+			match.Team1 = t
+		}
+	}
+	if match.Team2ID != "" {
+		if t, err := r.GetTeam(match.Team2ID); err == nil {
+			match.Team2 = t
+		}
+	}
+	if format, err := r.GetMatchFormat(match.MatchFormatID); err == nil {
+		match.Format = format
+	}
+	if players, err := r.GetMatchPlayersByMatch(match.ID); err == nil {
+		match.Players = players
+	}
+
+	return &match, nil
+}
+
+// UpdateMatchPlayers updates the players assigned to a match in-place.
+// It validates players_per_side from the match format, normalizes player_order,
+// and upserts match_players. It does not delete the match itself.
+// If the match already has hole_results, the operation will be blocked unless
+// allowDestructive is set to true to explicitly allow replacing match_players.
+func (r *Repository) UpdateMatchPlayers(matchID string, team1UserIDs, team2UserIDs []string, allowDestructive bool) error {
+	// Get match and format
+	match, err := r.GetMatch(matchID)
+	if err != nil {
+		return fmt.Errorf("failed to load match: %w", err)
+	}
+
+	format, err := r.GetMatchFormat(match.MatchFormatID)
+	if err != nil {
+		return fmt.Errorf("failed to load match format: %w", err)
+	}
+	playersPerSide := format.PlayersPerSide
+
+	// If there are existing hole_results for this match, require explicit
+	// confirmation to proceed because replacing match_players can invalidate
+	// or orphan existing scoring data.
+	var existingResultsCount int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM hole_results WHERE match_id = $1`, matchID).Scan(&existingResultsCount); err != nil {
+		return fmt.Errorf("failed to check for existing hole results: %w", err)
+	}
+	if existingResultsCount > 0 && !allowDestructive {
+		return fmt.Errorf("%w: match has existing hole results; set allow_destructive=true to override", ErrHasHoleResults)
+	}
+
+	// Normalize/truncate input slices
+	if len(team1UserIDs) > playersPerSide {
+		team1UserIDs = team1UserIDs[:playersPerSide]
+	}
+	if len(team2UserIDs) > playersPerSide {
+		team2UserIDs = team2UserIDs[:playersPerSide]
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// For simplicity and correctness, remove existing match_players for this match
+	if _, err := tx.Exec(`DELETE FROM match_players WHERE match_id = $1`, matchID); err != nil {
+		return fmt.Errorf("failed to clear existing match players: %w", err)
+	}
+
+	// Insert new players for team1
+	for i, userID := range team1UserIDs {
+		if _, err := tx.Exec(`INSERT INTO match_players (match_id, user_id, team_id, player_order, created_at) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`, matchID, userID, match.Team1ID, i+1); err != nil {
+			return fmt.Errorf("failed to insert match player: %w", err)
+		}
+	}
+
+	// Insert new players for team2
+	for i, userID := range team2UserIDs {
+		if _, err := tx.Exec(`INSERT INTO match_players (match_id, user_id, team_id, player_order, created_at) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`, matchID, userID, match.Team2ID, i+1); err != nil {
+			return fmt.Errorf("failed to insert match player: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (r *Repository) UpdatePairingStatus(pairingID, status string) error {
 	query := `UPDATE pairings SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`
 	args := []interface{}{status, pairingID}
@@ -2144,7 +2362,19 @@ func (r *Repository) UpdateMatchPoints(matchID string, team1Points, team2Points 
 // Delete Methods
 // ============================================
 
-func (r *Repository) DeleteMatch(matchID string) error {
+// DeleteMatch deletes a match. If allowDestructive is false and there are
+// existing hole_results for the match, the operation will be blocked and an
+// error is returned. This protects historical scoring data unless the caller
+// explicitly opts into destructive behavior.
+func (r *Repository) DeleteMatch(matchID string, allowDestructive bool) error {
+	var existing int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM hole_results WHERE match_id = $1`, matchID).Scan(&existing); err != nil {
+		return fmt.Errorf("failed to check for existing hole results: %w", err)
+	}
+	if existing > 0 && !allowDestructive {
+		return fmt.Errorf("%w: match has existing hole results; set allow_destructive=true to override", ErrHasHoleResults)
+	}
+
 	query := `DELETE FROM matches WHERE id = $1`
 	_, err := r.db.Exec(query, matchID)
 	if err != nil {
@@ -2153,8 +2383,23 @@ func (r *Repository) DeleteMatch(matchID string) error {
 	return nil
 }
 
-func (r *Repository) DeleteRound(roundID string) error {
-	// Note: This will cascade delete all matches due to ON DELETE CASCADE
+// DeleteRound deletes a round and its matches. If allowDestructive is false
+// and any match within the round has hole_results, the operation will be
+// blocked to avoid accidental loss of historical scoring.
+func (r *Repository) DeleteRound(roundID string, allowDestructive bool) error {
+	var existing int
+	// Count hole_results for matches in this round
+	if err := r.db.QueryRow(`
+        SELECT COUNT(*) FROM hole_results hr
+        JOIN matches m ON hr.match_id = m.id
+        WHERE m.round_id = $1
+    `, roundID).Scan(&existing); err != nil {
+		return fmt.Errorf("failed to check for existing hole results in round: %w", err)
+	}
+	if existing > 0 && !allowDestructive {
+		return fmt.Errorf("%w: round has matches with existing hole results; set allow_destructive=true to override", ErrHasHoleResults)
+	}
+
 	query := `DELETE FROM rounds WHERE id = $1`
 	_, err := r.db.Exec(query, roundID)
 	if err != nil {
@@ -2163,8 +2408,21 @@ func (r *Repository) DeleteRound(roundID string) error {
 	return nil
 }
 
-func (r *Repository) DeleteTeam(teamID string) error {
-	// Note: This will cascade delete team members due to ON DELETE CASCADE
+// DeleteTeam deletes a team. If allowDestructive is false and any matches
+// involving the team have hole_results, the operation will be blocked.
+func (r *Repository) DeleteTeam(teamID string, allowDestructive bool) error {
+	var existing int
+	if err := r.db.QueryRow(`
+        SELECT COUNT(*) FROM hole_results hr
+        JOIN matches m ON hr.match_id = m.id
+        WHERE m.team1_id = $1 OR m.team2_id = $1
+    `, teamID).Scan(&existing); err != nil {
+		return fmt.Errorf("failed to check for existing hole results for team: %w", err)
+	}
+	if existing > 0 && !allowDestructive {
+		return fmt.Errorf("%w: team is involved in matches with existing hole results; set allow_destructive=true to override", ErrHasHoleResults)
+	}
+
 	query := `DELETE FROM teams WHERE id = $1`
 	_, err := r.db.Exec(query, teamID)
 	if err != nil {

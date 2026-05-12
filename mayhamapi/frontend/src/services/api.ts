@@ -396,9 +396,11 @@ export interface AuthResponse {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  public code?: string;
+  constructor(public status: number, message: string, code?: string) {
     super(message);
     this.name = 'ApiError';
+    this.code = code;
   }
 }
 
@@ -445,9 +447,13 @@ class ApiClient {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        // If the server returned a structured error (e.g. { code, error }),
+        // include both the message and the code on the thrown ApiError so
+        // callers can react appropriately (409 conflict -> confirm/ retry).
         throw new ApiError(
           response.status,
-          errorData.error || `HTTP ${response.status}`
+          errorData.error || `HTTP ${response.status}`,
+          errorData.code
         );
       }
 
@@ -595,6 +601,14 @@ class ApiClient {
     });
   }
 
+  // Update an existing team (name/color)
+  async updateTeam(teamId: string, data: { name?: string; color?: string }): Promise<Team> {
+    return this.request<Team>(`/teams/${teamId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
   // Rounds
   async getTournamentRounds(tournamentId: string): Promise<Round[]> {
     const response = await this.request<{rounds: Round[]}>(`/tournaments/${tournamentId}/rounds`);
@@ -604,6 +618,14 @@ class ApiClient {
   async createRound(tournamentId: string, data: CreateRoundRequest): Promise<Round> {
     return this.request<Round>(`/tournaments/${tournamentId}/rounds`, {
       method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Update an existing round
+  async updateRound(roundId: string, data: { name?: string; round_number?: number; round_date?: string; golf_course_id?: string }): Promise<Round> {
+    return this.request<Round>(`/rounds/${roundId}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
@@ -628,6 +650,14 @@ class ApiClient {
   async getPairingPlayers(pairingId: string): Promise<PairingPlayer[]> {
     const response = await this.request<{players: PairingPlayer[]}>(`/pairings/${pairingId}/players`);
     return response.players || [];
+  }
+
+  // Update an existing pairing (fields like pairing_number, tee_time, golf_course_tee_id)
+  async updatePairing(pairingId: string, data: { pairing_number?: number; tee_time?: string; golf_course_tee_id?: string; players?: PairingPlayerRequest[] }): Promise<Pairing> {
+    return this.request<Pairing>(`/pairings/${pairingId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
   }
 
   async getPairingMatches(pairingId: string): Promise<Match[]> {
@@ -666,6 +696,14 @@ class ApiClient {
   async createMatch(roundId: string, data: CreateMatchRequest): Promise<Match> {
     return this.request<Match>(`/rounds/${roundId}/matches`, {
       method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Update an existing match's metadata (format, holes, hole range, points, team ids)
+  async updateMatch(matchId: string, data: { match_format_id?: string; holes?: number; start_hole?: number; end_hole?: number; points_available?: number; team1_id?: string; team2_id?: string }): Promise<Match> {
+    return this.request<Match>(`/matches/${matchId}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
@@ -811,20 +849,23 @@ class ApiClient {
     });
   }
 
-  async deleteTeam(teamId: string): Promise<void> {
-    return this.request<void>(`/teams/${teamId}`, {
+  async deleteTeam(teamId: string, allowDestructive = false): Promise<void> {
+    const suffix = allowDestructive ? '?allow_destructive=true' : '';
+    return this.request<void>(`/teams/${teamId}${suffix}`, {
       method: 'DELETE',
     });
   }
 
-  async deleteRound(roundId: string): Promise<void> {
-    return this.request<void>(`/rounds/${roundId}`, {
+  async deleteRound(roundId: string, allowDestructive = false): Promise<void> {
+    const suffix = allowDestructive ? '?allow_destructive=true' : '';
+    return this.request<void>(`/rounds/${roundId}${suffix}`, {
       method: 'DELETE',
     });
   }
 
-  async deleteMatch(matchId: string): Promise<void> {
-    return this.request<void>(`/matches/${matchId}`, {
+  async deleteMatch(matchId: string, allowDestructive = false): Promise<void> {
+    const suffix = allowDestructive ? '?allow_destructive=true' : '';
+    return this.request<void>(`/matches/${matchId}${suffix}`, {
       method: 'DELETE',
     });
   }
@@ -842,6 +883,16 @@ class ApiClient {
 
   async getMatchPlayers(matchId: string): Promise<MatchPlayer[]> {
     const response = await this.request<{ players: MatchPlayer[] }>(`/matches/${matchId}/players`);
+    return response.players || [];
+  }
+
+  // Update match player assignments. If the match already has hole results, the
+  // server will respond with 409 Conflict unless allowDestructive is true.
+  async updateMatchPlayers(matchId: string, team1UserIds: string[], team2UserIds: string[], allowDestructive = false): Promise<MatchPlayer[]> {
+    const response = await this.request<{ players: MatchPlayer[] }>(`/matches/${matchId}/players`, {
+      method: 'POST',
+      body: JSON.stringify({ team1_user_ids: team1UserIds, team2_user_ids: team2UserIds, allow_destructive: allowDestructive }),
+    });
     return response.players || [];
   }
 

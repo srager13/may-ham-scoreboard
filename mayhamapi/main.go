@@ -295,7 +295,14 @@ func setupRouter(
 			protected.POST("/rounds/:round_id/matches", tournamentHandler.CreateMatch)
 			protected.DELETE("/matches/:match_id", tournamentHandler.DeleteMatch)
 			protected.GET("/matches/:match_id/players", tournamentHandler.GetMatchPlayers)
+			// New: update match players in-place (validate/normalize players_per_side)
+			protected.POST("/matches/:match_id/players", tournamentHandler.UpdateMatchPlayers)
 			protected.PATCH("/matches/:match_id/status", tournamentHandler.UpdateMatchStatus)
+			// New: patch endpoints for non-destructive updates
+			protected.PATCH("/teams/:team_id", tournamentHandler.UpdateTeam)
+			protected.PATCH("/rounds/:round_id", tournamentHandler.UpdateRound)
+			protected.PATCH("/pairings/:pairing_id", tournamentHandler.UpdatePairing)
+			protected.PATCH("/matches/:match_id", tournamentHandler.UpdateMatch)
 
 			// Scoring (players can submit their own scores)
 			protected.POST("/matches/:match_id/scores", scoringHandler.SubmitScores)
