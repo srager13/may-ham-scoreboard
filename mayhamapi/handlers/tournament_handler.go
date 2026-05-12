@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -454,8 +455,14 @@ func (h *TournamentHandler) DeleteTournament(c *gin.Context) {
 func (h *TournamentHandler) DeleteTeam(c *gin.Context) {
 	teamID := c.Param("team_id")
 
-	err := h.repo.DeleteTeam(teamID)
+	allow := c.Query("allow_destructive") == "true"
+	err := h.repo.DeleteTeam(teamID, allow)
 	if err != nil {
+		if errors.Is(err, repository.ErrHasHoleResults) {
+			// Structured conflict response so frontend can handle confirmation
+			c.JSON(http.StatusConflict, gin.H{"code": "HAS_HOLE_RESULTS", "error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -467,8 +474,13 @@ func (h *TournamentHandler) DeleteTeam(c *gin.Context) {
 func (h *TournamentHandler) DeleteRound(c *gin.Context) {
 	roundID := c.Param("round_id")
 
-	err := h.repo.DeleteRound(roundID)
+	allow := c.Query("allow_destructive") == "true"
+	err := h.repo.DeleteRound(roundID, allow)
 	if err != nil {
+		if errors.Is(err, repository.ErrHasHoleResults) {
+			c.JSON(http.StatusConflict, gin.H{"code": "HAS_HOLE_RESULTS", "error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -480,8 +492,13 @@ func (h *TournamentHandler) DeleteRound(c *gin.Context) {
 func (h *TournamentHandler) DeleteMatch(c *gin.Context) {
 	matchID := c.Param("match_id")
 
-	err := h.repo.DeleteMatch(matchID)
+	allow := c.Query("allow_destructive") == "true"
+	err := h.repo.DeleteMatch(matchID, allow)
 	if err != nil {
+		if errors.Is(err, repository.ErrHasHoleResults) {
+			c.JSON(http.StatusConflict, gin.H{"code": "HAS_HOLE_RESULTS", "error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -757,4 +774,153 @@ func (h *TournamentHandler) ListTeamLogos(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"files": files})
+}
+
+// PATCH /api/v1/teams/:team_id
+func (h *TournamentHandler) UpdateTeam(c *gin.Context) {
+	teamID := c.Param("team_id")
+	var req struct {
+		Name    *string `json:"name"`
+		Color   *string `json:"color"`
+		LogoURL *string `json:"logo_url"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updated, err := h.repo.UpdateTeam(teamID, req.Name, req.Color, req.LogoURL)
+	if err != nil {
+		if err.Error() == "team not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "team not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
+}
+
+// PATCH /api/v1/rounds/:round_id
+func (h *TournamentHandler) UpdateRound(c *gin.Context) {
+	roundID := c.Param("round_id")
+	var req struct {
+		Name         *string `json:"name"`
+		RoundDate    *string `json:"round_date"`
+		GolfCourseID *string `json:"golf_course_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updated, err := h.repo.UpdateRound(roundID, req.Name, req.RoundDate, req.GolfCourseID)
+	if err != nil {
+		if err.Error() == "round not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "round not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
+}
+
+// PATCH /api/v1/pairings/:pairing_id
+func (h *TournamentHandler) UpdatePairing(c *gin.Context) {
+	pairingID := c.Param("pairing_id")
+	var req struct {
+		PairingNumber   *int       `json:"pairing_number"`
+		TeeTime         *time.Time `json:"tee_time"`
+		GolfCourseTeeID *string    `json:"golf_course_tee_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updated, err := h.repo.UpdatePairing(pairingID, req.PairingNumber, req.TeeTime, req.GolfCourseTeeID)
+	if err != nil {
+		if err.Error() == "pairing not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "pairing not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
+}
+
+// PATCH /api/v1/matches/:match_id
+func (h *TournamentHandler) UpdateMatch(c *gin.Context) {
+	matchID := c.Param("match_id")
+	var req struct {
+		MatchFormatID   *string  `json:"match_format_id"`
+		Holes           *int     `json:"holes"`
+		StartHole       *int     `json:"start_hole"`
+		EndHole         *int     `json:"end_hole"`
+		PointsAvailable *float64 `json:"points_available"`
+		Team1ID         *string  `json:"team1_id"`
+		Team2ID         *string  `json:"team2_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Basic validation for holes/start/end
+	if req.StartHole != nil && req.EndHole != nil {
+		if *req.StartHole < 1 || *req.StartHole > 18 || *req.EndHole < 1 || *req.EndHole > 18 || *req.StartHole > *req.EndHole {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_hole/end_hole values"})
+			return
+		}
+	}
+
+	updated, err := h.repo.UpdateMatch(matchID, req.MatchFormatID, req.Holes, req.StartHole, req.EndHole, req.PointsAvailable, req.Team1ID, req.Team2ID)
+	if err != nil {
+		if err.Error() == "match not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "match not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
+}
+
+// POST /api/v1/matches/:match_id/players
+func (h *TournamentHandler) UpdateMatchPlayers(c *gin.Context) {
+	matchID := c.Param("match_id")
+	var req struct {
+		Team1UserIDs     []string `json:"team1_user_ids" binding:"required"`
+		Team2UserIDs     []string `json:"team2_user_ids" binding:"required"`
+		AllowDestructive bool     `json:"allow_destructive"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Delegate to repository which enforces players_per_side. The repository
+	// will return a specific error message when hole_results exist and
+	// allow_destructive was not provided; translate that to 409 Conflict so the
+	// UI can prompt the user for confirmation.
+	if err := h.repo.UpdateMatchPlayers(matchID, req.Team1UserIDs, req.Team2UserIDs, req.AllowDestructive); err != nil {
+		if errors.Is(err, repository.ErrHasHoleResults) {
+			// Return structured conflict JSON to allow the frontend to present
+			// the server-provided message and machine-readable code before retrying
+			c.JSON(http.StatusConflict, gin.H{"code": "HAS_HOLE_RESULTS", "error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Return updated players
+	players, err := h.repo.GetMatchPlayersByMatch(matchID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"players": players})
 }
