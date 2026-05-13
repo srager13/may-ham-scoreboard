@@ -61,17 +61,8 @@ else
     exit 1
 fi
 
-# Step 2: Create git tag if it doesn't exist
-log_info "Step 2: Creating git tag..."
-if git rev-parse "$VERSION_TAG" >/dev/null 2>&1; then
-    log_info "Tag $VERSION_TAG already exists"
-else
-    git tag -a "$VERSION_TAG" -m "Release $VERSION_TAG"
-    log_success "Created tag: $VERSION_TAG"
-fi
-
-# Step 3: Build backend
-log_info "Step 3: Building backend..."
+# Step 2: Build backend
+log_info "Step 2: Building backend..."
 cd "$PROJECT_ROOT"
 
 if go build -o mayhamapi-${VERSION_TAG}; then
@@ -81,8 +72,8 @@ else
     exit 1
 fi
 
-# Step 4: Build frontend
-log_info "Step 4: Building frontend..."
+# Step 3: Build frontend
+log_info "Step 3: Building frontend..."
 cd "$PROJECT_ROOT/frontend"
 
 if npm run build; then
@@ -92,8 +83,37 @@ else
     exit 1
 fi
 
-# Step 5: Backup database
-log_info "Step 5: Backing up database..."
+# Step 4: Commit frontend build changes if any
+log_info "Step 4: Checking for frontend build changes..."
+cd "$PROJECT_ROOT"
+
+if ! git diff --quiet; then
+    log_info "Frontend build changes detected, committing..."
+    git add static/
+    git commit -m "chore: update frontend build assets for $VERSION_TAG"
+    
+    if git push; then
+        log_success "Build changes committed and pushed"
+    else
+        log_error "Failed to push changes"
+        exit 1
+    fi
+else
+    log_info "No frontend build changes"
+fi
+
+# Step 5: Create git tag if it doesn't exist
+log_info "Step 5: Creating git tag..."
+if git rev-parse "$VERSION_TAG" >/dev/null 2>&1; then
+    log_info "Tag $VERSION_TAG already exists"
+else
+    git tag -a "$VERSION_TAG" -m "Release $VERSION_TAG"
+    git push origin "$VERSION_TAG"
+    log_success "Created tag: $VERSION_TAG and pushed to remote"
+fi
+
+# Step 6: Backup database
+log_info "Step 6: Backing up database..."
 cd "$SCRIPT_DIR"
 if ./backup-database.sh production; then
     log_success "Database backup completed"
@@ -102,8 +122,8 @@ else
     exit 1
 fi
 
-# Step 6: Create deployment backup
-log_info "Step 6: Creating deployment backup..."
+# Step 7: Create deployment backup
+log_info "Step 7: Creating deployment backup..."
 ensure_backup_dir "$BACKUP_DIR"
 TIMESTAMP=$(get_timestamp)
 
@@ -114,8 +134,8 @@ if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
     log_success "Current deployment backed up to $BACKUP_DIR/$TIMESTAMP"
 fi
 
-# Step 7: Stop service
-log_info "Step 7: Stopping service..."
+# Step 8: Stop service
+log_info "Step 8: Stopping service..."
 if sudo systemctl stop "$SERVICE_NAME"; then
     log_success "Service stopped"
 else
@@ -123,8 +143,8 @@ else
     exit 1
 fi
 
-# Step 8: Deploy backend
-log_info "Step 8: Deploying backend binary and db schema..."
+# Step 9: Deploy backend
+log_info "Step 9: Deploying backend binary and db schema..."
 cd "$PROJECT_ROOT"
 sudo cp "mayhamapi-${VERSION_TAG}" "$DEPLOY_DIR/backend/mayhamapi"
 sudo chown golftournament:golftournament "$DEPLOY_DIR/backend/mayhamapi"
@@ -139,22 +159,22 @@ sudo cp -a "db/." "$DEPLOY_DIR/backend/db/"
 sudo chown -R golftournament:golftournament "$DEPLOY_DIR/backend/db"
 log_success "Backend binary and DB schema deployed"
 
-# Step 9: Deploy frontend
-log_info "Step 9: Deploying frontend static files..."
+# Step 10: Deploy frontend
+log_info "Step 10: Deploying frontend static files..."
 sudo rm -rf "$DEPLOY_DIR/backend/static"
 sudo cp -r "$PROJECT_ROOT/static" "$DEPLOY_DIR/backend/"
 sudo chown -R golftournament:golftournament "$DEPLOY_DIR/backend/static"
 log_success "Frontend static files deployed"
 
-# Step 10: Deploy configuration
-log_info "Step 10: Deploying configuration..."
+# Step 11: Deploy configuration
+log_info "Step 11: Deploying configuration..."
 sudo cp "$PROJECT_ROOT/.env.production" "$DEPLOY_DIR/backend/.env.production"
 sudo chown golftournament:golftournament "$DEPLOY_DIR/backend/.env.production"
 sudo chmod 600 "$DEPLOY_DIR/backend/.env.production"
 log_success "Configuration deployed"
 
-# Step 11: Start service
-log_info "Step 11: Starting service..."
+# Step 12: Start service
+log_info "Step 12: Starting service..."
 if sudo systemctl start "$SERVICE_NAME"; then
     log_success "Service started"
 else
@@ -172,8 +192,8 @@ else
     exit 1
 fi
 
-# Step 12: Wait for service to be ready
-log_info "Step 12: Waiting for service to be ready..."
+# Step 13: Wait for service to be ready
+log_info "Step 13: Waiting for service to be ready..."
 if wait_for_service "http://localhost:${PORT}/health"; then
     log_success "Service is ready"
 else
@@ -182,8 +202,8 @@ else
     exit 1
 fi
 
-# Step 13: Run verification
-log_info "Step 13: Running verification checks..."
+# Step 14: Run verification
+log_info "Step 14: Running verification checks..."
 cd "$SCRIPT_DIR"
 if ./verify-deployment.sh production; then
     log_success "Verification passed"
@@ -192,8 +212,8 @@ else
     exit 1
 fi
 
-# Step 14: Cleanup
-log_info "Step 14: Cleaning up..."
+# Step 15: Cleanup
+log_info "Step 15: Cleaning up..."
 cd "$PROJECT_ROOT"
 rm -f "mayhamapi-${VERSION_TAG}"
 log_success "Cleanup completed"
