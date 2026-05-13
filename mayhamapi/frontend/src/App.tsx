@@ -8,6 +8,7 @@ import LandingPage from './components/LandingPage';
 import Groups from './components/Groups';
 import AdminPortal from './components/AdminPortal';
 import TournamentInfo from './components/TournamentInfo';
+import Scorecards from './components/Scorecards';
 import { AuthProvider, AuthModal, LoginButton, useAuth, EmailVerificationBanner, ForgotPasswordPage } from './components/Auth';
 import { TournamentProvider } from './components/TournamentContext';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -221,6 +222,7 @@ const VerifyEmailPage: React.FC = () => {
   const navigation = [
     { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
     { name: 'Score Entry', href: '/score', icon: BarChart3 },
+    { name: 'Scorecards', href: '/scorecards', icon: BarChart3 },
     { name: 'Tournament Info', href: '/tournamentinfo', icon: Trophy },
     { name: 'Groups', href: '/groups', icon: Users },
     { name: 'Tournament Setup', href: '/tournamentsetup', icon: Settings },
@@ -391,6 +393,14 @@ const VerifyEmailPage: React.FC = () => {
                 <React.Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
                   <TournamentInfo />
                 </React.Suspense>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/scorecards"
+            element={
+              <ProtectedRoute>
+                <Scorecards />
               </ProtectedRoute>
             }
           />

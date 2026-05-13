@@ -54,11 +54,20 @@ const getTeamsFromPairing = (pairing: PairingHeaderData) => {
 const calculateOverallTeamPoints = (pairing: PairingHeaderData) => {
   const teamPoints: Record<string, number> = {};
   (pairing.matchResults || []).forEach((match) => {
+    // Prefer aggregate fields if present; fall back to summing hole_results.
+    const t1 = typeof (match as any).team1_points === 'number'
+      ? (match as any).team1_points
+      : (match.hole_results ? match.hole_results.reduce((acc, hr) => acc + (hr.team1_points || 0), 0) : 0);
+
+    const t2 = typeof (match as any).team2_points === 'number'
+      ? (match as any).team2_points
+      : (match.hole_results ? match.hole_results.reduce((acc, hr) => acc + (hr.team2_points || 0), 0) : 0);
+
     if (match.team1_id) {
-      teamPoints[match.team1_id] = (teamPoints[match.team1_id] || 0) + match.team1_points;
+      teamPoints[match.team1_id] = (teamPoints[match.team1_id] || 0) + (t1 || 0);
     }
     if (match.team2_id) {
-      teamPoints[match.team2_id] = (teamPoints[match.team2_id] || 0) + match.team2_points;
+      teamPoints[match.team2_id] = (teamPoints[match.team2_id] || 0) + (t2 || 0);
     }
   });
   return teamPoints;
