@@ -57,6 +57,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     
     checkAuth();
+    
+    // Listen for global unauthorized events (e.g., API returned 403)
+    const onUnauthorized = (e: Event) => {
+      console.warn('Received api:unauthorized event, signing out user');
+      localStorage.removeItem('auth_token');
+      apiClient.clearToken();
+      setUser(null);
+    };
+    window.addEventListener('api:unauthorized', onUnauthorized as EventListener);
+
+    return () => {
+      window.removeEventListener('api:unauthorized', onUnauthorized as EventListener);
+    };
   }, []);
 
   const login = async (email: string, password: string) => {

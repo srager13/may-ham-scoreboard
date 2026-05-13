@@ -445,6 +445,19 @@ class ApiClient {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        // If we receive a 403 Forbidden from the API, clear stored auth
+        // information and notify the UI so it can prompt for sign-in.
+        if (response.status === 403) {
+          // Clear token from the client and localStorage
+          this.clearToken();
+          try {
+            // Dispatch a global event that UI components can listen for
+            window.dispatchEvent(new CustomEvent('api:unauthorized', { detail: { status: 403 } }));
+          } catch (e) {
+            // ignore if event dispatch fails in some environments
+          }
+        }
+
         throw new ApiError(
           response.status,
           errorData.error || `HTTP ${response.status}`
@@ -571,6 +584,12 @@ class ApiClient {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      if (response.status === 403) {
+        this.clearToken();
+        try {
+          window.dispatchEvent(new CustomEvent('api:unauthorized', { detail: { status: 403 } }));
+        } catch (e) {}
+      }
       throw new ApiError(response.status, errorData.error || `HTTP ${response.status}`);
     }
 

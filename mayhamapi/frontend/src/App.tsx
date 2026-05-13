@@ -202,12 +202,21 @@ const VerifyEmailPage: React.FC = () => {
   );
 };
 
-function AppContent() {
-  const location = useLocation();
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { user } = useAuth();
-  const isLandingPage = location.pathname === '/';
+  function AppContent() {
+    const location = useLocation();
+    const [showAuthModal, setShowAuthModal] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const { user } = useAuth();
+    const isLandingPage = location.pathname === '/';
+
+    // Open the auth modal when the API reports an unauthorized (403) response
+    useEffect(() => {
+      const handler = (e: Event) => {
+        setShowAuthModal(true);
+      };
+      window.addEventListener('api:unauthorized', handler as EventListener);
+      return () => window.removeEventListener('api:unauthorized', handler as EventListener);
+    }, []);
 
   const navigation = [
     { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
