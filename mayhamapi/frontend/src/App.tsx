@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { Trophy, Users, BarChart3, Settings, AlertCircle, Shield, Menu, X, CheckCircle } from 'lucide-react';
+import LoginPage from './pages/LoginPage';
+import { Navigate } from 'react-router-dom';
 import Leaderboard from './components/Leaderboard';
 import TournamentSetup from './components/TournamentSetup';
 import ScoreInterface from './components/ScoreInterface';
@@ -8,7 +10,8 @@ import LandingPage from './components/LandingPage';
 import Groups from './components/Groups';
 import AdminPortal from './components/AdminPortal';
 import TournamentInfo from './components/TournamentInfo';
-import { AuthProvider, AuthModal, LoginButton, useAuth, EmailVerificationBanner, ForgotPasswordPage } from './components/Auth';
+import { AuthProvider, LoginButton, useAuth, EmailVerificationBanner, ForgotPasswordPage } from './components/Auth';
+import ToasterProvider, { showToast } from './components/Toaster';
 import { TournamentProvider } from './components/TournamentContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { apiClient, ApiError } from './services/api';
@@ -16,7 +19,7 @@ import { apiClient, ApiError } from './services/api';
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
-  const [showAuthModal, setShowAuthModal] = useState(false);
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -27,25 +30,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
 
   if (!isAuthenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center">
-          <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Authentication Required</h2>
-          <p className="text-gray-600 mb-4">Please sign in to access this feature.</p>
-          <button
-            onClick={() => setShowAuthModal(true)}
-            className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700"
-          >
-            Sign In
-          </button>
-          <AuthModal
-            isOpen={showAuthModal}
-            onClose={() => setShowAuthModal(false)}
-          />
-        </div>
-      </div>
-    );
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
   }
 
   return <>{children}</>;
@@ -54,7 +39,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 // Admin Route Component
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAuthenticated, loading } = useAuth();
-  const [showAuthModal, setShowAuthModal] = useState(false);
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -65,25 +50,7 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }
 
   if (!isAuthenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center">
-          <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Authentication Required</h2>
-          <p className="text-gray-600 mb-4">Please sign in to access this feature.</p>
-          <button
-            onClick={() => setShowAuthModal(true)}
-            className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700"
-          >
-            Sign In
-          </button>
-          <AuthModal
-            isOpen={showAuthModal}
-            onClose={() => setShowAuthModal(false)}
-          />
-        </div>
-      </div>
-    );
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
   }
 
   if (!user?.is_admin) {
@@ -203,20 +170,33 @@ const VerifyEmailPage: React.FC = () => {
 };
 
   function AppContent() {
-    const location = useLocation();
-    const [showAuthModal, setShowAuthModal] = useState(false);
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const { user } = useAuth();
-    const isLandingPage = location.pathname === '/';
+  const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user } = useAuth();
+  const isLandingPage = location.pathname === '/';
+  const navigate = useNavigate();
 
-    // Open the auth modal when the API reports an unauthorized (403) response
-    useEffect(() => {
-      const handler = (e: Event) => {
-        setShowAuthModal(true);
-      };
-      window.addEventListener('api:unauthorized', handler as EventListener);
-      return () => window.removeEventListener('api:unauthorized', handler as EventListener);
-    }, []);
+  // Open the persistent login page when the API reports an unauthorized (403) response
+  useEffect(() => {
+    const handler = (e: Event) => {
+      try { showToast('Your session expired — please sign in again'); } catch (err) {}
+      navigate(`/login?next=${encodeURIComponent(location.pathname)}`);
+    };
+    window.addEventListener('api:unauthorized', handler as EventListener);
+    return () => window.removeEventListener('api:unauthorized', handler as EventListener);
+  }, [navigate, location.pathname]);
+
+  // If a previous 403 set a flag (e.g., the browser reloaded), handle it on mount
+  useEffect(() => {
+    try {
+      const flag = sessionStorage.getItem('mayham:force_login');
+      if (flag) {
+        sessionStorage.removeItem('mayham:force_login');
+        showToast('Your session expired — please sign in again');
+        navigate(`/login?next=${encodeURIComponent(location.pathname)}`);
+      }
+    } catch (e) {}
+  }, [navigate, location.pathname]);
 
   const navigation = [
     { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
@@ -270,7 +250,7 @@ const VerifyEmailPage: React.FC = () => {
                 
                 {/* Auth Section and Mobile Menu Button */}
                 <div className="flex items-center space-x-2">
-                  <LoginButton onOpenAuth={() => setShowAuthModal(true)} />
+                  <LoginButton />
                   {/* Mobile menu button */}
                   <button
                     onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -357,6 +337,7 @@ const VerifyEmailPage: React.FC = () => {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/reset-password" element={<ForgotPasswordPage />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route 
@@ -405,11 +386,7 @@ const VerifyEmailPage: React.FC = () => {
         </Routes>
       </main>
 
-      {/* Auth Modal */}
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-      />
+      {/* login is now a persistent page at /login */}
     </div>
   );
 }
@@ -419,7 +396,9 @@ function App() {
     <ErrorBoundary>
       <AuthProvider>
         <TournamentProvider>
-          <AppContent />
+          <ToasterProvider>
+            <AppContent />
+          </ToasterProvider>
         </TournamentProvider>
       </AuthProvider>
     </ErrorBoundary>

@@ -448,8 +448,15 @@ class ApiClient {
         // If we receive a 403 Forbidden from the API, clear stored auth
         // information and notify the UI so it can prompt for sign-in.
         if (response.status === 403) {
+          // Mark in sessionStorage so that components that mount later can
+          // react even if they missed the event (ordering safety).
+          try {
+            sessionStorage.setItem('mayham:force_login', '1');
+          } catch (e) {}
+
           // Clear token from the client and localStorage
           this.clearToken();
+
           try {
             // Dispatch a global event that UI components can listen for
             window.dispatchEvent(new CustomEvent('api:unauthorized', { detail: { status: 403 } }));
@@ -585,10 +592,9 @@ class ApiClient {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       if (response.status === 403) {
+        try { sessionStorage.setItem('mayham:force_login', '1'); } catch (e) {}
         this.clearToken();
-        try {
-          window.dispatchEvent(new CustomEvent('api:unauthorized', { detail: { status: 403 } }));
-        } catch (e) {}
+        try { window.dispatchEvent(new CustomEvent('api:unauthorized', { detail: { status: 403 } })); } catch (e) {}
       }
       throw new ApiError(response.status, errorData.error || `HTTP ${response.status}`);
     }

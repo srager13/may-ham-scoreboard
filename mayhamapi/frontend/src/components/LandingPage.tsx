@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Users, BarChart3, ChevronRight, Star } from 'lucide-react';
-import { AuthModal, useAuth } from './Auth';
+import { useAuth } from './Auth';
 
 const LandingPage = () => {
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
@@ -12,7 +11,7 @@ const LandingPage = () => {
     if (isAuthenticated) {
       navigate('/leaderboard');
     } else {
-      setShowAuthModal(true);
+      navigate('/login');
     }
   };
 
@@ -165,14 +164,7 @@ const LandingPage = () => {
       </div>
 
       {/* Auth Modal */}
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        onSuccess={() => {
-          setShowAuthModal(false);
-          navigate('/leaderboard');
-        }}
-      />
+      {/* login flow moved to persistent /login page */}
     </div>
   );
 };

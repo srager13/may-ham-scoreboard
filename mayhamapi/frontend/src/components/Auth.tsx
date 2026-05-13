@@ -478,13 +478,10 @@ const UserProfile: React.FC = () => {
   );
 };
 
-// Login Button Component
-interface LoginButtonProps {
-  onOpenAuth: () => void;
-}
-
-const LoginButton: React.FC<LoginButtonProps> = ({ onOpenAuth }) => {
+// Login Button Component — navigates to persistent /login page
+const LoginButton: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
   if (isAuthenticated) {
     return <UserProfile />;
@@ -492,7 +489,7 @@ const LoginButton: React.FC<LoginButtonProps> = ({ onOpenAuth }) => {
 
   return (
     <button
-      onClick={onOpenAuth}
+      onClick={() => navigate('/login')}
       className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center space-x-2"
     >
       <LogIn className="h-4 w-4" />
