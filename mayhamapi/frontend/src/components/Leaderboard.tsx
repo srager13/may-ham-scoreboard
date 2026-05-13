@@ -101,6 +101,90 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
       const leaderboardData = await apiClient.getTournamentLeaderboard(tournamentId);
       setData(leaderboardData);
 
+      // If the leaderboard API provides live_matches use it to populate the
+      // livePairings state. This avoids an extra traversal (rounds->pairings->matches)
+      // which can be fragile and cause the UI to show no live matches even when
+      // the leaderboard endpoint already knows about in-progress matches.
+      try {
+        if (leaderboardData?.live_matches && leaderboardData.live_matches.length > 0) {
+          // Load rounds once so we can attach round metadata for sorting
+          const roundsData = await apiClient.getTournamentRounds(tournamentId).catch(() => [] as Round[]);
+          const roundMap = new Map<string, Round>(roundsData.map((r) => [r.id, r]));
+
+          // Group matches by pairing_id. If a match has no pairing_id, create
+          // a synthetic key so it still renders as its own pairing block.
+          const groups = new Map<string, Match[]>();
+          leaderboardData.live_matches.forEach((m) => {
+            const key = m.pairing_id || `match-${m.id}`;
+            const arr = groups.get(key) || [];
+            arr.push(m);
+            groups.set(key, arr);
+          });
+
+          const pairingPromises = Array.from(groups.entries()).map(async ([groupKey, matches]) => {
+            // Try to fetch real pairing when pairing_id was provided
+            let pairing: Pairing | null = null;
+            const pairingId = matches[0].pairing_id;
+            if (pairingId) {
+              try {
+                pairing = await apiClient.getPairing(pairingId);
+              } catch (err) {
+                console.warn('Failed to load pairing for live match grouping:', pairingId, err);
+                pairing = null;
+              }
+            }
+
+            // If we couldn't fetch a pairing, synthesize a minimal pairing object
+            const pairingObj: Pairing =
+              pairing ||
+              ({
+                id: groupKey,
+                round_id: matches[0].round_id,
+                pairing_number: 0,
+                status: 'in_progress',
+                players: matches[0].players || [],
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              } as Pairing);
+
+            // Enrich each match with hole_results when available
+            const matchResults: MatchWithResults[] = await Promise.all(
+              matches.map(async (match) => {
+                try {
+                  const scoresResp = await apiClient.getMatchScores(match.id);
+                  return {
+                    ...match,
+                    hole_results: scoresResp.hole_results || []
+                  } as MatchWithResults;
+                } catch (err) {
+                  console.warn('Error loading match scores for live match:', match.id, err);
+                  return match as MatchWithResults;
+                }
+              })
+            );
+
+            return {
+              ...pairingObj,
+              round: roundMap.get(pairingObj.round_id),
+              matches,
+              matchResults
+            } as PairingWithResults;
+          });
+
+          const liveBuilt = (await Promise.all(pairingPromises)).filter((p) => !!p) as PairingWithResults[];
+          liveBuilt.sort((a, b) => {
+            const roundDiff = (b.round?.round_number || 0) - (a.round?.round_number || 0);
+            if (roundDiff !== 0) return roundDiff;
+            return (b.pairing_number || 0) - (a.pairing_number || 0);
+          });
+
+          setLivePairings(liveBuilt);
+        }
+      } catch (err) {
+        // Non-fatal: fall back to existing live loading logic when this fails
+        console.warn('Error populating livePairings from leaderboard.live_matches:', err);
+      }
+
     } catch (err) {
       console.error('Error loading leaderboard:', err);
       
