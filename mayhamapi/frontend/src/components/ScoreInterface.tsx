@@ -243,7 +243,8 @@ const ScoreInterface: React.FC = () => {
       // Determine current hole (first hole without scores)
       const completedHoles = new Set(Object.keys(scoresMap).map(h => parseInt(h)));
       let nextHole = 1;
-      for (let h = 1; h <= 18; h++) {
+      const holeCount = getHoleCount(pairing);
+      for (let h = 1; h <= holeCount; h++) {
         if (!completedHoles.has(h)) {
           nextHole = h;
           break;
@@ -692,8 +693,9 @@ const ScoreInterface: React.FC = () => {
       }
     }
 
-    // Advance to next hole
-    setCurrentHole(Math.min(18, currentHole + 1));
+    // Advance to next hole (respect course hole count)
+    const holeCount = getHoleCount(selectedPairing);
+    setCurrentHole(Math.min(holeCount, currentHole + 1));
   };
 
   const startPairing = async (pairingId: string) => {
@@ -927,21 +929,22 @@ const ScoreInterface: React.FC = () => {
           setLoadingResults(false);
         }
 
-      // Advance to next hole after successful submission
+      // Advance to next hole after successful submission (respect course hole count)
       const updatedScores = {
         ...selectedPairing.scores,
         ...holeScores
       };
       const completedHoles = new Set(Object.keys(updatedScores).map(h => parseInt(h)));
       let nextHole = currentHole + 1;
-      for (let h = nextHole; h <= 18; h++) {
+      const holeCount = getHoleCount(selectedPairing);
+      for (let h = nextHole; h <= holeCount; h++) {
         if (!completedHoles.has(h)) {
           nextHole = h;
           break;
         }
       }
-      if (nextHole > 18) {
-        nextHole = 18;
+      if (nextHole > holeCount) {
+        nextHole = holeCount;
       }
       setCurrentHole(nextHole);
 
@@ -1181,8 +1184,9 @@ const ScoreInterface: React.FC = () => {
         }
       }
 
-      // Navigate to new hole
-      const newHole = direction === 'prev' ? Math.max(1, currentHole - 1) : Math.min(18, currentHole + 1);
+      // Navigate to new hole (respect course hole count)
+      const holeCount = getHoleCount(pairing);
+      const newHole = direction === 'prev' ? Math.max(1, currentHole - 1) : Math.min(holeCount, currentHole + 1);
       setCurrentHole(newHole);
     };
 
@@ -1226,11 +1230,16 @@ const ScoreInterface: React.FC = () => {
 
         setError(null);
 
-        if (currentHole === 18) {
+        // Advance to the next hole automatically after a successful submit,
+        // unless this was the last hole for the pairing.
+        const holeCount = getHoleCount(pairing);
+        if (currentHole === holeCount) {
           const shouldComplete = window.confirm('Complete the round now?');
           if (shouldComplete) {
             await completePairing(pairing.id);
           }
+        } else {
+          setCurrentHole(Math.min(holeCount, currentHole + 1));
         }
       } catch (err) {
         console.error('Error submitting scores:', err);
@@ -1318,21 +1327,21 @@ const ScoreInterface: React.FC = () => {
               <ChevronLeft className="mr-2" size={20} />
               Hole {Math.max(1, currentHole - 1)}
             </button>
-            <button
-              onClick={handleSubmitCurrentHole}
-              disabled={isSubmitting}
-              className="px-8 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg font-bold text-lg transition-colors"
-            >
-              {isSubmitting ? 'SUBMITTING...' : 'SUBMIT'}
-            </button>
-            <button
-              onClick={() => handleNavigateHole('next')}
-              disabled={currentHole === 18 || isSubmitting}
-              className="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded-lg font-semibold transition-colors flex items-center justify-center"
-            >
-              Hole {Math.min(18, currentHole + 1)}
-              <ChevronRight className="ml-2" size={20} />
-            </button>
+              <button
+                onClick={handleSubmitCurrentHole}
+                disabled={isSubmitting}
+                className="px-8 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg font-bold text-lg transition-colors"
+              >
+                {isSubmitting ? 'SUBMITTING...' : 'SUBMIT'}
+              </button>
+              <button
+                onClick={() => handleNavigateHole('next')}
+                disabled={isSubmitting || currentHole === getHoleCount(pairing)}
+                className="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded-lg font-semibold transition-colors flex items-center justify-center"
+              >
+                Hole {Math.min(getHoleCount(pairing), currentHole + 1)}
+                <ChevronRight className="ml-2" size={20} />
+              </button>
           </div>
         </div>
 
@@ -1471,6 +1480,15 @@ const ScoreInterface: React.FC = () => {
       return { team1Points, team2Points };
     };
 
+    // Derive hole lists dynamically to avoid hard-coded hole count assumptions
+    const holeCount = getHoleCount(pairing);
+    const holesArray: number[] = pairing.holes && pairing.holes.length > 0
+      ? pairing.holes.map(h => h.hole_number)
+      : Array.from({ length: holeCount }, (_, i) => i + 1);
+    const splitIndex = Math.ceil(holeCount / 2);
+    const frontHoles = holesArray.slice(0, splitIndex);
+    const backHoles = holesArray.slice(splitIndex);
+
     return (
       <>
         {/* Golf Course Information Box */}
@@ -1501,21 +1519,21 @@ const ScoreInterface: React.FC = () => {
               <th className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase border-r-2 border-gray-800 bg-gray-100">
                 Hole
               </th>
-              {Array.from({ length: 9 }, (_, i) => i + 1).map(hole => (
+              {frontHoles.map(hole => (
                 <th key={hole} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300 min-w-[50px]">
                   {hole}
                 </th>
               ))}
               <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg} min-w-[60px]`}>
-                Out
+                {`Out (${frontHoles[0]}-${frontHoles[frontHoles.length - 1]})`}
               </th>
-              {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => (
+              {backHoles.map(hole => (
                 <th key={hole} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300 min-w-[50px]">
                   {hole}
                 </th>
               ))}
               <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.inBg} min-w-[60px] border-r-2 border-gray-800`}>
-                In
+                {backHoles.length > 0 ? `In (${backHoles[0]}-${backHoles[backHoles.length - 1]})` : 'In'}
               </th>
               <th className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.totalBg} min-w-[60px]`}>
                 Total
@@ -1529,30 +1547,30 @@ const ScoreInterface: React.FC = () => {
                 <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-gray-50">
                   Yardage
                 </td>
-                {Array.from({ length: 9 }, (_, i) => {
-                  const hole = pairing.holes?.find(h => h.hole_number === i + 1);
+                {frontHoles.map(holeNum => {
+                  const hole = pairing.holes?.find(h => h.hole_number === holeNum);
                   return (
-                    <td key={i + 1} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
+                    <td key={holeNum} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
                       {hole?.yards || '—'}
                     </td>
                   );
                 })}
                 <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.yardageOutInBg}`}>
-                  {pairing.holes?.slice(0, 9).reduce((sum, h) => sum + (h.yards || 0), 0)}
+                  {frontHoles.reduce((sum, hn) => sum + (pairing.holes?.find(h => h.hole_number === hn)?.yards || 0), 0)}
                 </td>
-                {Array.from({ length: 9 }, (_, i) => {
-                  const hole = pairing.holes?.find(h => h.hole_number === i + 10);
+                {backHoles.map(holeNum => {
+                  const hole = pairing.holes?.find(h => h.hole_number === holeNum);
                   return (
-                    <td key={i + 10} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
+                    <td key={holeNum} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
                       {hole?.yards || '—'}
                     </td>
                   );
                 })}
                 <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 ${SCORECARD_COLORS.yardageOutInBg} border-r-2 border-gray-800`}>
-                  {pairing.holes?.slice(9, 18).reduce((sum, h) => sum + (h.yards || 0), 0)}
+                  {backHoles.reduce((sum, hn) => sum + (pairing.holes?.find(h => h.hole_number === hn)?.yards || 0), 0)}
                 </td>
                 <td className={`px-3 py-2 text-center text-sm font-semibold text-gray-900 ${SCORECARD_COLORS.yardageTotalBg}`}>
-                  {pairing.holes?.reduce((sum, h) => sum + (h.yards || 0), 0)}
+                  {holesArray.reduce((sum, hn) => sum + (pairing.holes?.find(h => h.hole_number === hn)?.yards || 0), 0)}
                 </td>
               </tr>
             )}
@@ -1563,30 +1581,30 @@ const ScoreInterface: React.FC = () => {
                 <td className={`sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 ${SCORECARD_COLORS.parRowHeaderBg}`}>
                   Par
                 </td>
-                {Array.from({ length: 9 }, (_, i) => {
-                  const hole = pairing.holes?.find(h => h.hole_number === i + 1);
+                {frontHoles.map(holeNum => {
+                  const hole = pairing.holes?.find(h => h.hole_number === holeNum);
                   return (
-                    <td key={i + 1} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300">
+                    <td key={holeNum} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300">
                       {hole?.par || '—'}
                     </td>
                   );
                 })}
                 <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.parOutInBg}`}>
-                  {pairing.holes?.slice(0, 9).reduce((sum, h) => sum + (h.par || 0), 0)}
+                  {frontHoles.reduce((sum, hn) => sum + (pairing.holes?.find(h => h.hole_number === hn)?.par || 0), 0)}
                 </td>
-                {Array.from({ length: 9 }, (_, i) => {
-                  const hole = pairing.holes?.find(h => h.hole_number === i + 10);
+                {backHoles.map(holeNum => {
+                  const hole = pairing.holes?.find(h => h.hole_number === holeNum);
                   return (
-                    <td key={i + 10} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300">
+                    <td key={holeNum} className="px-3 py-2 text-center text-sm font-bold text-gray-900 border-r border-gray-300">
                       {hole?.par || '—'}
                     </td>
                   );
                 })}
                 <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 border-r-2 border-gray-800 ${SCORECARD_COLORS.parOutInBg}`}>
-                  {pairing.holes?.slice(9, 18).reduce((sum, h) => sum + (h.par || 0), 0)}
+                  {backHoles.reduce((sum, hn) => sum + (pairing.holes?.find(h => h.hole_number === hn)?.par || 0), 0)}
                 </td>
                 <td className={`px-3 py-2 text-center text-sm font-bold text-gray-900 ${SCORECARD_COLORS.parTotalBg}`}>
-                  {pairing.holes?.reduce((sum, h) => sum + (h.par || 0), 0)}
+                  {holesArray.reduce((sum, hn) => sum + (pairing.holes?.find(h => h.hole_number === hn)?.par || 0), 0)}
                 </td>
               </tr>
             )}
@@ -1597,19 +1615,19 @@ const ScoreInterface: React.FC = () => {
                 <td className="sticky left-0 z-10 px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase border-r-2 border-gray-800 bg-gray-50">
                   HCP
                 </td>
-                {Array.from({ length: 9 }, (_, i) => {
-                  const hole = pairing.holes?.find(h => h.hole_number === i + 1);
+                {frontHoles.map(holeNum => {
+                  const hole = pairing.holes?.find(h => h.hole_number === holeNum);
                   return (
-                    <td key={i + 1} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
+                    <td key={holeNum} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
                       {hole?.handicap || '—'}
                     </td>
                   );
                 })}
                 <td className={`px-3 py-2 text-center text-xs text-gray-600 border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg}`}></td>
-                {Array.from({ length: 9 }, (_, i) => {
-                  const hole = pairing.holes?.find(h => h.hole_number === i + 10);
+                {backHoles.map(holeNum => {
+                  const hole = pairing.holes?.find(h => h.hole_number === holeNum);
                   return (
-                    <td key={i + 10} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
+                    <td key={holeNum} className="px-3 py-2 text-center text-xs text-gray-600 border-r border-gray-300">
                       {hole?.handicap || '—'}
                     </td>
                   );
@@ -1651,9 +1669,8 @@ const ScoreInterface: React.FC = () => {
                         </span>
                       </div>
                     </td>
-                    {/* Front 9 scores (holes 1-9) */}
-                    {Array.from({ length: 9 }, (_, i) => {
-                      const holeNum = i + 1;
+                    {/* Front scores */}
+                    {frontHoles.map(holeNum => {
                       const match = getMatchForHole(pairing, holeNum);
                       const isTeamScoring = match?.format?.score_input_type === 'team' || false;
                       
@@ -1662,9 +1679,9 @@ const ScoreInterface: React.FC = () => {
                         return null;
                       }
 
-                      // For team scoring, use first player's ID; otherwise use current player
-                      const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
-                      const score = playerScores?.[holeNum]?.[scoreKey];
+                       // For team scoring, use first player's ID; otherwise use current player
+                       const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                       const score = playerScores?.[holeNum]?.[scoreKey];
                       
                       const hasWon = mode === 'display' && didTeamWinHole(holeNum, player.team_id);
                       
@@ -1733,34 +1750,33 @@ const ScoreInterface: React.FC = () => {
                     })}
                     {/* Out total */}
                     {(() => {
-                      const front9Match = getMatchForHole(pairing, 1);
-                      const front9IsTeamScoring = front9Match?.format?.score_input_type === 'team' || false;
+                       const frontMatchHole = frontHoles[0];
+                       const frontMatch = frontMatchHole ? getMatchForHole(pairing, frontMatchHole) : undefined;
+                       const frontIsTeamScoring = frontMatch?.format?.score_input_type === 'team' || false;
                       
                       // Skip for non-first teammates in team format
-                      if (front9IsTeamScoring && !isFirstPlayerOnTeam) {
+                       if (frontIsTeamScoring && !isFirstPlayerOnTeam) {
                         return null;
                       }
 
-                      const outTotal = Array.from({ length: 9 }, (_, i) => {
-                        const holeNum = i + 1;
-                        const match = getMatchForHole(pairing, holeNum);
-                        const isTeamScoring = match?.format?.score_input_type === 'team' || false;
-                        const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
-                        return playerScores?.[holeNum]?.[scoreKey] || 0;
-                      }).reduce((a, b) => a + b, 0);
+                       const outTotal = frontHoles.map(hn => {
+                         const match = getMatchForHole(pairing, hn);
+                         const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                         const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                         return playerScores?.[hn]?.[scoreKey] || 0;
+                       }).reduce((a, b) => a + b, 0);
 
                       return (
                         <td 
                           className={`px-3 py-2 text-center font-semibold border-r-2 border-gray-800 ${SCORECARD_COLORS.outBg}`}
-                          rowSpan={front9IsTeamScoring ? teamSize : 1}
+                           rowSpan={frontIsTeamScoring ? teamSize : 1}
                         >
                           {outTotal}
                         </td>
                       );
-                    })()}
-                    {/* Back 9 scores (holes 10-18) */}
-                    {Array.from({ length: 9 }, (_, i) => {
-                      const holeNum = i + 10;
+                     })()}
+                    {/* Back scores */}
+                    {backHoles.map(holeNum => {
                       const match = getMatchForHole(pairing, holeNum);
                       const isTeamScoring = match?.format?.score_input_type === 'team' || false;
                       
@@ -1839,26 +1855,26 @@ const ScoreInterface: React.FC = () => {
                     })}
                     {/* In total */}
                     {(() => {
-                      const back9Match = getMatchForHole(pairing, 10);
-                      const back9IsTeamScoring = back9Match?.format?.score_input_type === 'team' || false;
+                        const backMatchHole = backHoles[0];
+                        const backMatch = backMatchHole ? getMatchForHole(pairing, backMatchHole) : undefined;
+                        const backIsTeamScoring = backMatch?.format?.score_input_type === 'team' || false;
                       
                       // Skip for non-first teammates in team format
-                      if (back9IsTeamScoring && !isFirstPlayerOnTeam) {
+                      if (backIsTeamScoring && !isFirstPlayerOnTeam) {
                         return null;
                       }
 
-                      const inTotal = Array.from({ length: 9 }, (_, i) => {
-                        const holeNum = i + 10;
-                        const match = getMatchForHole(pairing, holeNum);
-                        const isTeamScoring = match?.format?.score_input_type === 'team' || false;
-                        const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
-                        return playerScores?.[holeNum]?.[scoreKey] || 0;
-                      }).reduce((a, b) => a + b, 0);
+                       const inTotal = backHoles.map(hn => {
+                         const match = getMatchForHole(pairing, hn);
+                         const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                         const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                         return playerScores?.[hn]?.[scoreKey] || 0;
+                       }).reduce((a, b) => a + b, 0);
 
                       return (
                         <td 
                           className={`px-3 py-2 text-center font-semibold border-r-2 border-gray-800 ${SCORECARD_COLORS.inBg}`}
-                          rowSpan={back9IsTeamScoring ? teamSize : 1}
+                           rowSpan={backIsTeamScoring ? teamSize : 1}
                         >
                           {inTotal}
                         </td>
@@ -1866,26 +1882,25 @@ const ScoreInterface: React.FC = () => {
                     })()}
                     {/* Total */}
                     {(() => {
-                      const back9Match = getMatchForHole(pairing, 10);
-                      const back9IsTeamScoring = back9Match?.format?.score_input_type === 'team' || false;
+                       const backMatch2 = backHoles[0] ? getMatchForHole(pairing, backHoles[0]) : undefined;
+                       const backIsTeamScoring2 = backMatch2?.format?.score_input_type === 'team' || false;
                       
                       // Skip for non-first teammates in team format
-                      if (back9IsTeamScoring && !isFirstPlayerOnTeam) {
+                       if (backIsTeamScoring2 && !isFirstPlayerOnTeam) {
                         return null;
                       }
 
-                      const total = Array.from({ length: 18 }, (_, i) => {
-                        const holeNum = i + 1;
-                        const match = getMatchForHole(pairing, holeNum);
-                        const isTeamScoring = match?.format?.score_input_type === 'team' || false;
-                        const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
-                        return playerScores?.[holeNum]?.[scoreKey] || 0;
-                      }).reduce((a, b) => a + b, 0);
+                       const total = holesArray.map(hn => {
+                         const match = getMatchForHole(pairing, hn);
+                         const isTeamScoring = match?.format?.score_input_type === 'team' || false;
+                         const scoreKey = isTeamScoring ? teamPlayers[0]?.user_id : player.user_id;
+                         return playerScores?.[hn]?.[scoreKey] || 0;
+                       }).reduce((a, b) => a + b, 0);
 
                       return (
                         <td 
                           className={`px-3 py-2 text-center font-bold ${SCORECARD_COLORS.totalBg}`}
-                          rowSpan={back9IsTeamScoring ? teamSize : 1}
+                           rowSpan={backIsTeamScoring2 ? teamSize : 1}
                         >
                           {total}
                         </td>
@@ -2182,12 +2197,12 @@ const ScoreInterface: React.FC = () => {
                     </div>
                   </div>
                   <button
-                    onClick={handleNextHole}
-                    disabled={currentHole === 18}
-                    className="px-3 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                  >
-                    Next →
-                  </button>
+                onClick={handleNextHole}
+                disabled={currentHole === getHoleCount(selectedPairing)}
+                className="px-3 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                Next →
+              </button>
                 </div>
 
                 {/* Par-Relative Symbol Legend */}
