@@ -1942,39 +1942,31 @@ type teamHoleStats struct {
 
 func (r *Repository) getTeamMatchStats(tournamentID, teamID string) (*teamMatchStats, error) {
 	query := `
-		SELECT 
-			COALESCE(SUM(CASE 
-				WHEN (m.team1_id = $2 AND m.team1_points > m.team2_points) OR 
-				     (m.team2_id = $2 AND m.team2_points > m.team1_points) 
-				THEN CASE WHEN m.team1_id = $2 THEN m.team1_points ELSE m.team2_points END 
-				ELSE 0 
-			END), 0) as points_won,
-			COALESCE(SUM(CASE 
-				WHEN (m.team1_id = $2 AND m.team1_points < m.team2_points) OR 
-				     (m.team2_id = $2 AND m.team2_points < m.team1_points) 
-				THEN CASE WHEN m.team1_id = $2 THEN m.team2_points ELSE m.team1_points END 
-				ELSE 0 
-			END), 0) as points_lost,
-			COUNT(CASE 
-				WHEN (m.team1_id = $2 AND m.team1_points > m.team2_points) OR 
-				     (m.team2_id = $2 AND m.team2_points > m.team1_points) 
-				THEN 1 
-			END) as matches_won,
-			COUNT(CASE 
-				WHEN (m.team1_id = $2 AND m.team1_points < m.team2_points) OR 
-				     (m.team2_id = $2 AND m.team2_points < m.team1_points) 
-				THEN 1 
-			END) as matches_lost,
-			COUNT(CASE 
-				WHEN m.team1_points = m.team2_points AND (m.team1_id = $2 OR m.team2_id = $2)
-				THEN 1 
-			END) as matches_tied
-		FROM matches m
-		INNER JOIN rounds r ON m.round_id = r.id
-		WHERE r.tournament_id = $1 
-			AND (m.team1_id = $2 OR m.team2_id = $2)
-			AND m.status = 'completed'
-	`
+        SELECT 
+            -- Sum the points the team actually earned in completed matches (includes wins, ties, etc.)
+            COALESCE(SUM(CASE WHEN m.team1_id = $2 THEN m.team1_points WHEN m.team2_id = $2 THEN m.team2_points ELSE 0 END), 0) as points_won,
+            -- Sum the points the opponent earned against this team in completed matches
+            COALESCE(SUM(CASE WHEN m.team1_id = $2 THEN m.team2_points WHEN m.team2_id = $2 THEN m.team1_points ELSE 0 END), 0) as points_lost,
+            COUNT(CASE 
+                WHEN (m.team1_id = $2 AND m.team1_points > m.team2_points) OR 
+                     (m.team2_id = $2 AND m.team2_points > m.team1_points) 
+                THEN 1 
+            END) as matches_won,
+            COUNT(CASE 
+                WHEN (m.team1_id = $2 AND m.team1_points < m.team2_points) OR 
+                     (m.team2_id = $2 AND m.team2_points < m.team1_points) 
+                THEN 1 
+            END) as matches_lost,
+            COUNT(CASE 
+                WHEN m.team1_points = m.team2_points AND (m.team1_id = $2 OR m.team2_id = $2)
+                THEN 1 
+            END) as matches_tied
+        FROM matches m
+        INNER JOIN rounds r ON m.round_id = r.id
+        WHERE r.tournament_id = $1 
+            AND (m.team1_id = $2 OR m.team2_id = $2)
+            AND m.status = 'completed'
+    `
 
 	var stats teamMatchStats
 	err := r.db.QueryRow(query, tournamentID, teamID).Scan(
