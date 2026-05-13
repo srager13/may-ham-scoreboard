@@ -147,27 +147,56 @@ const Scorecards: React.FC = () => {
 
             // Enrich matches with hole_results and compute per-match team points so
             // PairingHeaderDetails can calculate overall team points reliably.
-            const enrichedMatches: Match[] = await Promise.all(
-              (matchesResp || []).map(async (m) => {
-                try {
-                  const resp = await apiClient.getMatchScores(m.id).catch(() => ({ hole_results: [] } as any));
-                  const holeResults = resp.hole_results || [];
+              const enrichedMatches: Match[] = await Promise.all(
+                (matchesResp || []).map(async (m) => {
+                  try {
+                    const resp = await apiClient.getMatchScores(m.id).catch(() => ({ hole_results: [], match_status: {} } as any));
+                    const holeResults = resp.hole_results || [];
 
-                  // Sum team points from hole_results if present
-                  let t1 = 0;
-                  let t2 = 0;
-                  holeResults.forEach((hr: any) => {
-                    t1 += hr.team1_points || 0;
-                    t2 += hr.team2_points || 0;
-                  });
+                    // Prefer authoritative match-level points from match_status when present.
+                    // The scoring service returns match_status.team1_match_points / team2_match_points
+                    // as the match-level points that should be used for leaderboards and headers.
+                    let t1 = 0;
+                    let t2 = 0;
+                    // 1) Prefer authoritative match-level points provided by the scoring service
+                    //    (resp.match_status.team1_match_points / team2_match_points).
+                    if (resp.match_status && (typeof resp.match_status.team1_match_points === 'number' || typeof resp.match_status.team2_match_points === 'number')) {
+                      t1 = resp.match_status.team1_match_points || 0;
+                      t2 = resp.match_status.team2_match_points || 0;
+                    } else if (holeResults && holeResults.length > 0) {
+                      // 2) If hole_results appear to contain per-hole match points (values <= 1.0 per hole),
+                      //    sum them. If hole_results contain larger values (e.g. stroke totals or per-hole
+                      //    stableford sums used by cumulative formats), do NOT sum them as match points.
+                      const perHoleLooksLikeMatchPoints = holeResults.every((hr: any) => {
+                        const a = Math.abs(hr.team1_points || 0);
+                        const b = Math.abs(hr.team2_points || 0);
+                        return a <= 1.0 && b <= 1.0;
+                      });
 
-                  return { ...m, hole_results: holeResults, team1_points: t1, team2_points: t2 } as Match;
-                } catch (err) {
-                  console.warn('Failed to load match scores for', m.id, err);
-                  return m;
-                }
-              })
-            );
+                      if (perHoleLooksLikeMatchPoints) {
+                        holeResults.forEach((hr: any) => {
+                          t1 += hr.team1_points || 0;
+                          t2 += hr.team2_points || 0;
+                        });
+                      } else {
+                        // 3) Fallback: use stored match-level fields (from DB) when hole_results are cumulative
+                        // values (e.g., combined_scores_total returns per-hole stroke totals in Team1Points).
+                        t1 = (m as any).team1_points || 0;
+                        t2 = (m as any).team2_points || 0;
+                      }
+                    } else {
+                      // 4) Nothing available: fall back to match record fields if present
+                      t1 = (m as any).team1_points || 0;
+                      t2 = (m as any).team2_points || 0;
+                    }
+
+                    return { ...m, hole_results: holeResults, team1_points: t1, team2_points: t2 } as Match;
+                  } catch (err) {
+                    console.warn('Failed to load match scores for', m.id, err);
+                    return m;
+                  }
+                })
+              );
 
             return { ...pairing, players: playersResp, matchResults: enrichedMatches, scoresMap, round } as EnrichedPairing;
           } catch (err) {
