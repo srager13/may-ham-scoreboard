@@ -142,7 +142,7 @@ const TournamentLeaderboard = ({ tournamentId }: { tournamentId: string }) => {
                 round_id: matches[0].round_id,
                 pairing_number: 0,
                 status: 'in_progress',
-                players: matches[0].players || [],
+                // Omit players here to avoid mixing MatchPlayer vs PairingPlayer types.
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
               } as Pairing);
