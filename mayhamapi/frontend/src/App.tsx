@@ -7,6 +7,7 @@ import ScoreInterface from './components/ScoreInterface';
 import LandingPage from './components/LandingPage';
 import Groups from './components/Groups';
 import AdminPortal from './components/AdminPortal';
+import TournamentInfo from './components/TournamentInfo';
 import { AuthProvider, AuthModal, LoginButton, useAuth, EmailVerificationBanner, ForgotPasswordPage } from './components/Auth';
 import { TournamentProvider } from './components/TournamentContext';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -211,6 +212,7 @@ function AppContent() {
   const navigation = [
     { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
     { name: 'Score Entry', href: '/score', icon: BarChart3 },
+    { name: 'Tournament Info', href: '/tournamentinfo', icon: Trophy },
     { name: 'Groups', href: '/groups', icon: Users },
     { name: 'Tournament Setup', href: '/tournamentsetup', icon: Settings },
   ];
@@ -371,6 +373,17 @@ function AppContent() {
                 <TournamentSetup />
               </ProtectedRoute>
             } 
+          />
+          <Route 
+            path="/tournamentinfo"
+            element={
+              <ProtectedRoute>
+                {/* Lazy-loaded tournament info module */}
+                <React.Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                  <TournamentInfo />
+                </React.Suspense>
+              </ProtectedRoute>
+            }
           />
           <Route 
             path="/admin" 
